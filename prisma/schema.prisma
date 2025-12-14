@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id            String      @id @default(uuid())
+  projectNumber String      @unique
+  name          String
+  status        String      @default("ACTIVE") // ACTIVE, ARCHIVED
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  createdBy     String?
+  modifiedBy    String?
+
+  usages        Usage[]
+  usageLines    UsageLine[]
+  remnants      Remnant[] // Scrap or Remnants produced by this project
+}
+
+
+model GlobalSettings {
+  id              String @id @default("settings") // Singleton
+  scrapPricePerKg Float  @default(0)
+  updatedAt       DateTime @updatedAt
+}
+
+model SteelProfile {
+  id         String   @id @default(uuid())
+  type       String   // e.g., HEA, IPE
+  dimensions String   // e.g., 200, 300
+  grade      String   // e.g., S355
+  weightPerMeter Float @default(0) // kg/m
+  
+  inventory  Inventory[]
+  remnants   Remnant[]
+
+  @@unique([type, dimensions, grade])
+}
+
+model Inventory {
+  id                String   @id @default(uuid())
+  lotId             String   @unique
+  profileId         String
+  length            Float    // mm
+  quantityReceived  Int
+  quantityAtHand    Int
+  costPerMeter      Float    @default(0)
+  certificateFilename String?
+  status            String   @default("ACTIVE") // ACTIVE, EXHAUSTED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+  modifiedBy        String?
+
+  profile           SteelProfile @relation(fields: [profileId], references: [id])
+  usageLines        UsageLine[]
+}
+
+model Remnant {
+  id          String   @id // Manual/Generated: {RootLotId}-{Length}
+  rootLotId   String   // Link to original parent lot
+  profileId   String
+  length      Float    // mm
+  quantity    Int      @default(1)
+  costPerMeter Float     @default(0)
+  status      String   @default("AVAILABLE") // AVAILABLE, USED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy         String?
+  modifiedBy        String?
+  projectId         String? // Origin Project (useful for Scrap tracking)
+
+  profile     SteelProfile @relation(fields: [profileId], references: [id])
+  project     Project?     @relation(fields: [projectId], references: [id])
+  usageLines  UsageLine[]
+}
+
+model Usage {
+  id        String   @id @default(uuid())
+  projectId String
+  date      DateTime @default(now())
+  userId    String   // NextAuth user ID
+  createdBy String?
+  modifiedBy String?
+  
+  project   Project  @relation(fields: [projectId], references: [id])
+  lines     UsageLine[]
+}
+
+model UsageLine {
+  id           String  @id @default(uuid())
+  usageId      String
+  inventoryId  String?
+  remnantId    String?
+  quantityUsed Int     // Mostly 1 for remnants, but could be more for inventory
+  cost         Float   @default(0)
+  projectId    String? // Optional override
+
+  usage        Usage      @relation(fields: [usageId], references: [id], onDelete: Cascade)
+  inventory    Inventory? @relation(fields: [inventoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  remnant      Remnant?   @relation(fields: [remnantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  project      Project?   @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
