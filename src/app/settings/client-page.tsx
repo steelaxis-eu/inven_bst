@@ -162,7 +162,7 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
 
     return (
         <Tabs defaultValue="profiles" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
+            <TabsList className="flex w-full overflow-x-auto md:grid md:grid-cols-4 h-auto">
                 <TabsTrigger value="profiles">Active Profiles</TabsTrigger>
                 <TabsTrigger value="shapes">Shapes</TabsTrigger>
                 <TabsTrigger value="catalog">Standard Catalog</TabsTrigger>

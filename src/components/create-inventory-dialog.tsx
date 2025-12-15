@@ -57,6 +57,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     // Combobox states
     const [openTypeCombo, setOpenTypeCombo] = useState(false)
     const [openDimCombo, setOpenDimCombo] = useState(false)
+    const [dimSearch, setDimSearch] = useState("")
 
     // Derived
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
@@ -312,10 +313,30 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-[200px] p-0">
                                                     <Command>
-                                                        <CommandInput placeholder="Search dims..." />
+                                                        <CommandInput
+                                                            placeholder="Search or enter custom..."
+                                                            value={dimSearch}
+                                                            onValueChange={setDimSearch}
+                                                        />
                                                         <CommandList>
-                                                            <CommandEmpty>No dimensions found.</CommandEmpty>
-                                                            <CommandGroup>
+                                                            <CommandEmpty>
+                                                                <div className="flex flex-col gap-2 p-1">
+                                                                    <p className="text-xs text-muted-foreground">No catalog match.</p>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="w-full text-xs h-8"
+                                                                        onClick={() => {
+                                                                            setSelectedDim(dimSearch)
+                                                                            setCustomDim(dimSearch) // Treat as custom so logic flows
+                                                                            setOpenDimCombo(false)
+                                                                        }}
+                                                                    >
+                                                                        Use "{dimSearch}"
+                                                                    </Button>
+                                                                </div>
+                                                            </CommandEmpty>
+                                                            <CommandGroup heading="Catalog Dimensions">
                                                                 {availableDims.map(d => (
                                                                     <CommandItem
                                                                         key={d}
