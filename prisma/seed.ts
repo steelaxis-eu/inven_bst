@@ -15,7 +15,8 @@ async function main() {
         await prisma.remnant.deleteMany({})
         await prisma.inventory.deleteMany({})
         await prisma.steelProfile.deleteMany({})
-        console.log('✓ SteelProfile and dependent tables cleaned')
+        await prisma.standardProfile.deleteMany({}) // Clean standard catalog to refresh with CSV data
+        console.log('✓ SteelProfile, StandardProfile, and dependent tables cleaned')
     } catch (e) {
         console.log('! Note: Could not clean some tables (maybe empty or constraint invisible):', e)
     }

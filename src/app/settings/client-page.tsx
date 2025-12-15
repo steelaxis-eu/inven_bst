@@ -191,17 +191,19 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                     </CardHeader>
                     <CardContent>
                         <div className="max-h-[600px] overflow-y-auto border rounded">
-                            <Table>
-                                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight (kg/m)</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {initialSteelProfiles.map(p => (
-                                        <TableRow key={p.id}>
-                                            <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter}</TableCell>
-                                            <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteSteelProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight (kg/m)</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                    <TableBody>
+                                        {initialSteelProfiles.map(p => (
+                                            <TableRow key={p.id}>
+                                                <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter}</TableCell>
+                                                <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteSteelProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -229,19 +231,21 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Params</TableHead><TableHead>Formula</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                            <TableBody>
-                                {initialShapes.map(shape => (
-                                    <TableRow key={shape.id}>
-                                        <TableCell>{shape.id}</TableCell><TableCell>{shape.name}</TableCell>
-                                        <TableCell><div className="flex gap-1 flex-wrap">{(shape.params as string[]).map(p => <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>)}</div></TableCell>
-                                        <TableCell className="font-mono text-sm">{shape.formula || '-'}</TableCell>
-                                        <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Params</TableHead><TableHead>Formula</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                <TableBody>
+                                    {initialShapes.map(shape => (
+                                        <TableRow key={shape.id}>
+                                            <TableCell>{shape.id}</TableCell><TableCell>{shape.name}</TableCell>
+                                            <TableCell><div className="flex gap-1 flex-wrap">{(shape.params as string[]).map(p => <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>)}</div></TableCell>
+                                            <TableCell className="font-mono text-sm">{shape.formula || '-'}</TableCell>
+                                            <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>
@@ -258,7 +262,7 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                                     <DialogHeader><DialogTitle>Add Standard Profile</DialogTitle></DialogHeader>
                                     <div className="grid gap-4 py-4">
                                         <div className="grid gap-2"><Label>Type</Label><Input placeholder="HEA" value={newProfile.type} onChange={e => setNewProfile({ ...newProfile, type: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Dimensions</Label><Input placeholder="100" value={newProfile.dimensions} onChange={e => setNewProfile({ ...newProfile, dimensions: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Dimensions</Label><Input placeholder="e.g. 100" value={newProfile.dimensions} onChange={e => setNewProfile({ ...newProfile, dimensions: e.target.value })} /></div>
                                         <div className="grid gap-2"><Label>Weight (kg/m)</Label><Input type="number" step="0.01" value={newProfile.weight} onChange={e => setNewProfile({ ...newProfile, weight: e.target.value })} /></div>
                                         <div className="grid gap-2"><Label>Area (mm²)</Label><Input type="number" placeholder="Optional" value={newProfile.area} onChange={e => setNewProfile({ ...newProfile, area: e.target.value })} /></div>
                                     </div>
@@ -269,17 +273,19 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                     </CardHeader>
                     <CardContent>
                         <div className="max-h-[600px] overflow-y-auto border rounded">
-                            <Table>
-                                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight</TableHead><TableHead>Area</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {initialStandardProfiles.map(p => (
-                                        <TableRow key={p.id}>
-                                            <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter}</TableCell><TableCell>{p.crossSectionArea || '-'}</TableCell>
-                                            <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight</TableHead><TableHead>Area</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                    <TableBody>
+                                        {initialStandardProfiles.map(p => (
+                                            <TableRow key={p.id}>
+                                                <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter ? p.weightPerMeter.toFixed(2) : '-'}</TableCell><TableCell>{p.crossSectionArea ? p.crossSectionArea.toFixed(2) : '-'}</TableCell>
+                                                <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -292,30 +298,32 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                         <CardDescription>Define grades, densities, and scrap prices.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Grade Name</TableHead>
-                                    <TableHead>Density (kg/dm³)</TableHead>
-                                    <TableHead>Scrap Price (€/kg)</TableHead>
-                                    <TableHead>Action</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {initialGrades.map(grade => (
-                                    <TableRow key={grade.id}>
-                                        <TableCell className="font-medium">{grade.name}</TableCell>
-                                        <TableCell>{grade.density}</TableCell>
-                                        <TableCell>{grade.scrapPrice ? `€${grade.scrapPrice.toFixed(2)}` : '-'}</TableCell>
-                                        <TableCell>
-                                            <Button variant="ghost" size="sm" onClick={() => handleEditGrade(grade)}>
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                        </TableCell>
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Grade Name</TableHead>
+                                        <TableHead>Density (kg/dm³)</TableHead>
+                                        <TableHead>Scrap Price (€/kg)</TableHead>
+                                        <TableHead>Action</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {initialGrades.map(grade => (
+                                        <TableRow key={grade.id}>
+                                            <TableCell className="font-medium">{grade.name}</TableCell>
+                                            <TableCell>{grade.density}</TableCell>
+                                            <TableCell>{grade.scrapPrice ? `€${grade.scrapPrice.toFixed(2)}` : '-'}</TableCell>
+                                            <TableCell>
+                                                <Button variant="ghost" size="sm" onClick={() => handleEditGrade(grade)}>
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
 
                         <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
                             <DialogContent>
