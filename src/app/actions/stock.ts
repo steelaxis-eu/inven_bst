@@ -11,6 +11,7 @@ export type StockItem = {
     grade: string
     length: number
     quantity: number
+    weightPerMeter: number // kg/m
     status: string
     location: string // inferred from ID or standard
 }
@@ -70,6 +71,7 @@ export async function searchStock(query?: string, profileType?: string, dimensio
             grade: i.profile.grade,
             length: i.length,
             quantity: i.quantityAtHand,
+            weightPerMeter: i.profile.weightPerMeter,
             status: i.status,
             location: 'Warehouse'
         })),
@@ -82,6 +84,7 @@ export async function searchStock(query?: string, profileType?: string, dimensio
             grade: r.profile.grade,
             length: r.length,
             quantity: 1,
+            weightPerMeter: r.profile.weightPerMeter,
             status: r.status,
             location: 'Yard'
         }))

@@ -1,5 +1,6 @@
 import { getGlobalUsageHistory } from "@/app/actions/history"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { EditUsageDialog } from "@/components/edit-usage-dialog"
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,9 @@ export default async function HistoryPage() {
                             <TableHead>Profile</TableHead>
                             <TableHead>Source</TableHead>
                             <TableHead>Qty Used</TableHead>
+                            <TableHead>Scrap Generated</TableHead>
                             <TableHead>Created By</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -36,11 +39,25 @@ export default async function HistoryPage() {
                                 <TableCell>{row.profile}</TableCell>
                                 <TableCell>{row.source}</TableCell>
                                 <TableCell>{row.quantityUsed}</TableCell>
+                                <TableCell>
+                                    {row.scrapValue > 0 ? (
+                                        <span className="text-green-600 font-medium">+€{row.scrapValue.toFixed(2)}</span>
+                                    ) : '-'}
+                                </TableCell>
                                 <TableCell className="text-gray-500">{row.createdBy || '-'}</TableCell>
+                                <TableCell>
+                                    <EditUsageDialog
+                                        usageId={row.id}
+                                        originalLength={row.originalLength}
+                                        cost={row.cost}
+                                        costPerMeter={row.costPerMeter}
+                                        profile={row.profile}
+                                    />
+                                </TableCell>
                             </TableRow>
                         ))}
                         {history.length === 0 && (
-                            <TableRow><TableCell colSpan={8} className="text-center py-8">No usage recorded yet.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={10} className="text-center py-8">No usage recorded yet.</TableCell></TableRow>
                         )}
                     </TableBody>
                 </Table>

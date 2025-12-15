@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { searchStock, StockItem } from '@/app/actions/stock'
 import { SearchableSelect } from "@/components/ui/searchable-select"
 
-export function UsageWizard({ projects }: { projects: any[] }) {
+export function UsageWizard({ projects, scrapPrice }: { projects: any[], scrapPrice: number }) {
     const router = useRouter()
     const [projectId, setProjectId] = useState('')
     const [lines, setLines] = useState<any[]>([])
@@ -97,6 +97,12 @@ export function UsageWizard({ projects }: { projects: any[] }) {
 
     const showRemnantOption = selectedItem && lengthUsed && parseFloat(lengthUsed) < selectedItem.length
 
+    // Calculate Scrap Value
+    const remainingLength = selectedItem && lengthUsed ? selectedItem.length - parseFloat(lengthUsed) : 0
+    const estimatedScrapValue = (remainingLength > 0 && selectedItem?.weightPerMeter)
+        ? (remainingLength / 1000) * selectedItem.weightPerMeter * scrapPrice
+        : 0
+
     return (
         <div className="grid gap-6">
             <Card>
@@ -169,8 +175,8 @@ export function UsageWizard({ projects }: { projects: any[] }) {
 
                             {showRemnantOption && (
                                 <div className="bg-white p-3 rounded border space-y-2">
-                                    <Label className="text-sm font-semibold">Remaining Material Action ({selectedItem.length - parseFloat(lengthUsed)}mm):</Label>
-                                    <div className="flex gap-4">
+                                    <Label className="text-sm font-semibold">Remaining Material Action ({remainingLength}mm):</Label>
+                                    <div className="flex flex-col gap-2">
                                         <label className="flex items-center space-x-2 cursor-pointer">
                                             <input
                                                 type="radio"
@@ -179,18 +185,26 @@ export function UsageWizard({ projects }: { projects: any[] }) {
                                                 onChange={() => setCreateRemnant(true)}
                                                 className="h-4 w-4 text-blue-600"
                                             />
-                                            <span>Save as Remnant</span>
+                                            <span>Save as Remnant (Reuse later)</span>
                                         </label>
-                                        <label className="flex items-center space-x-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="remnantAction"
-                                                checked={createRemnant === false}
-                                                onChange={() => setCreateRemnant(false)}
-                                                className="h-4 w-4 text-red-600"
-                                            />
-                                            <span>Mark as Scrap (Discard)</span>
-                                        </label>
+
+                                        <div className="flex items-center gap-4">
+                                            <label className="flex items-center space-x-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="remnantAction"
+                                                    checked={createRemnant === false}
+                                                    onChange={() => setCreateRemnant(false)}
+                                                    className="h-4 w-4 text-red-600"
+                                                />
+                                                <span>Mark as Scrap (Discard)</span>
+                                            </label>
+                                            {!createRemnant && estimatedScrapValue > 0 && (
+                                                <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">
+                                                    Est. Value: €{estimatedScrapValue.toFixed(2)}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )}

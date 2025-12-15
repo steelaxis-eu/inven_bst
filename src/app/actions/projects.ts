@@ -90,8 +90,107 @@ export async function getProject(id: string) {
         })
     }
 
-    if (!project) console.log(`[getProject] Project not found even after robust search.`)
-    else console.log(`[getProject] Found project: ${project.projectNumber} with ${project.usages.length} usages.`)
+    if (!project) return null
 
-    return project
+    // Fetch settings for Scrap Price
+    const settings = await prisma.globalSettings.findUnique({ where: { id: 'settings' } })
+    const scrapPrice = settings?.scrapPricePerKg || 0
+
+    // --- Business Logic: Calculations & Cert Resolution ---
+
+    // 1. Collect all Remnant Root IDs
+    const remnantRootLotIds = new Set<string>()
+    let totalProjectCost = 0
+    const summaryMap = new Map<string, { profile: string, totalLength: number, totalCost: number, count: number }>()
+
+    project.usages.forEach(u => {
+        u.lines.forEach(l => {
+            // Cost Calc
+            const cost = l.cost || 0
+            totalProjectCost += cost
+
+            // Remnant Cert ID Collection
+            if (l.remnant && l.remnant.rootLotId) {
+                remnantRootLotIds.add(l.remnant.rootLotId)
+            }
+
+            // Summary Calc
+            const item = l.inventory || l.remnant
+            const profileName = item?.profile ? `${item.profile.type} ${item.profile.dimensions}` : 'Unknown'
+            const costPerMeter = item?.costPerMeter || 0
+            const estimatedLength = costPerMeter > 0 ? (cost / costPerMeter) * 1000 : 0
+
+            const existing = summaryMap.get(profileName) || { profile: profileName, totalLength: 0, totalCost: 0, count: 0 }
+            summaryMap.set(profileName, {
+                ...existing,
+                totalLength: existing.totalLength + estimatedLength,
+                totalCost: existing.totalCost + cost,
+                count: existing.count + 1
+            })
+        })
+    })
+
+    // 2. Fetch Parent Inventories
+    const parentMap = new Map<string, string | null>()
+    if (remnantRootLotIds.size > 0) {
+        const parents = await prisma.inventory.findMany({
+            where: { lotId: { in: Array.from(remnantRootLotIds) } },
+            select: { lotId: true, certificateFilename: true }
+        })
+        parents.forEach(p => parentMap.set(p.lotId, p.certificateFilename))
+    }
+
+    // 3. Enhance Usages and Calc Stats
+    let missingCertCount = 0
+    const enrichedUsages = project.usages.map(u => ({
+        ...u,
+        lines: u.lines.map(l => {
+            let certificate = null
+            let isMissing = false
+
+            if (l.inventory) {
+                certificate = l.inventory.certificateFilename
+                if (!certificate) isMissing = true
+            } else if (l.remnant) {
+                certificate = parentMap.get(l.remnant.rootLotId) || null
+                if (!certificate) isMissing = true
+            }
+
+            if (isMissing) missingCertCount++
+
+            return {
+                ...l,
+                certificate,
+                isMissingCertificate: isMissing
+            }
+        })
+    }))
+
+    // 4. Scrap Calc
+    let totalScrapValue = 0
+    let totalScrapWeight = 0
+    const scraps = project.remnants?.filter(r => r.status === 'SCRAP') || []
+    scraps.forEach(scrap => {
+        if (scrap.profile && scrap.profile.weightPerMeter) {
+            const weight = (scrap.length / 1000) * scrap.profile.weightPerMeter
+            totalScrapWeight += weight
+            totalScrapValue += weight * scrapPrice
+        }
+    })
+
+    const netCost = totalProjectCost - totalScrapValue
+
+    return {
+        ...project,
+        usages: enrichedUsages,
+        stats: {
+            missingCertCount,
+            totalProjectCost,
+            totalScrapValue,
+            totalScrapWeight,
+            netCost,
+            materialSummary: Array.from(summaryMap.values()),
+            scrapPrice // useful for display context
+        }
+    }
 }

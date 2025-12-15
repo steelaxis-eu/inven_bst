@@ -29,27 +29,46 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         // 2. Extract unique root Lot IDs and find certificates
         const certificates = new Set<string>()
         const lotIds = new Set<string>()
+        let missingCertDetected = false
 
         for (const line of usageLines) {
-            if (line.inventory?.certificateFilename) {
-                certificates.add(line.inventory.certificateFilename)
+            if (line.inventory) {
+                if (line.inventory.certificateFilename) {
+                    certificates.add(line.inventory.certificateFilename)
+                } else {
+                    missingCertDetected = true
+                }
             }
             if (line.remnant?.rootLotId) {
-                // We need to look up the inventory for this remnant's root lot
                 lotIds.add(line.remnant.rootLotId)
             }
         }
 
         // Fetch Inventory for Remnants' root lots to get certs
+        const parentMap = new Map<string, string | null>()
         if (lotIds.size > 0) {
             const parentInventories = await prisma.inventory.findMany({
                 where: { lotId: { in: Array.from(lotIds) } }
             })
             for (const inv of parentInventories) {
-                if (inv.certificateFilename) {
-                    certificates.add(inv.certificateFilename)
+                parentMap.set(inv.lotId, inv.certificateFilename)
+            }
+        }
+
+        // Check remnants again
+        for (const line of usageLines) {
+            if (line.remnant && line.remnant.rootLotId) {
+                const cert = parentMap.get(line.remnant.rootLotId)
+                if (cert) {
+                    certificates.add(cert)
+                } else {
+                    missingCertDetected = true
                 }
             }
+        }
+
+        if (missingCertDetected) {
+            return NextResponse.json({ error: 'Cannot download: Some materials are missing certificates.' }, { status: 400 })
         }
 
         if (certificates.size === 0) {

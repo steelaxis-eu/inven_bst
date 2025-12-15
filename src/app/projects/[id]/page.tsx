@@ -1,66 +1,32 @@
 import { getProject } from "@/app/actions/projects"
-import { getSettings } from "@/app/actions/settings"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import Link from "next/link"
+import { InventoryCertActions } from "@/components/inventory-cert-actions"
+import { FileViewer } from "@/components/ui/file-viewer"
+import { AlertTriangle, FileWarning, CheckCircle } from "lucide-react"
 
 export default async function ProjectDashboard({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
-    const cleanId = decodeURIComponent(id).trim() // Handle potential %20 or spaces
+    const cleanId = decodeURIComponent(id).trim()
 
-    let project = null
-    let settings = null
+    let project: any = null
     try {
         project = await getProject(cleanId)
-        settings = await getSettings()
     } catch (e) { }
 
     if (!project) return <div className="p-8 text-center text-red-500">Project "{cleanId}" not found. Please check the URL.</div>
 
-    // Calculate Totals
-    let totalProjectCost = 0
-    const summaryMap = new Map<string, { profile: string, totalLength: number, totalCost: number, count: number }>()
-
-    project.usages.forEach((usage: any) => {
-        usage.lines.forEach((line: any) => {
-            const cost = line.cost || 0
-            totalProjectCost += cost
-
-            // Identify Profile (Existing logic)
-            const item = line.inventory || line.remnant
-            const profileName = item?.profile ? `${item.profile.type} ${item.profile.dimensions}` : 'Unknown'
-            const costPerMeter = item?.costPerMeter || 0
-            const estimatedLength = costPerMeter > 0 ? (cost / costPerMeter) * 1000 : 0
-
-            const existing = summaryMap.get(profileName) || { profile: profileName, totalLength: 0, totalCost: 0, count: 0 }
-            summaryMap.set(profileName, {
-                ...existing,
-                totalLength: existing.totalLength + estimatedLength,
-                totalCost: existing.totalCost + cost,
-                count: existing.count + 1
-            })
-        })
-    })
-
-    // Calculate Scrap Recovery
-    let totalScrapValue = 0
-    let totalScrapWeight = 0
-    const scrapPrice = settings?.scrapPricePerKg || 0
-
-    // Check remnants produced by this project
-    // Note: getProject now includes 'remnants' relation
-    const scraps = project.remnants?.filter((r: any) => r.status === 'SCRAP') || []
-
-    scraps.forEach((scrap: any) => {
-        if (scrap.profile && scrap.profile.weightPerMeter) {
-            const weight = (scrap.length / 1000) * scrap.profile.weightPerMeter
-            totalScrapWeight += weight
-            totalScrapValue += weight * scrapPrice
-        }
-    })
-
-    const netCost = totalProjectCost - totalScrapValue
+    // Consume Backend Stats
+    const {
+        missingCertCount = 0,
+        totalProjectCost = 0,
+        totalScrapValue = 0,
+        totalScrapWeight = 0,
+        netCost = 0,
+        materialSummary = [],
+        scrapPrice = 0
+    } = project.stats || {}
 
     return (
         <div className="container mx-auto py-8 space-y-8">
@@ -80,10 +46,20 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-4">
-                    <a href={`/api/projects/${project.id}/certificates/zip`} download>
-                        <Button>Download Certs (ZIP)</Button>
-                    </a>
+                <div className="flex gap-4 items-center">
+                    {missingCertCount > 0 ? (
+                        <div className="group relative flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive rounded-md cursor-not-allowed border border-destructive/20 select-none">
+                            <FileWarning className="h-4 w-4" />
+                            <span>Download Disabled</span>
+                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 p-2 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                Missing {missingCertCount} certificate(s). Please upload them to enable download.
+                            </div>
+                        </div>
+                    ) : (
+                        <a href={`/api/projects/${project.id}/certificates/zip`} download>
+                            <Button>Download Certs (ZIP)</Button>
+                        </a>
+                    )}
                 </div>
             </div>
 
@@ -101,12 +77,12 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {summaryMap.size === 0 ? (
+                            {materialSummary.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={4} className="text-center text-gray-400">No materials used.</TableCell>
                                 </TableRow>
                             ) : (
-                                Array.from(summaryMap.values()).map((stat) => (
+                                materialSummary.map((stat: any) => (
                                     <TableRow key={stat.profile}>
                                         <TableCell className="font-medium">{stat.profile}</TableCell>
                                         <TableCell>{stat.count}</TableCell>
@@ -134,12 +110,13 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                                     <TableHead>Material</TableHead>
                                     <TableHead>Length Used</TableHead>
                                     <TableHead>Cost</TableHead>
+                                    <TableHead>Certificate</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {project.usages.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8">No usage recorded yet.</TableCell>
+                                        <TableCell colSpan={7} className="text-center py-8">No usage recorded yet.</TableCell>
                                     </TableRow>
                                 ) : (
                                     project.usages.map((usage: any) => (
@@ -161,6 +138,33 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                                                         : '?'}
                                                 </TableCell>
                                                 <TableCell>€{line.cost.toFixed(2)}</TableCell>
+                                                <TableCell>
+                                                    {line.inventory ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <InventoryCertActions id={line.inventory.id} certificate={line.certificate} />
+                                                            {line.isMissingCertificate && (
+                                                                <span className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">
+                                                                    Missing
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        // Remnant Logic
+                                                        !line.isMissingCertificate && line.certificate ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <FileViewer bucketName="certificates" path={line.certificate} fileName="View Cert" />
+                                                                <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                                                                    Linked
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-1 text-red-500 text-xs font-medium">
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                <span>Missing (Main Lot)</span>
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </TableCell>
                                             </TableRow>
                                         ))
                                     ))
