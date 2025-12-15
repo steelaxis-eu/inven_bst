@@ -10,22 +10,25 @@ const AlertDialog = AlertDialogPrimitive.Root
 
 const AlertDialogTrigger = AlertDialogPrimitive.Trigger
 
-const AlertDialogPortal = AlertDialogPrimitive.Portal
+const AlertDialogPortal = ({
+    ...props
+}: React.ComponentProps<typeof AlertDialogPrimitive.Portal>) => (
+    <AlertDialogPrimitive.Portal {...props} />
+)
+AlertDialogPortal.displayName = AlertDialogPrimitive.Portal.displayName
 
 const AlertDialogOverlay = React.forwardRef<
     React.ElementRef<typeof AlertDialogPrimitive.Overlay>,
     React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Portal>
-        <AlertDialogPrimitive.Overlay
-            className={cn(
-                "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-                className
-            )}
-            {...props}
-            ref={ref}
-        />
-    </AlertDialogPrimitive.Portal>
+    <AlertDialogPrimitive.Overlay
+        className={cn(
+            "fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            className
+        )}
+        {...props}
+        ref={ref}
+    />
 ))
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 
@@ -33,7 +36,7 @@ const AlertDialogContent = React.forwardRef<
     React.ElementRef<typeof AlertDialogPrimitive.Content>,
     React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
 >(({ className, ...props }, ref) => (
-    <AlertDialogPrimitive.Portal>
+    <AlertDialogPortal>
         <AlertDialogOverlay />
         <AlertDialogPrimitive.Content
             ref={ref}
@@ -43,7 +46,7 @@ const AlertDialogContent = React.forwardRef<
             )}
             {...props}
         />
-    </AlertDialogPrimitive.Portal>
+    </AlertDialogPortal>
 ))
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
