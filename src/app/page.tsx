@@ -44,6 +44,18 @@ export default async function Home() {
             </div>
           </Link>
 
+          <Link href="/usage/history" className="group block h-full">
+            <div className="h-full bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-8 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 hover:-translate-y-1">
+              <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">
+                <div className="p-3 rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8"><path d="M12 20v-6M6 20V10M18 20V4" /></svg>
+                </div>
+                <h2 className="text-2xl font-bold tracking-tight">Usage History</h2>
+                <p className="text-muted-foreground leading-relaxed">View complete history of all material usage and scraps.</p>
+              </div>
+            </div>
+          </Link>
+
           <Link href="/projects" className="group block h-full">
             <div className="h-full bg-card/50 backdrop-blur-sm border border-border/50 rounded-2xl p-8 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20 hover:-translate-y-1">
               <div className="flex flex-col items-center justify-center text-center space-y-4 h-full">

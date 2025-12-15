@@ -35,10 +35,26 @@ export async function getGlobalUsageHistory() {
         include: { profile: true }
     })
 
+    // Fetch parent inventory certificates for Remnants
+    const parentInventories = await prisma.inventory.findMany({
+        where: { lotId: { in: Array.from(rootLotIds) } },
+        select: { lotId: true, certificateFilename: true }
+    })
+    const certMap = new Map<string, string | null>()
+    parentInventories.forEach(i => certMap.set(i.lotId, i.certificateFilename))
+
     return usageLines.map(line => {
         const item = line.inventory || line.remnant
         const project = line.project || line.usage.project
         const rootLotId = line.inventory?.lotId || line.remnant?.rootLotId
+
+        // Resolve Certificate
+        let certificateFilename: string | null = null
+        if (line.inventory?.certificateFilename) {
+            certificateFilename = line.inventory.certificateFilename
+        } else if (rootLotId) {
+            certificateFilename = certMap.get(rootLotId) || null
+        }
 
         // Attempt to find generated scrap
         // Heuristic: Created within 5 minutes of usage and matching rootLotId
@@ -66,6 +82,7 @@ export async function getGlobalUsageHistory() {
             quantityUsed: line.quantityUsed,
             createdBy: line.usage.createdBy,
             scrapValue, // New Field
+            certificateFilename, // New Field
             // For Editing
             cost: line.cost,
             costPerMeter: item?.costPerMeter || 0,

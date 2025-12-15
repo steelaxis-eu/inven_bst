@@ -1,6 +1,7 @@
 import { getGlobalUsageHistory } from "@/app/actions/history"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { EditUsageDialog } from "@/components/edit-usage-dialog"
+import { Eye } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,7 @@ export default async function HistoryPage() {
                             <TableHead>Qty Used</TableHead>
                             <TableHead>Scrap Generated</TableHead>
                             <TableHead>Created By</TableHead>
+                            <TableHead>Cert</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                     </TableHeader>
@@ -45,6 +47,16 @@ export default async function HistoryPage() {
                                     ) : '-'}
                                 </TableCell>
                                 <TableCell className="text-gray-500">{row.createdBy || '-'}</TableCell>
+                                <TableCell>
+                                    {row.certificateFilename ? (
+                                        <a href={`/api/certificates/${row.certificateFilename}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                            <Eye className="w-4 h-4" />
+                                            <span className="text-xs">View</span>
+                                        </a>
+                                    ) : (
+                                        <span className="text-gray-300 text-xs">-</span>
+                                    )}
+                                </TableCell>
                                 <TableCell>
                                     <EditUsageDialog
                                         usageId={row.id}

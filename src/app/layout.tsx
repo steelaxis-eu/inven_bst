@@ -54,6 +54,7 @@ export default function RootLayout({
                   <Link href="/stock" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Stock</Link>
                   <Link href="/inventory" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Inventory</Link>
                   <Link href="/usage" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Usage</Link>
+                  <Link href="/usage/history" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">History</Link>
                   <Link href="/projects" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Projects</Link>
                 </nav>
                 <ModeToggle />
