@@ -113,6 +113,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Add Inventory Batch</DialogTitle>
+                    <DialogDescription>Add multiple items to your stock. You can calculate profile weights if needed.</DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-6">

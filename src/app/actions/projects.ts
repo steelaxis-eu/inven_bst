@@ -31,6 +31,18 @@ export async function createProject(data: { number: string, name: string }) {
     }
 }
 
+export async function archiveProject(id: string) {
+    try {
+        await prisma.project.update({
+            where: { id },
+            data: { status: 'ARCHIVED' }
+        })
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
 export async function getProject(id: string) {
     console.log(`[getProject] Fetching project with ID: "${id}"`) // Server log for debug
 

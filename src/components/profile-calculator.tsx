@@ -153,7 +153,10 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                 {trigger || <Button variant="outline">⚖️ Calculator</Button>}
             </DialogTrigger>
             <DialogContent className="max-w-md">
-                <DialogHeader><DialogTitle>Find or Calculate Profile</DialogTitle></DialogHeader>
+                <DialogHeader>
+                    <DialogTitle>Find or Calculate Profile</DialogTitle>
+                    <DialogDescription>Search for standard profiles or calculate custom weights.</DialogDescription>
+                </DialogHeader>
                 <div className="space-y-4 py-4">
                     <div className="flex gap-4 border-b pb-4">
                         <Button variant={mode === 'STANDARD' ? 'default' : 'ghost'} onClick={() => setMode('STANDARD')}>Standard Catalog</Button>

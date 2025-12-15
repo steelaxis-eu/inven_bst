@@ -43,6 +43,7 @@ export function CreateProjectDialog() {
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Create New Project</DialogTitle>
+                    <DialogDescription>Start a new project to track inventory usage.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
