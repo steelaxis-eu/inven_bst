@@ -82,38 +82,27 @@ async function main() {
 
 
     // 3. Seed SteelProfiles (Legacy/Linker) - Shapes ONLY
-    const profiles: any[] = []
-    for (const type of Object.keys(STANDARD_PROFILES)) {
-        for (const dim of Object.keys(STANDARD_PROFILES[type])) {
-            const w = STANDARD_PROFILES[type][dim]
-            const p = await prisma.steelProfile.upsert({
-                where: {
-                    type_dimensions: {
-                        type: type,
-                        dimensions: dim
-                    }
-                },
-                update: { weightPerMeter: w },
-                create: {
-                    type: type,
-                    dimensions: dim,
-                    weightPerMeter: w
-                }
-            })
-            profiles.push(p)
-        }
-    }
-    console.log('✓ Profiles (Shapes) seeded')
+    // We only create profiles that are actually USED in the inventory.
+    console.log('✓ Profiles (Shapes) seeded (Specific usage only)')
 
     // Helpers
-    const getProfile = (t: string, d: string) => profiles.find(p => p.type === t && p.dimensions === d)!
+    const ensureProfile = async (t: string, d: string, w: number) => {
+        return await prisma.steelProfile.upsert({
+            where: { type_dimensions: { type: t, dimensions: d } },
+            update: { weightPerMeter: w },
+            create: { type: t, dimensions: d, weightPerMeter: w }
+        })
+    }
+
     const s355 = await prisma.materialGrade.findUnique({ where: { name: 'S355' } })
     if (!s355) throw new Error("S355 not found")
 
     // 4. Seed Inventory
 
     // Lot A: HEA 200 (Full Lengths)
-    const hea200 = getProfile('HEA', '200')
+    // Ensure Profile Exists first
+    const hea200 = await ensureProfile('HEA', '200', STANDARD_PROFILES['HEA']['200'])
+
     if (hea200) {
         await prisma.inventory.upsert({
             where: { lotId: 'L-HEA200-001' },
@@ -134,7 +123,7 @@ async function main() {
     }
 
     // Lot B: IPE 300 (Partial Stock)
-    const ipe300 = getProfile('IPE', '300')
+    const ipe300 = await ensureProfile('IPE', '300', STANDARD_PROFILES['IPE']['300'])
     if (ipe300) {
         await prisma.inventory.upsert({
             where: { lotId: 'L-IPE300-055' },
