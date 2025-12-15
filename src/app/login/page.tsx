@@ -11,11 +11,16 @@ export default function LoginPage() {
     const handleLogin = async () => {
         setLoading(true)
         try {
+            // User requested explicit domain redirect
+            const redirectTo = process.env.NODE_ENV === 'production'
+                ? 'https://bstinventory.steelaxis.eu/auth/callback'
+                : `${window.location.origin}/auth/callback`
+
             await supabase.auth.signInWithOAuth({
                 provider: 'azure',
                 options: {
                     scopes: 'email',
-                    redirectTo: `${window.location.origin}/auth/callback`,
+                    redirectTo: redirectTo,
                 },
             })
         } catch (error) {
@@ -26,8 +31,8 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-            <div className="w-full max-w-sm p-6 bg-white rounded-lg shadow-md border text-center">
+        <div className="flex h-screen w-full items-center justify-center bg-background">
+            <div className="w-full max-w-sm p-6 bg-card rounded-lg shadow-md border text-center">
                 <h1 className="text-2xl font-bold mb-2">Inventory System</h1>
                 <p className="text-sm text-gray-500 mb-6">Sign in to access the dashboard</p>
 

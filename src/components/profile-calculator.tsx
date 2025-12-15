@@ -295,10 +295,10 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                         </div>
                     )}
 
-                    <div className="bg-slate-100 p-4 rounded text-center">
-                        <div className="text-sm text-gray-500">Weight (Calculated on Server)</div>
-                        <div className="text-3xl font-bold text-blue-600">
-                            {calculating ? '...' : (calculatedWeight ? calculatedWeight.toFixed(2) : '---')} <span className="text-base text-gray-400">kg/m</span>
+                    <div className="bg-muted p-4 rounded text-center">
+                        <div className="text-sm text-muted-foreground">Weight (Calculated on Server)</div>
+                        <div className="text-3xl font-bold text-primary">
+                            {calculating ? '...' : (calculatedWeight ? calculatedWeight.toFixed(2) : '---')} <span className="text-base text-muted-foreground">kg/m</span>
                         </div>
                     </div>
 
