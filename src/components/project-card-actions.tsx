@@ -16,6 +16,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 
 export function ProjectCardActions({ id, name }: { id: string, name: string }) {
     const [loading, setLoading] = useState(false)
@@ -26,8 +27,9 @@ export function ProjectCardActions({ id, name }: { id: string, name: string }) {
         try {
             await archiveProject(id)
             router.refresh()
+            toast.success("Project archived")
         } catch (e) {
-            alert("Failed to archive project")
+            toast.error("Failed to archive project")
         } finally {
             setLoading(false)
         }

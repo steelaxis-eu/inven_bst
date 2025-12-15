@@ -12,6 +12,7 @@ import { ProfileCalculator } from "./profile-calculator"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { FileUploader } from "@/components/ui/file-uploader"
 import { FileViewer } from "@/components/ui/file-viewer"
+import { toast } from "sonner"
 
 export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles: any[] }) {
     const [open, setOpen] = useState(false)
@@ -44,8 +45,9 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
             setProfiles([...profiles, p])
             setProfileOpen(false)
             setNewProfile({ type: '', dimensions: '', grade: '' })
+            toast.success("Profile created")
         } catch (e) {
-            alert("Failed to create profile (maybe duplicates?)")
+            toast.error("Failed to create profile (maybe duplicates?)")
         } finally {
             setLoading(false)
         }
@@ -53,7 +55,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
 
     const handleAddItem = () => {
         if (!current.lotId || !current.profileId || !current.length || !current.quantity) {
-            alert("Please fill required fields (Lot ID, Profile, Length, Qty)")
+            toast.warning("Please fill required fields (Lot ID, Profile, Length, Qty)")
             return
         }
 
@@ -95,11 +97,12 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
             if (res.success) {
                 setOpen(false)
                 setItems([])
+                toast.success("Inventory batch saved")
             } else {
-                alert(`Error: ${res.error}`)
+                toast.error(`Error: ${res.error}`)
             }
         } catch (err) {
-            alert("Unexpected error occurred.")
+            toast.error("Unexpected error occurred.")
         } finally {
             setLoading(false)
         }
@@ -131,8 +134,9 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
                             </div>
                             <div className="grid gap-2">
                                 <Label>Profile</Label>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 min-w-0">
                                     <SearchableSelect
+                                        className="flex-1 min-w-0" // Allow shrinking
                                         value={current.profileId}
                                         onValueChange={v => setCurrent({ ...current, profileId: v })}
                                         placeholder="Select Profile"
@@ -145,7 +149,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
 
                                     <ProfileCalculator
                                         trigger={
-                                            <Button type="button" variant="outline" size="icon" title="Find/Calculate Profile">
+                                            <Button type="button" variant="outline" size="icon" title="Find/Calculate Profile" className="shrink-0">
                                                 <span className="text-xl">+</span>
                                             </Button>
                                         }
@@ -184,7 +188,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
                                                 // Select it
                                                 setCurrent({ ...current, profileId: p.id })
                                             } catch (e) {
-                                                alert("Error creating profile")
+                                                toast.error("Error creating profile")
                                             } finally {
                                                 setLoading(false)
                                             }
