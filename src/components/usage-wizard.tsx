@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { searchStock, StockItem } from '@/app/actions/stock'
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import { createUsage } from '@/app/actions/usage'
 
 export function UsageWizard({ projects, scrapPrice }: { projects: any[], scrapPrice: number }) {
     const router = useRouter()
@@ -74,17 +75,9 @@ export function UsageWizard({ projects, scrapPrice }: { projects: any[], scrapPr
         if (!projectId || lines.length === 0) return
 
         try {
-            const res = await fetch('/api/usage', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectId,
-                    userId: 'user-demo', // Mock
-                    lines
-                })
-            })
+            const res = await createUsage(projectId, 'user-demo', lines)
 
-            if (!res.ok) throw new Error(await res.text())
+            if (!res.success) throw new Error(res.error)
 
             alert("Usage recorded successfully!")
             setLines([])
