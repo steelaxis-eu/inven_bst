@@ -20,6 +20,9 @@ export default async function SettingsPage() {
         orderBy: [{ type: 'asc' }, { dimensions: 'asc' }],
         take: 100 // Cap for performance, maybe implement pagination later or search in client
     })
+    const steelProfiles = await prisma.steelProfile.findMany({
+        orderBy: [{ type: 'asc' }, { dimensions: 'asc' }]
+    })
 
     return (
         <div className="container py-10">
@@ -33,6 +36,7 @@ export default async function SettingsPage() {
                 initialShapes={shapes}
                 initialGrades={grades}
                 initialStandardProfiles={standardProfiles}
+                initialSteelProfiles={steelProfiles}
             />
         </div>
     )
