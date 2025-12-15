@@ -59,7 +59,7 @@ export default function RootLayout({
               </div>
             </div>
           </header>
-          <main className="flex-1 bg-muted/20">
+          <main className="flex-1 bg-gradient-to-br from-background to-muted/50">
             {children}
           </main>
           <Toaster />
