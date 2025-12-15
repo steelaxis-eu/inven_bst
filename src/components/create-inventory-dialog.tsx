@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ProfileCalculator } from "./profile-calculator"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { FileUploader } from "@/components/ui/file-uploader"
+import { FileViewer } from "@/components/ui/file-viewer"
 
 export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles: any[] }) {
     const [open, setOpen] = useState(false)
@@ -212,8 +213,13 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
                             <FileUploader
                                 bucketName="certificates"
                                 currentValue={current.certificate}
-                                onUploadComplete={(url) => setCurrent({ ...current, certificate: url })}
+                                onUploadComplete={(path) => setCurrent({ ...current, certificate: path })}
                             />
+                            {current.certificate && (
+                                <div className="mt-1">
+                                    <FileViewer bucketName="certificates" path={current.certificate} fileName="Verify Upload" />
+                                </div>
+                            )}
                         </div>
 
                         <Button type="button" onClick={handleAddItem} variant="secondary">Add to Batch</Button>

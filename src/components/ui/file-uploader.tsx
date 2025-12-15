@@ -33,11 +33,10 @@ export function FileUploader({ bucketName, onUploadComplete, currentValue, class
                 throw uploadError
             }
 
-            // Get Public URL
-            const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath)
-
+            // Private Bucket Strategy: Return the path, not the URL
+            // The file is private, so getPublicUrl would break or return unusable link.
             setFileName(file.name)
-            onUploadComplete(data.publicUrl)
+            onUploadComplete(filePath) // Return internal path (e.g., "123.pdf")
         } catch (error) {
             alert('Error uploading file!')
             console.error(error)
