@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { ModeToggle } from "@/components/mode-toggle"
+import { Analytics } from "@vercel/analytics/react"
 
 // ...
 
@@ -61,6 +62,8 @@ export default function RootLayout({
           <main className="flex-1 bg-muted/20">
             {children}
           </main>
+          <Toaster />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
