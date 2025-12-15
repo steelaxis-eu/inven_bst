@@ -121,34 +121,4 @@ export async function createInventoryBatch(items: {
     } catch (e: any) {
         return { success: false, error: e.message }
     }
-}    // We can do a transaction for safety
-try {
-    await prisma.$transaction(async (tx) => {
-        for (const data of items) {
-            const totalLengthMeters = (data.length * data.quantity) / 1000
-            const costPerMeter = totalLengthMeters > 0 ? data.totalCost / totalLengthMeters : 0
-
-            await tx.inventory.create({
-                data: {
-                    lotId: data.lotId,
-                    profileId: data.profileId,
-                    length: data.length,
-                    quantityReceived: data.quantity,
-                    quantityAtHand: data.quantity,
-                    costPerMeter: costPerMeter,
-                    certificateFilename: data.certificate,
-                    status: 'ACTIVE',
-                    createdBy: 'System',
-                    modifiedBy: 'System'
-                }
-            })
-        }
-    })
-
-    revalidatePath('/inventory')
-    revalidatePath('/stock')
-    return { success: true }
-} catch (e: any) {
-    return { success: false, error: e.message }
-}
 }
