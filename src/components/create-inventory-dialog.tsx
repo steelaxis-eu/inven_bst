@@ -86,7 +86,36 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
             return getVal(a) - getVal(b)
         })
 
+    // Auto-parse parameters from selectedDim string (e.g. "100x50x5")
     const hasAnyDims = activeDims.length > 0 || catalogDims.length > 0
+
+    useEffect(() => {
+        if (!selectedDim || !activeShape) return
+
+        // Regex to split by 'x', '*', or spaces
+        const parts = selectedDim.toLowerCase().split(/[x* ]+/).map(s => parseFloat(s)).filter(n => !isNaN(n))
+        const params = activeShape.params as string[]
+
+        if (parts.length > 0 && params.length > 0) {
+            const newParams: Record<string, string> = {}
+
+            // Map valid numbers to params in order
+            // Special mappings for specific shapes if needed, but sequential is standard
+            // RHS (b, h, t) <- 100x50x5
+            // SHS (b, t) <- 100x5
+            params.forEach((param, i) => {
+                if (parts[i] !== undefined) {
+                    newParams[param] = parts[i].toString()
+                }
+            })
+
+            // Only update if meaningfully different to avoid loops
+            const isDiff = Object.entries(newParams).some(([k, v]) => shapeParams[k] !== v)
+            if (isDiff) {
+                setShapeParams(prev => ({ ...prev, ...newParams }))
+            }
+        }
+    }, [selectedDim, activeShape])
 
     // Calculation Effect
     useEffect(() => {

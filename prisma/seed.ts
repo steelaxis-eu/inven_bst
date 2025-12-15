@@ -138,6 +138,10 @@ async function main() {
             if (weightStr && weightStr.trim() !== '') {
                 const w = parseFloat(weightStr)
                 if (!isNaN(w)) {
+                    // Exclude shapes that should be treated as "Custom" with formulas (RHS, SHS, CHS)
+                    // This forces the UI to use the Formula inputs instead of the limited Standard Catalog list.
+                    if (['RHS', 'SHS', 'CHS'].includes(type.toUpperCase())) continue
+
                     // Calc area
                     const area = w / 0.00785
 
