@@ -12,18 +12,15 @@ export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
     // Fetch all necessary settings data
-    const settings = await getSettings()
-    const scrapPrice = settings.scrapPricePerKg
     const shapes = await prisma.profileShape.findMany({ orderBy: { id: 'asc' } })
     const grades = await prisma.materialGrade.findMany({ orderBy: { name: 'asc' } })
     const standardProfiles = await prisma.standardProfile.findMany({
         orderBy: [{ type: 'asc' }, { dimensions: 'asc' }],
-        take: 100 // Cap for performance, maybe implement pagination later or search in client
+        take: 1000 // Increased to show full catalog including L and U profiles
     })
     const steelProfiles = await prisma.steelProfile.findMany({
         orderBy: [{ type: 'asc' }, { dimensions: 'asc' }]
     })
-
     return (
         <div className="container py-10">
             <div className="flex items-center gap-4 mb-8">
@@ -32,7 +29,6 @@ export default async function SettingsPage() {
             </div>
 
             <SettingsClient
-                initialScrapPrice={scrapPrice}
                 initialShapes={shapes}
                 initialGrades={grades}
                 initialStandardProfiles={standardProfiles}

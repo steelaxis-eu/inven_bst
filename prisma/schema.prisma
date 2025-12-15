@@ -26,7 +26,6 @@ model Project {
 
 model GlobalSettings {
   id              String @id @default("settings") // Singleton
-  scrapPricePerKg Float  @default(0)
   updatedAt       DateTime @updatedAt
 }
 
@@ -62,9 +61,10 @@ model ProfileShape {
 }
 
 model MaterialGrade {
-  id      String @id @default(uuid())
-  name    String @unique // e.g., S355
-  density Float  @default(7.85) // kg/dm3
+  id         String @id @default(uuid())
+  name       String @unique // e.g., S355
+  density    Float  @default(7.85) // kg/dm3
+  scrapPrice Float  @default(0)    // €/kg
   
   inventory Inventory[]
   remnants  Remnant[]

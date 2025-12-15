@@ -23,8 +23,8 @@ async function main() {
     // 1. Seed Global Settings
     await prisma.globalSettings.upsert({
         where: { id: 'settings' },
-        update: { scrapPricePerKg: 0.25 },
-        create: { id: 'settings', scrapPricePerKg: 0.25 }
+        update: {},
+        create: { id: 'settings' }
     })
     console.log('✓ Settings seeded')
 
@@ -56,29 +56,33 @@ async function main() {
 
     // 2.1 Seed Material Grades
     const GRADES = [
-        { name: 'S235', density: 7.85 },
-        { name: 'S275', density: 7.85 },
-        { name: 'S355', density: 7.85 },
-        { name: 'SS304', density: 7.90 },
-        { name: 'SS316', density: 7.95 }
+        { name: 'S235', density: 7.85, scrapPrice: 0.25 },
+        { name: 'S275', density: 7.85, scrapPrice: 0.25 },
+        { name: 'S355', density: 7.85, scrapPrice: 0.25 },
+        { name: 'SS304', density: 7.90, scrapPrice: 1.50 },
+        { name: 'SS316', density: 7.95, scrapPrice: 1.80 }
     ]
     for (const g of GRADES) {
         await prisma.materialGrade.upsert({
             where: { name: g.name },
-            update: { density: g.density },
-            create: { name: g.name, density: g.density }
+            update: { density: g.density, scrapPrice: g.scrapPrice },
+            create: { name: g.name, density: g.density, scrapPrice: g.scrapPrice }
         })
     }
     console.log('✓ Grades seeded')
 
     // 2.2 Seed Profile Shapes (Definitions for Custom)
+    // Formulas use params as variables. Area in mm^2.
+    // RHS/SHS (EN 10210): Area = 2dt(b+h-2t) approx or simplified A = (b*h) - ((b-2t)*(h-2t))
+    // CHS: Area = PI * (r_out^2 - r_in^2) -> PI * ((d/2)^2 - ((d-2t)/2)^2)
+    // Density (rho) is handled by the Grade. Calculation will be: Area * 1m * rho
     const SHAPES = [
-        { id: 'Plate', name: 'Plate / Flat Bar', params: ['w', 't'], formula: 'w * t * 1' },
-        { id: 'Round', name: 'Round Bar', params: ['d'], formula: 'PI * (d/2)^2' },
-        { id: 'RHS', name: 'Rectangular Hollow Section', params: ['h', 'w', 't'], formula: 'Advanced' },
-        { id: 'SHS', name: 'Square Hollow Section', params: ['s', 't'], formula: 'Advanced' },
-        { id: 'CHS', name: 'Circular Hollow Section', params: ['d', 't'], formula: 'Advanced' },
-        { id: 'SQB', name: 'Square Bar', params: ['s'], formula: 's * s' },
+        { id: 'Plate', name: 'Plate / Flat Bar', params: ['w', 't'], formula: 'w * t' },
+        { id: 'Round', name: 'Round Bar', params: ['d'], formula: '3.14159 * (d/2) * (d/2)' },
+        { id: 'RHS', name: 'Rectangular Hollow', params: ['b', 'h', 't'], formula: '(b * h) - ((b - 2*t) * (h - 2*t))' },
+        { id: 'SHS', name: 'Square Hollow', params: ['b', 't'], formula: '(b * b) - ((b - 2*t) * (b - 2*t))' },
+        { id: 'CHS', name: 'Circular Hollow', params: ['d', 't'], formula: '3.14159 * ((d/2)*(d/2) - ((d-2*t)/2)*((d-2*t)/2))' },
+        { id: 'SQB', name: 'Square Bar', params: ['b'], formula: 'b * b' },
     ]
     for (const s of SHAPES) {
         await prisma.profileShape.upsert({

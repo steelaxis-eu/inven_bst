@@ -7,26 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { updateSettings } from "@/app/actions/settings"
 import { createStandardProfile, deleteStandardProfile } from "@/app/actions/inventory"
 import { createSteelProfile, deleteSteelProfile } from "@/app/actions/profiles"
 import { createProfileShape, deleteProfileShape } from "@/app/actions/shapes"
+import { updateGrade } from "@/app/actions/grades"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { Pencil } from "lucide-react"
 
 interface SettingsClientProps {
-    initialScrapPrice: number
     initialShapes: any[]
     initialGrades: any[]
     initialStandardProfiles: any[]
     initialSteelProfiles: any[]
 }
 
-export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles }: SettingsClientProps) {
-    const [scrapPrice, setScrapPrice] = useState(initialScrapPrice.toString())
-    const [loadingPrice, setLoadingPrice] = useState(false)
-
+export function SettingsClient({ initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles }: SettingsClientProps) {
     // Standard Profile State
     const [profileDialogOpen, setProfileDialogOpen] = useState(false)
     const [newProfile, setNewProfile] = useState({ type: '', dimensions: '', weight: '', area: '' })
@@ -41,6 +38,12 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
     const [shapeDialogOpen, setShapeDialogOpen] = useState(false)
     const [newShape, setNewShape] = useState({ id: '', name: '', params: '', formula: '' })
     const [loadingShape, setLoadingShape] = useState(false)
+
+    // Grade Edit State
+    const [editingGrade, setEditingGrade] = useState<any>(null)
+    const [gradeForm, setGradeForm] = useState({ density: '', scrapPrice: '' })
+    const [gradeDialogOpen, setGradeDialogOpen] = useState(false)
+    const [loadingGrade, setLoadingGrade] = useState(false)
 
     // Handlers
     const handleAddProfile = async () => {
@@ -107,9 +110,7 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
         }
         setLoadingShape(true)
         try {
-            // Parse params (comma separated)
             const paramsList = newShape.params.split(',').map(p => p.trim()).filter(p => p)
-
             await createProfileShape({
                 id: newShape.id,
                 name: newShape.name,
@@ -132,60 +133,58 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
         toast.success("Shape deleted")
     }
 
-    const handleSavePrice = async () => {
-        setLoadingPrice(true)
+    const handleEditGrade = (grade: any) => {
+        setEditingGrade(grade)
+        setGradeForm({
+            density: grade.density.toString(),
+            scrapPrice: (grade.scrapPrice || 0).toString()
+        })
+        setGradeDialogOpen(true)
+    }
+
+    const handleSaveGrade = async () => {
+        if (!editingGrade) return
+        setLoadingGrade(true)
         try {
-            await updateSettings(parseFloat(scrapPrice))
-            toast.success("Scrap price updated!")
+            await updateGrade(editingGrade.id, {
+                density: parseFloat(gradeForm.density),
+                scrapPrice: parseFloat(gradeForm.scrapPrice)
+            })
+            setGradeDialogOpen(false)
+            setEditingGrade(null)
+            toast.success("Grade updated")
         } catch (e) {
-            toast.error("Failed to update price")
+            toast.error("Failed to update grade")
         } finally {
-            setLoadingPrice(false)
+            setLoadingGrade(false)
         }
     }
 
     return (
         <Tabs defaultValue="profiles" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
                 <TabsTrigger value="profiles">Active Profiles</TabsTrigger>
                 <TabsTrigger value="shapes">Shapes</TabsTrigger>
                 <TabsTrigger value="catalog">Standard Catalog</TabsTrigger>
                 <TabsTrigger value="grades">Grades</TabsTrigger>
-                <TabsTrigger value="general">General</TabsTrigger>
             </TabsList>
 
-            {/* Active Profiles Tab (SteelProfile) */}
             <TabsContent value="profiles">
                 <Card>
                     <CardHeader>
                         <CardTitle>Active Profiles</CardTitle>
-                        <CardDescription>Profiles currently used in your inventory. Add manually or they are added automatically from the Standard Catalog.</CardDescription>
+                        <CardDescription>Profiles currently used in your inventory.</CardDescription>
                         <div className="flex justify-end">
                             <Dialog open={steelProfileDialogOpen} onOpenChange={setSteelProfileDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button size="sm">Add Manual Profile</Button>
-                                </DialogTrigger>
+                                <DialogTrigger asChild><Button size="sm">Add Manual Profile</Button></DialogTrigger>
                                 <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Add Manual Profile</DialogTitle>
-                                    </DialogHeader>
+                                    <DialogHeader><DialogTitle>Add Manual Profile</DialogTitle></DialogHeader>
                                     <div className="grid gap-4 py-4">
-                                        <div className="grid gap-2">
-                                            <Label>Type</Label>
-                                            <Input placeholder="e.g. HEA" value={newSteelProfile.type} onChange={e => setNewSteelProfile({ ...newSteelProfile, type: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Dimensions</Label>
-                                            <Input placeholder="e.g. 100" value={newSteelProfile.dimensions} onChange={e => setNewSteelProfile({ ...newSteelProfile, dimensions: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Weight (kg/m)</Label>
-                                            <Input type="number" step="0.01" value={newSteelProfile.weight} onChange={e => setNewSteelProfile({ ...newSteelProfile, weight: e.target.value })} />
-                                        </div>
+                                        <div className="grid gap-2"><Label>Type</Label><Input placeholder="e.g. HEA" value={newSteelProfile.type} onChange={e => setNewSteelProfile({ ...newSteelProfile, type: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Dimensions</Label><Input placeholder="e.g. 100" value={newSteelProfile.dimensions} onChange={e => setNewSteelProfile({ ...newSteelProfile, dimensions: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Weight (kg/m)</Label><Input type="number" step="0.01" value={newSteelProfile.weight} onChange={e => setNewSteelProfile({ ...newSteelProfile, weight: e.target.value })} /></div>
                                     </div>
-                                    <DialogFooter>
-                                        <Button onClick={handleAddSteelProfile} disabled={loadingSteelProfile}>{loadingSteelProfile ? 'Saving...' : 'Add'}</Button>
-                                    </DialogFooter>
+                                    <DialogFooter><Button onClick={handleAddSteelProfile} disabled={loadingSteelProfile}>{loadingSteelProfile ? 'Saving...' : 'Add'}</Button></DialogFooter>
                                 </DialogContent>
                             </Dialog>
                         </div>
@@ -193,30 +192,12 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                     <CardContent>
                         <div className="max-h-[600px] overflow-y-auto border rounded">
                             <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Dimensions</TableHead>
-                                        <TableHead>Weight (kg/m)</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
+                                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight (kg/m)</TableHead><TableHead></TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {initialSteelProfiles.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={4} className="text-center text-muted-foreground">No active profiles. They will appear here when you add inventory.</TableCell>
-                                        </TableRow>
-                                    )}
                                     {initialSteelProfiles.map(p => (
                                         <TableRow key={p.id}>
-                                            <TableCell>{p.type}</TableCell>
-                                            <TableCell>{p.dimensions}</TableCell>
-                                            <TableCell>{p.weightPerMeter}</TableCell>
-                                            <TableCell>
-                                                <Button variant="ghost" size="sm" onClick={() => handleDeleteSteelProfile(p.id)} className="text-red-500 h-8 w-8 p-0">
-                                                    ×
-                                                </Button>
-                                            </TableCell>
+                                            <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter}</TableCell>
+                                            <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteSteelProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -226,77 +207,37 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                 </Card>
             </TabsContent>
 
-            {/* Shapes Tab */}
             <TabsContent value="shapes">
                 <Card>
                     <CardHeader>
                         <CardTitle>Profile Shapes</CardTitle>
-                        <CardDescription>Define custom shapes with variables (comma separated) and formulas.</CardDescription>
+                        <CardDescription>Define custom shapes with variables.</CardDescription>
                         <div className="flex justify-end">
                             <Dialog open={shapeDialogOpen} onOpenChange={setShapeDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button size="sm">Add Shape</Button>
-                                </DialogTrigger>
+                                <DialogTrigger asChild><Button size="sm">Add Shape</Button></DialogTrigger>
                                 <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Add Custom Shape</DialogTitle>
-                                    </DialogHeader>
+                                    <DialogHeader><DialogTitle>Add Custom Shape</DialogTitle></DialogHeader>
                                     <div className="grid gap-4 py-4">
-                                        <div className="grid gap-2">
-                                            <Label>ID (Unique)</Label>
-                                            <Input placeholder="e.g. TRIANGLE" value={newShape.id} onChange={e => setNewShape({ ...newShape, id: e.target.value.toUpperCase() })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Name</Label>
-                                            <Input placeholder="e.g. Triangular Prism" value={newShape.name} onChange={e => setNewShape({ ...newShape, name: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Parameters (comma separated)</Label>
-                                            <Input placeholder="e.g. b, h, length" value={newShape.params} onChange={e => setNewShape({ ...newShape, params: e.target.value })} />
-                                            <p className="text-xs text-muted-foreground">Variables to ask user for.</p>
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Formula</Label>
-                                            <Input placeholder="e.g. 0.5 * b * h" value={newShape.formula} onChange={e => setNewShape({ ...newShape, formula: e.target.value })} />
-                                            <p className="text-xs text-muted-foreground">Documentation only currently.</p>
-                                        </div>
+                                        <div className="grid gap-2"><Label>ID (Unique)</Label><Input placeholder="TRIANGLE" value={newShape.id} onChange={e => setNewShape({ ...newShape, id: e.target.value.toUpperCase() })} /></div>
+                                        <div className="grid gap-2"><Label>Name</Label><Input placeholder="Triangular Prism" value={newShape.name} onChange={e => setNewShape({ ...newShape, name: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Params (comma sep)</Label><Input placeholder="b, h" value={newShape.params} onChange={e => setNewShape({ ...newShape, params: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Formula</Label><Input placeholder="0.5 * b * h" value={newShape.formula} onChange={e => setNewShape({ ...newShape, formula: e.target.value })} /></div>
                                     </div>
-                                    <DialogFooter>
-                                        <Button onClick={handleAddShape} disabled={loadingShape}>{loadingShape ? 'Saving...' : 'Add'}</Button>
-                                    </DialogFooter>
+                                    <DialogFooter><Button onClick={handleAddShape} disabled={loadingShape}>{loadingShape ? 'Saving...' : 'Add'}</Button></DialogFooter>
                                 </DialogContent>
                             </Dialog>
                         </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>ID</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Parameters</TableHead>
-                                    <TableHead>Formula</TableHead>
-                                    <TableHead></TableHead>
-                                </TableRow>
-                            </TableHeader>
+                            <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Params</TableHead><TableHead>Formula</TableHead><TableHead></TableHead></TableRow></TableHeader>
                             <TableBody>
                                 {initialShapes.map(shape => (
                                     <TableRow key={shape.id}>
-                                        <TableCell className="font-medium">{shape.id}</TableCell>
-                                        <TableCell>{shape.name}</TableCell>
-                                        <TableCell>
-                                            <div className="flex gap-1 flex-wrap">
-                                                {(shape.params as string[]).map(p => (
-                                                    <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>
-                                                ))}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="font-mono text-sm text-muted-foreground">{shape.formula || '-'}</TableCell>
-                                        <TableCell>
-                                            <Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">
-                                                ×
-                                            </Button>
-                                        </TableCell>
+                                        <TableCell>{shape.id}</TableCell><TableCell>{shape.name}</TableCell>
+                                        <TableCell><div className="flex gap-1 flex-wrap">{(shape.params as string[]).map(p => <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>)}</div></TableCell>
+                                        <TableCell className="font-mono text-sm">{shape.formula || '-'}</TableCell>
+                                        <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -305,43 +246,23 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                 </Card>
             </TabsContent>
 
-            {/* Catalog Tab */}
             <TabsContent value="catalog">
                 <Card>
                     <CardHeader>
                         <CardTitle>Standard Profile Catalog</CardTitle>
-                        <CardDescription>Predefined dimensions and weights for standard shapes.</CardDescription>
+                        <CardDescription>Predefined dimensions and weights.</CardDescription>
                         <div className="flex justify-end">
                             <Dialog open={profileDialogOpen} onOpenChange={setProfileDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button size="sm">Add Profile</Button>
-                                </DialogTrigger>
+                                <DialogTrigger asChild><Button size="sm">Add Profile</Button></DialogTrigger>
                                 <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Add Standard Profile</DialogTitle>
-                                    </DialogHeader>
+                                    <DialogHeader><DialogTitle>Add Standard Profile</DialogTitle></DialogHeader>
                                     <div className="grid gap-4 py-4">
-                                        <div className="grid gap-2">
-                                            <Label>Type</Label>
-                                            <Input placeholder="e.g. HEA" value={newProfile.type} onChange={e => setNewProfile({ ...newProfile, type: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Dimensions</Label>
-                                            <Input placeholder="e.g. 100" value={newProfile.dimensions} onChange={e => setNewProfile({ ...newProfile, dimensions: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Weight (kg/m)</Label>
-                                            <Input type="number" step="0.01" value={newProfile.weight} onChange={e => setNewProfile({ ...newProfile, weight: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Cross Section Area (mm²)</Label>
-                                            <Input type="number" placeholder="Optional" value={newProfile.area} onChange={e => setNewProfile({ ...newProfile, area: e.target.value })} />
-                                            <p className="text-xs text-muted-foreground">Used for precise weight calculation with different material densities.</p>
-                                        </div>
+                                        <div className="grid gap-2"><Label>Type</Label><Input placeholder="HEA" value={newProfile.type} onChange={e => setNewProfile({ ...newProfile, type: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Dimensions</Label><Input placeholder="100" value={newProfile.dimensions} onChange={e => setNewProfile({ ...newProfile, dimensions: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Weight (kg/m)</Label><Input type="number" step="0.01" value={newProfile.weight} onChange={e => setNewProfile({ ...newProfile, weight: e.target.value })} /></div>
+                                        <div className="grid gap-2"><Label>Area (mm²)</Label><Input type="number" placeholder="Optional" value={newProfile.area} onChange={e => setNewProfile({ ...newProfile, area: e.target.value })} /></div>
                                     </div>
-                                    <DialogFooter>
-                                        <Button onClick={handleAddProfile} disabled={loadingProfile}>{loadingProfile ? 'Saving...' : 'Add'}</Button>
-                                    </DialogFooter>
+                                    <DialogFooter><Button onClick={handleAddProfile} disabled={loadingProfile}>{loadingProfile ? 'Saving...' : 'Add'}</Button></DialogFooter>
                                 </DialogContent>
                             </Dialog>
                         </div>
@@ -349,27 +270,12 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                     <CardContent>
                         <div className="max-h-[600px] overflow-y-auto border rounded">
                             <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Dimensions</TableHead>
-                                        <TableHead>Weight (kg/m)</TableHead>
-                                        <TableHead>Area (mm²)</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
+                                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight</TableHead><TableHead>Area</TableHead><TableHead></TableHead></TableRow></TableHeader>
                                 <TableBody>
                                     {initialStandardProfiles.map(p => (
                                         <TableRow key={p.id}>
-                                            <TableCell>{p.type}</TableCell>
-                                            <TableCell>{p.dimensions}</TableCell>
-                                            <TableCell>{p.weightPerMeter}</TableCell>
-                                            <TableCell>{p.crossSectionArea || '-'}</TableCell>
-                                            <TableCell>
-                                                <Button variant="ghost" size="sm" onClick={() => handleDeleteProfile(p.id)} className="text-red-500 h-8 w-8 p-0">
-                                                    ×
-                                                </Button>
-                                            </TableCell>
+                                            <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter}</TableCell><TableCell>{p.crossSectionArea || '-'}</TableCell>
+                                            <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -379,12 +285,11 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                 </Card>
             </TabsContent>
 
-            {/* Grades Tab */}
             <TabsContent value="grades">
                 <Card>
                     <CardHeader>
                         <CardTitle>Material Grades</CardTitle>
-                        <CardDescription>Define available steel grades and their density.</CardDescription>
+                        <CardDescription>Define grades, densities, and scrap prices.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -392,7 +297,8 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                                 <TableRow>
                                     <TableHead>Grade Name</TableHead>
                                     <TableHead>Density (kg/dm³)</TableHead>
-                                    <TableHead>Equivalent (kg/m³)</TableHead>
+                                    <TableHead>Scrap Price (€/kg)</TableHead>
+                                    <TableHead>Action</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -400,37 +306,39 @@ export function SettingsClient({ initialScrapPrice, initialShapes, initialGrades
                                     <TableRow key={grade.id}>
                                         <TableCell className="font-medium">{grade.name}</TableCell>
                                         <TableCell>{grade.density}</TableCell>
-                                        <TableCell>{(grade.density * 1000).toLocaleString()}</TableCell>
+                                        <TableCell>{grade.scrapPrice ? `€${grade.scrapPrice.toFixed(2)}` : '-'}</TableCell>
+                                        <TableCell>
+                                            <Button variant="ghost" size="sm" onClick={() => handleEditGrade(grade)}>
+                                                <Pencil className="h-4 w-4" />
+                                            </Button>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
-                    </CardContent>
-                </Card>
-            </TabsContent>
 
-            {/* General Tab */}
-            <TabsContent value="general">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Global Parameters</CardTitle>
-                        <CardDescription>System-wide constants and default values.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex items-end gap-4 max-w-sm">
-                            <div className="grid gap-2 w-full">
-                                <label className="text-sm font-medium">Scrap Price (€/kg)</label>
-                                <Input
-                                    type="number"
-                                    value={scrapPrice}
-                                    onChange={e => setScrapPrice(e.target.value)}
-                                    step="0.01"
-                                />
-                            </div>
-                            <Button onClick={handleSavePrice} disabled={loadingPrice}>
-                                {loadingPrice ? 'Saving...' : 'Save'}
-                            </Button>
-                        </div>
+                        <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Edit Grade: {editingGrade?.name}</DialogTitle>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid gap-2">
+                                        <Label>Density (kg/dm³)</Label>
+                                        <Input type="number" step="0.01" value={gradeForm.density} onChange={e => setGradeForm({ ...gradeForm, density: e.target.value })} />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Scrap Price (€/kg)</Label>
+                                        <Input type="number" step="0.01" value={gradeForm.scrapPrice} onChange={e => setGradeForm({ ...gradeForm, scrapPrice: e.target.value })} />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button onClick={handleSaveGrade} disabled={loadingGrade}>
+                                        {loadingGrade ? 'Saving...' : 'Save Changes'}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </CardContent>
                 </Card>
             </TabsContent>

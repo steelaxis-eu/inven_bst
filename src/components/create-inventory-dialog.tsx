@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -62,6 +62,37 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     const availableDims = standardProfiles
         .filter(p => p.type === selectedType)
         .map(p => p.dimensions)
+
+    // Calculation Effect
+    useEffect(() => {
+        if (!activeShape || !selectedGrade || !activeShape.formula) return
+
+        const gradeObj = grades.find(g => g.name === selectedGrade)
+        if (!gradeObj) return
+
+        // Check valid params
+        const numeric: Record<string, number> = {}
+        const neededParams = activeShape.params as string[]
+
+        let allValid = true
+        for (const p of neededParams) {
+            const val = parseFloat(shapeParams[p])
+            if (isNaN(val)) {
+                allValid = false
+                break
+            }
+            numeric[p] = val
+        }
+
+        if (allValid) {
+            import('@/lib/formula').then(({ evaluateFormula }) => {
+                const areaMm2 = evaluateFormula(activeShape.formula!, numeric)
+                // areaMm2 / 1000 * density => weight/m
+                const weight = (areaMm2 / 1000) * gradeObj.density
+                setManualWeight(weight.toFixed(2))
+            })
+        }
+    }, [activeShape, shapeParams, selectedGrade, grades])
 
     // Auto-fill weight logic
     // When Type/Dim matches standard, use it. Else empty.
@@ -239,22 +270,31 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     ) : (
                                         // Custom Shape Inputs
                                         activeShape ? (
-                                            <div className="flex gap-2">
-                                                {(activeShape.params as string[]).map(param => (
-                                                    <Input
-                                                        key={param}
-                                                        placeholder={param}
-                                                        className="h-8 text-xs"
-                                                        value={shapeParams[param] || ''}
-                                                        onChange={e => {
-                                                            const newParams = { ...shapeParams, [param]: e.target.value }
-                                                            setShapeParams(newParams)
-                                                            // Auto-construct customDim string: e.g. 100x10x5
-                                                            const dimStr = (activeShape.params as string[]).map(p => newParams[p] || '?').join('x')
-                                                            setCustomDim(dimStr)
-                                                        }}
-                                                    />
-                                                ))}
+                                            <div className="flex flex-col gap-2">
+                                                <div className="flex gap-2">
+                                                    {(activeShape.params as string[]).map(param => (
+                                                        <Input
+                                                            key={param}
+                                                            placeholder={param}
+                                                            className="h-8 text-xs"
+                                                            value={shapeParams[param] || ''}
+                                                            onChange={e => {
+                                                                const val = e.target.value
+                                                                const newParams = { ...shapeParams, [param]: val }
+                                                                setShapeParams(newParams)
+
+                                                                // Auto-construct customDim string
+                                                                const dimStr = (activeShape.params as string[]).map(p => newParams[p] || '?').join('x')
+                                                                setCustomDim(dimStr)
+                                                            }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                {activeShape.formula && (
+                                                    <p className="text-[10px] text-muted-foreground font-mono">
+                                                        Formula: {activeShape.formula}
+                                                    </p>
+                                                )}
                                             </div>
                                         ) : (
                                             <Input placeholder="Custom Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} />
@@ -376,6 +416,6 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                     </Button>
                 </div>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     )
 }

@@ -61,7 +61,10 @@ export async function getProject(id: string) {
                 }
             },
             remnants: {
-                include: { profile: true }
+                include: {
+                    profile: true,
+                    grade: true
+                }
             }
         }
     })
@@ -84,7 +87,10 @@ export async function getProject(id: string) {
                     }
                 },
                 remnants: {
-                    include: { profile: true }
+                    include: {
+                        profile: true,
+                        grade: true
+                    }
                 }
             }
         })
@@ -92,9 +98,9 @@ export async function getProject(id: string) {
 
     if (!project) return null
 
-    // Fetch settings for Scrap Price
-    const settings = await prisma.globalSettings.findUnique({ where: { id: 'settings' } })
-    const scrapPrice = settings?.scrapPricePerKg || 0
+    // Fetch settings - REMOVED (Scrap price is now per grade)
+    // const settings = await prisma.globalSettings.findUnique({ where: { id: 'settings' } })
+    // const scrapPrice = settings?.scrapPricePerKg || 0
 
     // --- Business Logic: Calculations & Cert Resolution ---
 
@@ -174,7 +180,10 @@ export async function getProject(id: string) {
         if (scrap.profile && scrap.profile.weightPerMeter) {
             const weight = (scrap.length / 1000) * scrap.profile.weightPerMeter
             totalScrapWeight += weight
-            totalScrapValue += weight * scrapPrice
+
+            // Use grade-specific scrap price if available, otherwise 0
+            const price = (scrap as any).grade?.scrapPrice || 0
+            totalScrapValue += weight * price
         }
     })
 
@@ -190,7 +199,7 @@ export async function getProject(id: string) {
             totalScrapWeight,
             netCost,
             materialSummary: Array.from(summaryMap.values()),
-            scrapPrice // useful for display context
+            scrapPrice: 0 // No single global price anymore
         }
     }
 }
