@@ -73,16 +73,32 @@ async function main() {
 
     // 2.2 Seed Profile Shapes (Definitions for Custom)
     // Formulas use params as variables. Area in mm^2.
-    // RHS/SHS (EN 10210): Area = 2dt(b+h-2t) approx or simplified A = (b*h) - ((b-2t)*(h-2t))
-    // CHS: Area = PI * (r_out^2 - r_in^2) -> PI * ((d/2)^2 - ((d-2t)/2)^2)
-    // Density (rho) is handled by the Grade. Calculation will be: Area * 1m * rho
+    // 2.2 Seed Profile Shapes (Definitions for Custom)
+    // Precise EN 10210/10219 formulas for RHS/SHS (A.3)
+    // Area = 2T(B+H-2T) - (4 - PI)(ro^2 - ri^2)
+    // ro/ri depend on T.
+    const enFormulaBox = `
+        const ro = (t <= 6) ? 2.0 * t : (t <= 10) ? 2.5 * t : 3.0 * t;
+        const ri = (t <= 6) ? 1.0 * t : (t <= 10) ? 1.5 * t : 2.0 * t;
+        const area = 2*t*(b + h - 2*t) - (4 - Math.PI)*(ro*ro - ri*ri);
+        return area;
+    `
+    // For SHS, b=h. We can reuse the same formula if we map params, but here simple separate string is cleaner.
+    const enFormulaSquare = `
+        const h = b; 
+        const ro = (t <= 6) ? 2.0 * t : (t <= 10) ? 2.5 * t : 3.0 * t;
+        const ri = (t <= 6) ? 1.0 * t : (t <= 10) ? 1.5 * t : 2.0 * t;
+        const area = 2*t*(b + h - 2*t) - (4 - Math.PI)*(ro*ro - ri*ri);
+        return area;
+    `
+
     const SHAPES = [
-        { id: 'Plate', name: 'Plate / Flat Bar', params: ['w', 't'], formula: 'w * t' },
-        { id: 'Round', name: 'Round Bar', params: ['d'], formula: '3.14159 * (d/2) * (d/2)' },
-        { id: 'RHS', name: 'Rectangular Hollow', params: ['b', 'h', 't'], formula: '(b * h) - ((b - 2*t) * (h - 2*t))' },
-        { id: 'SHS', name: 'Square Hollow', params: ['b', 't'], formula: '(b * b) - ((b - 2*t) * (b - 2*t))' },
-        { id: 'CHS', name: 'Circular Hollow', params: ['d', 't'], formula: '3.14159 * ((d/2)*(d/2) - ((d-2*t)/2)*((d-2*t)/2))' },
+        { id: 'FB', name: 'Flat Bar / Plate', params: ['w', 't'], formula: 'w * t' },
+        { id: 'R', name: 'Round Bar', params: ['d'], formula: 'Math.PI * (d/2) * (d/2)' },
         { id: 'SQB', name: 'Square Bar', params: ['b'], formula: 'b * b' },
+        { id: 'RHS', name: 'Rectangular Hollow (EN)', params: ['b', 'h', 't'], formula: enFormulaBox.replace(/\n\s+/g, ' ') }, // Minify slightly for DB storage if preferred, or keep structure.
+        { id: 'SHS', name: 'Square Hollow (EN)', params: ['b', 't'], formula: enFormulaSquare.replace(/\n\s+/g, ' ') },
+        { id: 'CHS', name: 'Circular Hollow', params: ['d', 't'], formula: 'Math.PI * ((d/2)*(d/2) - ((d-2*t)/2)*((d-2*t)/2))' },
     ]
     for (const s of SHAPES) {
         await prisma.profileShape.upsert({

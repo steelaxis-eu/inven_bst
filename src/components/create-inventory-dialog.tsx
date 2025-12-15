@@ -11,6 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileUploader } from "@/components/ui/file-uploader"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { toast } from "sonner"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 
 import { calculateProfileWeight } from "@/app/actions/calculator"
 
@@ -49,6 +53,10 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     // Custom Shape Logic
     const [shapeParams, setShapeParams] = useState<Record<string, string>>({})
     const [calcedWeight, setCalcedWeight] = useState(0)
+
+    // Combobox states
+    const [openTypeCombo, setOpenTypeCombo] = useState(false)
+    const [openDimCombo, setOpenDimCombo] = useState(false)
 
     // Derived
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
@@ -210,7 +218,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
             <DialogTrigger asChild>
                 <Button>Add Inventory</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-[95vw] w-auto min-w-[600px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Add Inventory Batch</DialogTitle>
                     <DialogDescription>Add multiple items to your stock. You can calculate profile weights if needed.</DialogDescription>
@@ -231,26 +239,63 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             </div>
 
                             {/* New Profile Selectors */}
-                            <div className="grid gap-2 col-span-1 md:col-span-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
+                            <div className="grid gap-4 col-span-1 md:col-span-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 items-end">
                                 <div>
                                     <Label>Type</Label>
-                                    <Select value={selectedType} onValueChange={t => {
-                                        setSelectedType(t);
-                                        setSelectedDim('');
-                                        setCustomDim('');
-                                        setManualWeight('');
-                                        // Reset shape params
-                                        setShapeParams({});
-                                    }}>
-                                        <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="STANDARD_HEADER" disabled className="font-semibold text-xs text-muted-foreground group">Standard Profiles</SelectItem>
-                                            {uniqueTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-
-                                            <SelectItem value="CUSTOM_HEADER" disabled className="font-semibold text-xs text-muted-foreground mt-2 border-t pt-2">Custom Shapes</SelectItem>
-                                            {shapes.map(s => <SelectItem key={s.id} value={s.id}>{s.id} ({s.name})</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" role="combobox" aria-expanded={openTypeCombo} className="w-full justify-between px-3 font-normal">
+                                                {selectedType || "Select type..."}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[200px] p-0">
+                                            <Command>
+                                                <CommandInput placeholder="Search type..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No type found.</CommandEmpty>
+                                                    <CommandGroup heading="Standard Profiles">
+                                                        {uniqueTypes.map(t => (
+                                                            <CommandItem
+                                                                key={t}
+                                                                value={t}
+                                                                onSelect={(currentValue) => {
+                                                                    setSelectedType(currentValue === selectedType ? "" : currentValue)
+                                                                    setSelectedDim('')
+                                                                    setCustomDim('')
+                                                                    setManualWeight('')
+                                                                    setShapeParams({})
+                                                                    setOpenTypeCombo(false)
+                                                                }}
+                                                            >
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
+                                                                {t}
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                    <CommandGroup heading="Custom Shapes">
+                                                        {shapes.map(s => (
+                                                            <CommandItem
+                                                                key={s.id}
+                                                                value={s.id}
+                                                                onSelect={(currentValue) => {
+                                                                    setSelectedType(currentValue === selectedType ? "" : currentValue)
+                                                                    setSelectedDim('')
+                                                                    setCustomDim('')
+                                                                    setManualWeight('')
+                                                                    setShapeParams({})
+                                                                    setOpenTypeCombo(false)
+                                                                }}
+                                                            >
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
+                                                                {s.id} ({s.name})
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
                                 </div>
 
                                 <div className="space-y-1">
@@ -258,12 +303,38 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     {isStandardType ? (
                                         // Standard Profile Selection
                                         availableDims.length > 0 ? (
-                                            <Select value={selectedDim} onValueChange={d => { setSelectedDim(d); setCustomDim('') }}>
-                                                <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
-                                                <SelectContent>
-                                                    {availableDims.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
+                                            <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant="outline" role="combobox" aria-expanded={openDimCombo} className="w-full justify-between px-3 font-normal">
+                                                        {selectedDim || "Select..."}
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[200px] p-0">
+                                                    <Command>
+                                                        <CommandInput placeholder="Search dims..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>No dimensions found.</CommandEmpty>
+                                                            <CommandGroup>
+                                                                {availableDims.map(d => (
+                                                                    <CommandItem
+                                                                        key={d}
+                                                                        value={d}
+                                                                        onSelect={(currentValue) => {
+                                                                            setSelectedDim(currentValue === selectedDim ? "" : currentValue)
+                                                                            setCustomDim('')
+                                                                            setOpenDimCombo(false)
+                                                                        }}
+                                                                    >
+                                                                        <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                        {d}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
                                         ) : (
                                             <Input disabled placeholder="Select Type first" />
                                         )

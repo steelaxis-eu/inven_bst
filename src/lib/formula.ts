@@ -16,8 +16,14 @@ export function evaluateFormula(formula: string, params: Record<string, number>)
         // Replace "PI" with "Math.PI" if user typed PI
         let safeFormula = formula.replace(/\bPI\b/g, 'Math.PI')
 
+        // If formula contains multiple statements (semi-colons or newlines), treat as body.
+        // Otherwise treat as expression to return.
+        const isComplex = safeFormula.includes(';') || safeFormula.includes('\n') || safeFormula.includes('return')
+
+        const body = isComplex ? safeFormula : `return ${safeFormula};`
+
         // Create function
-        const func = new Function(...keys, `return ${safeFormula};`)
+        const func = new Function(...keys, body)
         return func(...values)
     } catch (e) {
         console.error("Formula eval error:", e)
