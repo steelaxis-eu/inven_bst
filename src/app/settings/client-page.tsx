@@ -65,7 +65,6 @@ export function SettingsClient({ initialScrapPrice, initialProfiles }: { initial
                             <TableRow>
                                 <TableHead>Type</TableHead>
                                 <TableHead>Dimensions</TableHead>
-                                <TableHead>Grade</TableHead>
                                 <TableHead>Weight (kg/m)</TableHead>
                                 <TableHead></TableHead>
                             </TableRow>
@@ -122,7 +121,6 @@ function ProfileRow({ profile }: { profile: any }) {
         <TableRow>
             <TableCell>{profile.type}</TableCell>
             <TableCell>{profile.dimensions}</TableCell>
-            <TableCell>{profile.grade}</TableCell>
             <TableCell>
                 <Input
                     type="number"

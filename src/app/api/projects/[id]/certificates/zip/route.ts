@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { getBlobStream } from '@/lib/azure-storage'
+import { getFileStream, CERTIFICATES_BUCKET } from '@/lib/storage'
 import archiver from 'archiver'
 import { PassThrough } from 'stream'
 
@@ -96,9 +96,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         // Append files
         let fileCount = 0
         for (const filename of Array.from(certificates)) {
-            const blobStream = await getBlobStream(filename)
-            if (blobStream) {
-                archive.append(blobStream as any, { name: filename })
+            const fileStream = await getFileStream(CERTIFICATES_BUCKET, filename)
+            if (fileStream) {
+                archive.append(fileStream as any, { name: filename })
                 fileCount++
             }
         }

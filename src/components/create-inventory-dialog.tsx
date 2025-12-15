@@ -39,63 +39,46 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     // New Profile Selection State
     const [selectedType, setSelectedType] = useState('')
     const [selectedDim, setSelectedDim] = useState('')
+    const [customDim, setCustomDim] = useState('') // For custom dimensions input
     const [selectedGrade, setSelectedGrade] = useState('')
-    const [manualWeight, setManualWeight] = useState('') // For overrides or custom
+    const [manualWeight, setManualWeight] = useState('')
 
     // Derived
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
+    // Add custom types if not present
+    const allTypes = Array.from(new Set([...uniqueTypes, 'PL', 'RHS', 'SHS', 'CHS', 'FB', 'R', 'SQB']))
+
     const availableDims = standardProfiles
         .filter(p => p.type === selectedType)
         .map(p => p.dimensions)
 
     // Auto-fill weight logic
-    // const calculatedWeight = ... (do inside render or effect?)
-
-
-    // Profile Form State
-    const [newProfile, setNewProfile] = useState({ type: '', dimensions: '', grade: '' })
-
-    const handleCreateProfile = async () => {
-        if (!newProfile.type || !newProfile.dimensions || !newProfile.grade) return
-        setLoading(true)
-        try {
-            const { createProfile } = await import("@/app/actions/inventory")
-            const p = await createProfile(newProfile)
-            setProfiles([...profiles, p])
-            setProfileOpen(false)
-            setNewProfile({ type: '', dimensions: '', grade: '' })
-            toast.success("Profile created")
-        } catch (e) {
-            toast.error("Failed to create profile (maybe duplicates?)")
-        } finally {
-            setLoading(false)
-        }
-    }
+    // When Type/Dim matches standard, use it. Else empty.
+    const standardMatch = standardProfiles.find(p => p.type === selectedType && p.dimensions === (customDim || selectedDim))
 
     const handleAddItem = async () => {
-        if (!current.lotId || !selectedType || !selectedDim || !selectedGrade || !current.length || !current.quantity) {
+        if (!current.lotId || !selectedType || !(selectedDim || customDim) || !selectedGrade || !current.length || !current.quantity) {
             toast.warning("Please fill required fields (Lot ID, Type, Dim, Grade, Length, Qty)")
             return
         }
 
         setLoading(true)
         try {
-            // 1. Resolve Profile ID
-            // Find standard weight
-            const std = standardProfiles.find(p => p.type === selectedType && p.dimensions === selectedDim)
-            const weight = manualWeight ? parseFloat(manualWeight) : (std?.weightPerMeter || 0)
+            // 1. Resolve Profile (Shape)
+            const finalDim = customDim || selectedDim
+            const weight = manualWeight ? parseFloat(manualWeight) : (standardMatch?.weightPerMeter || 0)
 
             const profile = await ensureProfile({
                 type: selectedType,
-                dimensions: selectedDim,
-                grade: selectedGrade,
+                dimensions: finalDim,
                 weight: weight
             })
 
             setItems([...items, {
                 ...current,
                 profileId: profile.id,
-                profileName: `${profile.type} ${profile.dimensions} (${profile.grade})`,
+                gradeName: selectedGrade, // Pass name to batch creator to resolve ID
+                profileName: `${profile.type} ${profile.dimensions} (${selectedGrade})`,
                 _id: Math.random().toString()
             }])
 
@@ -107,7 +90,6 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 certificate: current.certificate,
                 totalCost: ''
             })
-            // Keep Type/Dim/Grade? usually yes.
         } catch (e) {
             toast.error("Failed to resolve profile")
         } finally {
@@ -123,6 +105,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
             const res = await createInventoryBatch(items.map(i => ({
                 lotId: i.lotId,
                 profileId: i.profileId,
+                gradeName: i.gradeName, // Pass grade name
                 length: parseFloat(i.length),
                 quantity: parseInt(i.quantity),
                 certificate: i.certificate,
@@ -172,21 +155,42 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             <div className="grid gap-2 col-span-2 grid-cols-4">
                                 <div>
                                     <Label>Type</Label>
-                                    <Select value={selectedType} onValueChange={t => { setSelectedType(t); setSelectedDim('') }}>
+                                    <Select value={selectedType} onValueChange={t => { setSelectedType(t); setSelectedDim(''); setCustomDim('') }}>
                                         <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
                                         <SelectContent>
-                                            {uniqueTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                            {allTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
+                                <div className="space-y-1">
                                     <Label>Dimensions</Label>
-                                    <Select value={selectedDim} onValueChange={setSelectedDim} disabled={!selectedType}>
-                                        <SelectTrigger><SelectValue placeholder="Dim" /></SelectTrigger>
-                                        <SelectContent>
-                                            {availableDims.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    {availableDims.length > 0 ? (
+                                        <div className="flex gap-1">
+                                            <Select value={selectedDim} onValueChange={d => { setSelectedDim(d); setCustomDim('') }}>
+                                                <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
+                                                <SelectContent>
+                                                    {availableDims.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                                    <SelectItem value="CUSTOM">Custom...</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    ) : (
+                                        <Input
+                                            placeholder="e.g. 10x100"
+                                            value={customDim}
+                                            onChange={e => setCustomDim(e.target.value)}
+                                            disabled={!selectedType}
+                                        />
+                                    )}
+                                    {/* If Custom selected in dropdown, show input */}
+                                    {selectedDim === 'CUSTOM' && (
+                                        <Input
+                                            className="mt-1"
+                                            placeholder="Enter dimensions..."
+                                            value={customDim}
+                                            onChange={e => setCustomDim(e.target.value)}
+                                        />
+                                    )}
                                 </div>
                                 <div>
                                     <Label>Grade</Label>
@@ -199,10 +203,9 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 </div>
                                 <div>
                                     <Label>Weight (kg/m)</Label>
-                                    {/* Show calculated or allow override */}
                                     <Input
                                         type="number"
-                                        placeholder={(standardProfiles.find(p => p.type === selectedType && p.dimensions === selectedDim)?.weightPerMeter || 0).toString()}
+                                        placeholder={standardMatch ? standardMatch.weightPerMeter.toString() : "0"}
                                         value={manualWeight}
                                         onChange={e => setManualWeight(e.target.value)}
                                     />

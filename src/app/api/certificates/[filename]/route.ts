@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getBlobStream } from '@/lib/azure-storage'
+import { getFileStream, CERTIFICATES_BUCKET } from '@/lib/storage'
 import { PassThrough } from 'stream'
 
 export async function GET(req: Request, { params }: { params: Promise<{ filename: string }> }) {
@@ -10,15 +10,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ filename
     }
 
     try {
-        const blobStream = await getBlobStream(filename)
+        const fileStream = await getFileStream(CERTIFICATES_BUCKET, filename)
 
-        if (!blobStream) {
+        if (!fileStream) {
             return NextResponse.json({ error: 'File not found' }, { status: 404 })
         }
 
         // TypeScript workaround for stream as response
         const responseStream: any = new PassThrough()
-        blobStream.pipe(responseStream)
+        fileStream.pipe(responseStream)
 
         return new Response(responseStream, {
             headers: {

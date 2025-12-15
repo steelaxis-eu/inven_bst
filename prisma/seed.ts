@@ -81,40 +81,36 @@ async function main() {
     console.log('✓ Standard Catalog seeded')
 
 
-    // 3. Seed SteelProfiles (Legacy/Linker) using the same data
-    // We iterate again or reuse the object.
-
+    // 3. Seed SteelProfiles (Legacy/Linker) - Shapes ONLY
     const profiles: any[] = []
     for (const type of Object.keys(STANDARD_PROFILES)) {
         for (const dim of Object.keys(STANDARD_PROFILES[type])) {
             const w = STANDARD_PROFILES[type][dim]
             const p = await prisma.steelProfile.upsert({
                 where: {
-                    type_dimensions_grade: {
+                    type_dimensions: {
                         type: type,
-                        dimensions: dim,
-                        grade: 'S355'
+                        dimensions: dim
                     }
                 },
                 update: { weightPerMeter: w },
                 create: {
                     type: type,
                     dimensions: dim,
-                    grade: 'S355',
                     weightPerMeter: w
                 }
             })
             profiles.push(p)
         }
     }
-    console.log('✓ Profiles seeded')
+    console.log('✓ Profiles (Shapes) seeded')
 
     // Helpers
     const getProfile = (t: string, d: string) => profiles.find(p => p.type === t && p.dimensions === d)!
+    const s355 = await prisma.materialGrade.findUnique({ where: { name: 'S355' } })
+    if (!s355) throw new Error("S355 not found")
 
     // 4. Seed Inventory
-    // Clean existing mostly to avoid dups if re-running without reset
-    // But upsert is better.
 
     // Lot A: HEA 200 (Full Lengths)
     const hea200 = getProfile('HEA', '200')
@@ -125,6 +121,7 @@ async function main() {
             create: {
                 lotId: 'L-HEA200-001',
                 profileId: hea200.id,
+                gradeId: s355.id,
                 length: 12100,
                 quantityReceived: 10,
                 quantityAtHand: 8,
@@ -145,6 +142,7 @@ async function main() {
             create: {
                 lotId: 'L-IPE300-055',
                 profileId: ipe300.id,
+                gradeId: s355.id,
                 length: 15100,
                 quantityReceived: 6,
                 quantityAtHand: 2, // Low stock
@@ -167,6 +165,7 @@ async function main() {
                 id: 'L-HEA200-001-3400',
                 rootLotId: 'L-HEA200-001',
                 profileId: hea200.id,
+                gradeId: s355.id,
                 length: 3400,
                 quantity: 1,
                 costPerMeter: 45.0,
@@ -183,6 +182,7 @@ async function main() {
                 id: 'L-HEA200-001-450',
                 rootLotId: 'L-HEA200-001',
                 profileId: hea200.id,
+                gradeId: s355.id,
                 length: 450, // Short piece
                 quantity: 1,
                 costPerMeter: 45.0,

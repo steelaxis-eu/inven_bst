@@ -18,6 +18,7 @@ interface EditInventoryProps {
         length: number
         quantityAtHand: number
         status: string
+        costPerMeter: number
         certificateFilename?: string | null
     }
 }
@@ -31,6 +32,9 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
     const [length, setLength] = useState(item.length.toString())
     const [quantity, setQuantity] = useState(item.quantityAtHand.toString())
     const [status, setStatus] = useState(item.status)
+    // Calculate initial total cost
+    const initialTotalCost = (item.length * item.quantityAtHand / 1000) * (item.costPerMeter || 0)
+    const [totalCost, setTotalCost] = useState(initialTotalCost.toFixed(2))
 
     const handleSubmit = async () => {
         setLoading(true)
@@ -39,7 +43,8 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
                 lotId,
                 length: parseFloat(length),
                 quantityAtHand: parseInt(quantity),
-                status
+                status,
+                totalCost: parseFloat(totalCost)
             })
             if (res.success) {
                 setOpen(false)
@@ -78,6 +83,11 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
                     <div className="grid gap-2">
                         <Label>Quantity At Hand</Label>
                         <Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Total Cost (€)</Label>
+                        {/* TODO: maybe auto-update when len/qty changes? For now, manual is fine or let user override */}
+                        <Input type="number" step="0.01" value={totalCost} onChange={e => setTotalCost(e.target.value)} />
                     </div>
                     <div className="grid gap-2">
                         <Label>Status</Label>
