@@ -5,6 +5,21 @@ const prisma = new PrismaClient()
 async function main() {
     console.log('Starting seed...')
 
+    // 0. Clean Slate for SteelProfile (and dependents if needed, but we rely on cascade or manual clean usually)
+    // User requested "cleanslate steelProfile table".
+    // We should probably clean dependent tables first to avoid FK errors if we were running this on existing data.
+    // But usually seed is additive. Let's try to delete.
+    try {
+        await prisma.usageLine.deleteMany({})
+        await prisma.usage.deleteMany({})
+        await prisma.remnant.deleteMany({})
+        await prisma.inventory.deleteMany({})
+        await prisma.steelProfile.deleteMany({})
+        console.log('✓ SteelProfile and dependent tables cleaned')
+    } catch (e) {
+        console.log('! Note: Could not clean some tables (maybe empty or constraint invisible):', e)
+    }
+
     // 1. Seed Global Settings
     await prisma.globalSettings.upsert({
         where: { id: 'settings' },
@@ -14,7 +29,7 @@ async function main() {
     console.log('✓ Settings seeded')
 
     // 2. Seed Projects
-    const skyline = await prisma.project.upsert({
+    await prisma.project.upsert({
         where: { projectNumber: 'P-2024-001' },
         update: {},
         create: {
@@ -26,7 +41,7 @@ async function main() {
         }
     })
 
-    const bridge = await prisma.project.upsert({
+    await prisma.project.upsert({
         where: { projectNumber: 'P-2023-099' },
         update: {},
         create: {
@@ -37,6 +52,8 @@ async function main() {
             modifiedBy: 'Admin'
         }
     })
+    console.log('✓ Projects seeded')
+
     // 2.1 Seed Material Grades
     const GRADES = [
         { name: 'S235', density: 7.85 },
@@ -61,6 +78,7 @@ async function main() {
         { id: 'RHS', name: 'Rectangular Hollow Section', params: ['h', 'w', 't'], formula: 'Advanced' },
         { id: 'SHS', name: 'Square Hollow Section', params: ['s', 't'], formula: 'Advanced' },
         { id: 'CHS', name: 'Circular Hollow Section', params: ['d', 't'], formula: 'Advanced' },
+        { id: 'SQB', name: 'Square Bar', params: ['s'], formula: 's * s' },
     ]
     for (const s of SHAPES) {
         await prisma.profileShape.upsert({
@@ -71,179 +89,86 @@ async function main() {
     }
     console.log('✓ Profile Shapes seeded')
 
-    // 2.3 Seed Standard Profiles Catalog (Fuller mock)
-    // NOTE: In a real app, this would be thousands of lines. Accessing a limited set here.
-    const STANDARD_PROFILES: Record<string, Record<string, number>> = {
+    // 2.3 Seed Standard Profiles Catalog
+    // Full Data from previous seed.js
+    const standardProfilesData: Record<string, Record<string, number>> = {
         HEA: {
             "100": 16.7, "120": 19.9, "140": 24.7, "160": 30.4, "180": 35.5,
             "200": 42.3, "220": 50.5, "240": 60.3, "260": 68.2, "280": 76.4,
-            "300": 88.3, "320": 97.6, "340": 105.0, "360": 112.0, "400": 125.0
+            "300": 88.3, "320": 97.6, "340": 105.0, "360": 112.0, "400": 125.0,
+            "450": 140.0, "500": 155.0, "550": 166.0, "600": 178.0, "650": 190.0
         },
         HEB: {
             "100": 20.4, "120": 26.7, "140": 33.7, "160": 42.6, "180": 51.2,
-            "200": 61.3, "220": 71.5
+            "200": 61.3, "220": 71.5, "240": 83.2, "260": 93.0, "280": 103.0,
+            "300": 117.0, "320": 127.0, "340": 134.0, "360": 142.0, "400": 155.0,
+            "450": 171.0, "500": 187.0, "550": 199.0, "600": 212.0, "650": 225.0,
+            "700": 241.0, "800": 262.0, "900": 291.0, "1000": 314.0
         },
         IPE: {
             "80": 6.0, "100": 8.1, "120": 10.4, "140": 12.9, "160": 15.8, "180": 18.8,
-            "200": 22.4, "220": 26.2, "240": 30.7, "270": 36.1, "300": 42.2, "330": 49.1
+            "200": 22.4, "220": 26.2, "240": 30.7, "270": 36.1, "300": 42.2, "330": 49.1,
+            "360": 57.1, "400": 66.3, "450": 77.6, "500": 90.7, "550": 106.0, "600": 122.0
         },
         UPN: {
-            "80": 8.6, "100": 10.6, "120": 13.4, "140": 16.0, "160": 18.8, "180": 22.0,
-            "200": 25.3, "220": 29.4
+            "80": 8.64, "100": 10.6, "120": 13.4, "140": 16.0, "160": 18.8, "180": 22.0,
+            "200": 25.3, "220": 29.4, "240": 33.2, "260": 37.9, "280": 41.8, "300": 46.2,
+            "320": 59.5, "350": 60.6, "380": 63.1, "400": 71.8
         },
         UPE: {
-            "80": 7.9, "100": 9.82, "120": 12.1, "140": 14.5
+            "80": 7.9, "100": 9.82, "120": 12.1, "140": 14.5, "160": 17.0, "180": 19.7,
+            "200": 22.8, "220": 26.6, "240": 30.2, "270": 35.2, "300": 42.2, "330": 53.2,
+            "360": 61.2, "400": 72.2
         },
-        L: {
-            "50x5": 3.77, "60x6": 5.42, "100x10": 15.1
+        L: {  // Equal
+            "20x3": 0.88, "25x3": 1.12, "30x3": 1.36, "35x4": 2.10, "40x4": 2.42,
+            "45x4": 2.74, "50x5": 3.77, "60x6": 5.42, "70x7": 7.38, "80x8": 9.66,
+            "90x9": 12.2, "100x10": 15.1, "120x12": 21.6, "150x15": 33.8, "200x20": 59.9
+        },
+        L_unequal: {
+            "30x20x3": 1.11, "40x20x4": 1.77, "45x30x4": 2.25, "50x30x5": 2.96,
+            "60x40x5": 3.76, "75x50x6": 5.65, "100x50x8": 8.99, "120x80x10": 15.0,
+            "150x100x10": 19.3
+        },
+        SHS: { // Square Hollow Sections (Cold formed EN 10219 approx)
+            "40x40x3": 3.30, "40x40x4": 4.09, "50x50x3": 4.25, "50x50x4": 5.35, "50x50x5": 6.36,
+            "60x60x3": 5.19, "60x60x4": 6.60, "60x60x5": 7.93,
+            "80x80x3": 7.07, "80x80x4": 9.22, "80x80x5": 11.1, "80x80x6": 12.9,
+            "100x100x4": 11.2, "100x100x5": 13.6, "100x100x6": 16.0, "100x100x8": 20.0
+        },
+        RHS: { // Rectangular Hollow Sections
+            "60x40x3": 4.19, "60x40x4": 5.35,
+            "80x40x3": 5.19, "80x40x4": 6.60,
+            "100x50x4": 8.59, "100x50x5": 10.5,
+            "120x60x5": 12.8,
+            "150x100x5": 18.0, "150x100x6": 21.3
         }
-    }
+    };
 
-    for (const type of Object.keys(STANDARD_PROFILES)) {
-        for (const dim of Object.keys(STANDARD_PROFILES[type])) {
-            const w = STANDARD_PROFILES[type][dim]
+    let profileCount = 0
+    for (const type of Object.keys(standardProfilesData)) {
+        for (const dim of Object.keys(standardProfilesData[type])) {
+            const w = standardProfilesData[type][dim]
+
+            // Calculate approx area for default 7.85 density (used for base calculation)
+            // Weight (kg/m) = Area(mm2) * 0.00785
+            // Area = Weight / 0.00785
+            const area = w / 0.00785
+
             await prisma.standardProfile.upsert({
                 where: { type_dimensions: { type, dimensions: dim } },
-                update: { weightPerMeter: w },
-                create: { type, dimensions: dim, weightPerMeter: w }
+                update: { weightPerMeter: w, crossSectionArea: area },
+                create: { type, dimensions: dim, weightPerMeter: w, crossSectionArea: area }
             })
+            profileCount++
         }
     }
-    console.log('✓ Standard Catalog seeded')
+    console.log(`✓ Standard Catalog seeded (${profileCount} items)`)
 
+    // IMPORTANT: Per user request, we DO NOT seed SteelProfile, Inventory, or Remnants.
+    // "cleanslate steelProfile table and dont seed anything in it"
 
-    // 3. Seed SteelProfiles (Legacy/Linker) - Shapes ONLY
-    // We only create profiles that are actually USED in the inventory.
-    console.log('✓ Profiles (Shapes) seeded (Specific usage only)')
-
-    // Helpers
-    const ensureProfile = async (t: string, d: string, w: number) => {
-        return await prisma.steelProfile.upsert({
-            where: { type_dimensions: { type: t, dimensions: d } },
-            update: { weightPerMeter: w },
-            create: { type: t, dimensions: d, weightPerMeter: w }
-        })
-    }
-
-    const s355 = await prisma.materialGrade.findUnique({ where: { name: 'S355' } })
-    if (!s355) throw new Error("S355 not found")
-
-    // 4. Seed Inventory
-
-    // Lot A: HEA 200 (Full Lengths)
-    // Ensure Profile Exists first
-    const hea200 = await ensureProfile('HEA', '200', STANDARD_PROFILES['HEA']['200'])
-
-    if (hea200) {
-        await prisma.inventory.upsert({
-            where: { lotId: 'L-HEA200-001' },
-            update: {},
-            create: {
-                lotId: 'L-HEA200-001',
-                profileId: hea200.id,
-                gradeId: s355.id,
-                length: 12100,
-                quantityReceived: 10,
-                quantityAtHand: 8,
-                costPerMeter: 45.0, // €
-                status: 'ACTIVE',
-                certificateFilename: 'cert-L-HEA200-001.pdf',
-                createdAt: new Date('2024-01-10')
-            }
-        })
-    }
-
-    // Lot B: IPE 300 (Partial Stock)
-    const ipe300 = await ensureProfile('IPE', '300', STANDARD_PROFILES['IPE']['300'])
-    if (ipe300) {
-        await prisma.inventory.upsert({
-            where: { lotId: 'L-IPE300-055' },
-            update: {},
-            create: {
-                lotId: 'L-IPE300-055',
-                profileId: ipe300.id,
-                gradeId: s355.id,
-                length: 15100,
-                quantityReceived: 6,
-                quantityAtHand: 2, // Low stock
-                costPerMeter: 60.5,
-                status: 'ACTIVE',
-                createdAt: new Date('2024-02-15')
-            }
-        })
-    }
-
-    console.log('✓ Inventory seeded')
-
-    // 5. Seed Remnants
-    if (hea200) {
-        // Remnant from Project Bridge (Available)
-        await prisma.remnant.upsert({
-            where: { id: 'L-HEA200-001-3400' },
-            update: {},
-            create: {
-                id: 'L-HEA200-001-3400',
-                rootLotId: 'L-HEA200-001',
-                profileId: hea200.id,
-                gradeId: s355.id,
-                length: 3400,
-                quantity: 1,
-                costPerMeter: 45.0,
-                status: 'AVAILABLE',
-                projectId: bridge.id
-            }
-        })
-
-        // Remnant (Scrap)
-        await prisma.remnant.upsert({
-            where: { id: 'L-HEA200-001-450' },
-            update: {},
-            create: {
-                id: 'L-HEA200-001-450',
-                rootLotId: 'L-HEA200-001',
-                profileId: hea200.id,
-                gradeId: s355.id,
-                length: 450, // Short piece
-                quantity: 1,
-                costPerMeter: 45.0,
-                status: 'SCRAP',
-                projectId: skyline.id
-            }
-        })
-    }
-    console.log('✓ Remnants seeded')
-
-    // 6. Seed Usage History (Simulate some consumption)
-    if (skyline && hea200) {
-
-        // Ensure we have a usage record
-        const usage = await prisma.usage.create({
-            data: {
-                projectId: skyline.id,
-                userId: 'user-seed',
-                createdBy: 'Seed',
-                date: new Date('2024-03-01T10:00:00Z')
-            }
-        })
-
-        // Usage 1: Cut 4000mm from HEA200
-        const stockItem = await prisma.inventory.findUnique({ where: { lotId: 'L-HEA200-001' } })
-
-        if (stockItem) {
-            await prisma.usageLine.create({
-                data: {
-                    usageId: usage.id,
-                    inventoryId: stockItem.id,
-                    quantityUsed: 1,
-                    cost: 270.0, // 6m * 45
-                    projectId: skyline.id
-                }
-            })
-        }
-    }
-    console.log('✓ Usage History seeded')
-
-    console.log('Seeding finished.')
+    console.log('✓ Seeding finished. SteelProfile table left clean.')
 }
 
 main()

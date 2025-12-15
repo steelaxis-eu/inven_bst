@@ -188,7 +188,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 <div className="space-y-6">
                     {/* Form Section */}
                     <div className="grid gap-4 border p-4 rounded bg-muted/50">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label>Lot ID</Label>
                                 <Input
@@ -200,7 +200,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             </div>
 
                             {/* New Profile Selectors */}
-                            <div className="grid gap-2 col-span-2 grid-cols-4">
+                            <div className="grid gap-2 col-span-1 md:col-span-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
                                 <div>
                                     <Label>Type</Label>
                                     <Select value={selectedType} onValueChange={t => {
@@ -304,7 +304,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="grid gap-2">
                                 <Label>Length (mm)</Label>
                                 <Input className="bg-background" type="number" value={current.length} onChange={e => setCurrent({ ...current, length: e.target.value })} />
