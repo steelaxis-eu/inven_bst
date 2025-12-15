@@ -94,12 +94,11 @@ async function main() {
     `
 
     const SHAPES = [
-        { id: 'FB', name: 'Flat Bar / Plate', params: ['w', 't'], formula: 'w * t' },
-        { id: 'R', name: 'Round Bar', params: ['d'], formula: 'Math.PI * (d/2) * (d/2)' },
-        { id: 'SQB', name: 'Square Bar', params: ['b'], formula: 'b * b' },
-        { id: 'RHS', name: 'Rectangular Hollow (EN)', params: ['b', 'h', 't'], formula: enFormulaBox.replace(/\n\s+/g, ' ') }, // Minify slightly for DB storage if preferred, or keep structure.
-        { id: 'SHS', name: 'Square Hollow (EN)', params: ['b', 't'], formula: enFormulaSquare.replace(/\n\s+/g, ' ') },
-        { id: 'CHS', name: 'Circular Hollow', params: ['d', 't'], formula: 'Math.PI * ((d/2)*(d/2) - ((d-2*t)/2)*((d-2*t)/2))' },
+        { id: 'Plate', name: 'Plate / Flat Bar', params: ['w', 't'], formula: 'w * t * 1' },
+        { id: 'Round', name: 'Round Bar', params: ['d'], formula: 'Math.PI * (d/2) * (d/2)' }, // Corrected from 'PI * (d/2)^2' to valid JS
+        { id: 'RHS', name: 'Rectangular Hollow Section', params: ['h', 'w', 't'], formula: '2 * t * (w + h - 2 * t)' },
+        { id: 'SHS', name: 'Square Hollow Section', params: ['s', 't'], formula: '4 * t * (s - t)' },
+        { id: 'CHS', name: 'Circular Hollow Section', params: ['d', 't'], formula: 'Math.PI * t * (d - t)' }, // Corrected from 'PI * t * (d - t)' to valid JS
     ]
     for (const s of SHAPES) {
         await prisma.profileShape.upsert({

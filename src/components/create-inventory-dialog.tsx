@@ -301,299 +301,219 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 </DialogHeader>
 
                 <div className="space-y-6">
-                    {/* Form Section */}
-                    <div className="grid gap-4 border p-4 rounded bg-muted/50">
-                        <div className="grid gap-6 py-4">
-                            {/* Section: Identification */}
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium leading-none text-muted-foreground border-b pb-2">Identification</h4>
-                                <div className="grid gap-4">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="lotId" className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Lot ID</Label>
-                                        <Input
-                                            id="lotId"
-                                            placeholder="e.g. L-500"
-                                            value={current.lotId}
-                                            onChange={e => setCurrent({ ...current, lotId: e.target.value })}
-                                            className="font-mono uppercase transition-all bg-card/50 focus:ring-2 focus:ring-primary/20 h-10"
-                                        />
-                                    </div>
+                    {/* Inline Form for Desktop / Stacked for Mobile */}
+                    <div className="border p-4 rounded bg-muted/50">
+                        <div className="space-y-4">
+                            {/* Row 1: Identification & Profile */}
+                            <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-end">
+                                {/* Lot ID */}
+                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Lot ID</Label>
+                                    <Input
+                                        placeholder="L-500"
+                                        value={current.lotId}
+                                        onChange={e => setCurrent({ ...current, lotId: e.target.value })}
+                                        className="font-mono uppercase bg-card h-9"
+                                    />
                                 </div>
-                            </div>
 
-                            {/* Section: Profile Definition */}
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium leading-none text-muted-foreground border-b pb-2">Profile Definition</h4>
-                                <div className="grid gap-4 md:grid-cols-4 items-end">
-                                    {/* Type Selector */}
-                                    <div className="md:col-span-1 space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Type</Label>
-                                        <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
+                                {/* Type */}
+                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Type</Label>
+                                    <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" role="combobox" className="w-full justify-between px-2 font-normal bg-card h-9">
+                                                {selectedType || <span className="text-muted-foreground">Select...</span>}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[200px] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="Search type..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No type found.</CommandEmpty>
+                                                    <CommandGroup heading="Standard Profiles">
+                                                        {uniqueTypes.map(t => (
+                                                            <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
+                                                                {t}
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                    <CommandGroup heading="Custom">
+                                                        {shapes.map(s => (
+                                                            <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
+                                                                {s.id}
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+
+                                {/* Dimensions - Flexible Width */}
+                                <div className="space-y-2 w-full md:flex-1 min-w-[200px]">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Dimensions</Label>
+                                    {isStandardType ? (
+                                        <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
                                             <PopoverTrigger asChild>
-                                                <Button variant="outline" role="combobox" aria-expanded={openTypeCombo} className="w-full justify-between px-3 font-normal bg-card/50 h-10">
-                                                    {selectedType || <span className="text-muted-foreground">Select...</span>}
+                                                <Button variant="outline" role="combobox" className="w-full justify-between px-2 font-normal bg-card h-9">
+                                                    {selectedDim || <span className="text-muted-foreground">Select Dimensions...</span>}
                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                 </Button>
                                             </PopoverTrigger>
-                                            <PopoverContent className="w-[220px] p-0" align="start">
+                                            <PopoverContent className="w-[240px] p-0" align="start">
                                                 <Command>
-                                                    <CommandInput placeholder="Search type..." />
+                                                    <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search dims..." />
                                                     <CommandList>
-                                                        <CommandEmpty>No type found.</CommandEmpty>
-                                                        <CommandGroup heading="Standard Profiles">
-                                                            {uniqueTypes.map(t => (
-                                                                <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
-                                                                    <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
-                                                                    {t}
-                                                                </CommandItem>
-                                                            ))}
-                                                        </CommandGroup>
-                                                        <CommandGroup heading="Custom Shapes (Formulas)">
-                                                            {shapes.map(s => (
-                                                                <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
-                                                                    <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
-                                                                    {s.id} <span className="text-muted-foreground ml-1 text-xs">({s.name})</span>
-                                                                </CommandItem>
-                                                            ))}
-                                                        </CommandGroup>
+                                                        <CommandEmpty>
+                                                            <Button onClick={() => { setSelectedDim(dimSearch); setCustomDim(dimSearch); setOpenDimCombo(false) }} variant="ghost" className="w-full h-8 text-xs">
+                                                                Use "{dimSearch}"
+                                                            </Button>
+                                                        </CommandEmpty>
+                                                        {activeDims.length > 0 && (
+                                                            <CommandGroup heading="Active Profiles">
+                                                                {activeDims.map(d => (
+                                                                    <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                        <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                        {d}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        )}
+                                                        {catalogDims.length > 0 && (
+                                                            <CommandGroup heading="Standard Catalog">
+                                                                {catalogDims.map(d => (
+                                                                    <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                        <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                        {d}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        )}
                                                     </CommandList>
                                                 </Command>
                                             </PopoverContent>
                                         </Popover>
-                                    </div>
-
-                                    {/* Dimensions Selector */}
-                                    <div className="md:col-span-1 space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Dimensions</Label>
-                                        {isStandardType ? (
-                                            hasAnyDims || activeDims.length > 0 ? (
-                                                <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button variant="outline" role="combobox" aria-expanded={openDimCombo} className="w-full justify-between px-3 font-normal bg-card/50 h-10">
-                                                            {selectedDim || <span className="text-muted-foreground">Size...</span>}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-[240px] p-0" align="start">
-                                                        <Command>
-                                                            <CommandInput
-                                                                placeholder="Search or '100x100x5'..."
-                                                                value={dimSearch}
-                                                                onValueChange={setDimSearch}
-                                                            />
-                                                            <CommandList>
-                                                                <CommandEmpty>
-                                                                    <div className="flex flex-col gap-2 p-2">
-                                                                        <p className="text-xs text-muted-foreground text-center">No match.</p>
-                                                                        <Button
-                                                                            variant="secondary"
-                                                                            size="sm"
-                                                                            className="w-full text-xs h-7"
-                                                                            onClick={() => {
-                                                                                setSelectedDim(dimSearch); setCustomDim(dimSearch); setOpenDimCombo(false)
-                                                                            }}
-                                                                        >
-                                                                            Use "{dimSearch}"
-                                                                        </Button>
-                                                                    </div>
-                                                                </CommandEmpty>
-                                                                <CommandGroup heading="Active Profiles">
-                                                                    {activeDims.map(d => (
-                                                                        <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                            <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                            {d}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                                <CommandGroup heading="Standard Catalog">
-                                                                    {catalogDims.map(d => (
-                                                                        <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                            <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                            {d}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                            </CommandList>
-                                                        </Command>
-                                                    </PopoverContent>
-                                                </Popover>
-                                            ) : <Input disabled placeholder="None available" className="bg-muted/20 h-10" />
-                                        ) : (
-                                            activeShape ? (
-                                                <div className="flex flex-col gap-2">
-                                                    <div className="flex gap-1">
-                                                        {(activeShape.params as string[]).map(param => (
-                                                            <div key={param} className="relative flex-1">
-                                                                <Input
-                                                                    placeholder={param}
-                                                                    className="h-10 px-2 text-center font-mono text-sm bg-card/50 focus:ring-2 focus:ring-primary/20"
-                                                                    value={shapeParams[param] || ''}
-                                                                    onChange={e => updateShapeParam(param, e.target.value)}
-                                                                />
-                                                                <span className="absolute -bottom-3 left-0 w-full text-[9px] text-center text-muted-foreground uppercase tracking-tighter">{param}</span>
-                                                            </div>
-                                                        ))}
+                                    ) : (
+                                        activeShape ? (
+                                            <div className="flex gap-2">
+                                                {(activeShape.params as string[]).map(param => (
+                                                    <div key={param} className="relative flex-1 min-w-[60px]">
+                                                        <Input
+                                                            placeholder={param}
+                                                            className="h-9 px-2 text-center font-mono bg-card"
+                                                            value={shapeParams[param] || ''}
+                                                            onChange={e => updateShapeParam(param, e.target.value)}
+                                                        />
+                                                        <span className="absolute -bottom-3 left-0 w-full text-[9px] text-center text-muted-foreground uppercase">{param}</span>
                                                     </div>
-                                                </div>
-                                            ) : <Input placeholder="Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} className="h-10 bg-card/50" />
-                                        )}
-                                    </div>
-
-                                    {/* Grade */}
-                                    <div className="md:col-span-1 space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Grade</Label>
-                                        <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-                                            <SelectTrigger className="bg-card/50 h-10"><SelectValue placeholder="Grade" /></SelectTrigger>
-                                            <SelectContent>
-                                                {grades.map(g => <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Weight Display */}
-                                    <div className="md:col-span-1 space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Weight (kg/m)</Label>
-                                        <div className="flex items-center gap-2">
-                                            <div className="relative w-full">
-                                                <Input
-                                                    type="number"
-                                                    className={cn("pr-8 bg-secondary/30 border-secondary h-10 font-mono transition-colors", calcedWeight > 0 ? "text-primary font-bold bg-secondary/50" : "text-muted-foreground")}
-                                                    value={manualWeight || (calcedWeight > 0 ? calcedWeight.toFixed(2) : '')}
-                                                    placeholder="0.00"
-                                                    onChange={e => setManualWeight(e.target.value)}
-                                                />
-                                                {calcedWeight > 0 && !manualWeight && (
-                                                    <div className="absolute right-2 top-3">
-                                                        <Badge variant="secondary" className="h-4 w-4 p-0 flex items-center justify-center rounded-full text-[8px] hover:bg-secondary">A</Badge>
-                                                    </div>
-                                                )}
+                                                ))}
                                             </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-10 w-10 text-muted-foreground hover:text-foreground"
-                                                onClick={() => handleCalculateWeight()}
-                                                disabled={!selectedType}
-                                                title="Recalculate"
-                                            >
-                                                <span className="text-lg">🧮</span>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Section: Inventory Details */}
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium leading-none text-muted-foreground border-b pb-2">Batch Details</h4>
-                                <div className="grid gap-4 md:grid-cols-3">
-                                    <div className="space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Length (mm)</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="e.g. 6000"
-                                            value={current.length}
-                                            onChange={e => setCurrent({ ...current, length: e.target.value })}
-                                            className="bg-card/50 h-10"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Quantity</Label>
-                                        <Input
-                                            type="number"
-                                            min="1"
-                                            value={current.quantity}
-                                            onChange={e => setCurrent({ ...current, quantity: e.target.value })}
-                                            className="bg-card/50 h-10"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Total Cost (€)</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="0.00"
-                                            step="0.01"
-                                            value={current.totalCost}
-                                            onChange={e => setCurrent({ ...current, totalCost: e.target.value })}
-                                            className="text-right font-mono bg-card/50 h-10"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Section: Documents */}
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium leading-none text-muted-foreground border-b pb-2">Documents</h4>
-                                <div className="space-y-2">
-                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Certificate (PDF)</Label>
-                                    <FileUploader
-                                        bucketName="certificates"
-                                        currentValue={current.certificate}
-                                        onUploadComplete={(path) => setCurrent({ ...current, certificate: path })}
-                                    />
-                                    {current.certificate && (
-                                        <div className="mt-1">
-                                            <FileViewer bucketName="certificates" path={current.certificate} fileName="Verify Upload" />
-                                        </div>
+                                        ) : <Input placeholder="Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} className="h-9 bg-card" />
                                     )}
                                 </div>
+
+                                {/* Grade */}
+                                <div className="space-y-2 w-full md:w-28 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Grade</Label>
+                                    <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                                        <SelectTrigger className="bg-card h-9"><SelectValue placeholder="Grade" /></SelectTrigger>
+                                        <SelectContent>
+                                            {grades.map(g => <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
 
-                            {/* Footer Actions */}
-                            <div className="flex justify-between items-center pt-4 border-t mt-2">
-                                <div className="text-xs text-muted-foreground">
-                                    {items.length > 0 && <span>{items.length} items ready to add</span>}
+                            {/* Row 2: Quantities, Cost, Weight, Action */}
+                            <div className="flex flex-col md:flex-row gap-4 items-start md:items-end pt-2">
+                                {/* Length */}
+                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Length (mm)</Label>
+                                    <Input type="number" value={current.length} onChange={e => setCurrent({ ...current, length: e.target.value })} className="bg-card h-9" />
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        type="button"
-                                        onClick={handleAddItem}
-                                        size="lg"
-                                        className="w-full md:w-auto font-semibold shadow-md active:scale-95 transition-transform"
-                                    >
-                                        Add to Batch
-                                    </Button>
+
+                                {/* Qty */}
+                                <div className="space-y-2 w-full md:w-20 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Qty</Label>
+                                    <Input type="number" value={current.quantity} onChange={e => setCurrent({ ...current, quantity: e.target.value })} className="bg-card h-9" />
                                 </div>
+
+                                {/* Cost */}
+                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cost (€)</Label>
+                                    <Input type="number" step="0.01" value={current.totalCost} onChange={e => setCurrent({ ...current, totalCost: e.target.value })} className="bg-card h-9 text-right font-mono" />
+                                </div>
+
+                                {/* Weight (Manual/Calc) */}
+                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Weight (kg/m)</Label>
+                                    <div className="relative">
+                                        <Input
+                                            value={manualWeight}
+                                            onChange={e => setManualWeight(e.target.value)}
+                                            className={cn("bg-card h-9 pr-7", calcedWeight > 0 ? "font-bold text-primary" : "")}
+                                        />
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="absolute right-0 top-0 h-9 w-9 text-muted-foreground hover:text-foreground"
+                                            onClick={() => handleCalculateWeight()}
+                                            disabled={!selectedType}
+                                            title="Recalculate"
+                                        >
+                                            <span className="text-sm">🧮</span>
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* File Upload (Condensed) */}
+                                <div className="space-y-2 w-full md:flex-1 min-w-[150px]">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cert</Label>
+                                    <div className="flex gap-2 items-center">
+                                        <div className="flex-1">
+                                            <FileUploader
+                                                bucketName="certificates"
+                                                currentValue={current.certificate}
+                                                onUploadComplete={(path) => setCurrent({ ...current, certificate: path })}
+                                                minimal={true}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Add Button */}
+                                <Button onClick={handleAddItem} className="w-full md:w-auto h-9 px-6 shrink-0">Add Item</Button>
                             </div>
                         </div>
 
-                        {/* Pending Items List */}
+                        {/* Pending List */}
                         {items.length > 0 && (
-                            <div className="mt-6">
-                                <h4 className="font-semibold mb-2">Pending Items ({items.length})</h4>
-                                <div className="border rounded max-h-40 overflow-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Lot</TableHead>
-                                                <TableHead>Profile</TableHead>
-                                                <TableHead>Len</TableHead>
-                                                <TableHead>Qty</TableHead>
-                                                <TableHead>Cost</TableHead>
-                                                <TableHead></TableHead>
+                            <div className="mt-6 border rounded overflow-hidden">
+                                <Table>
+                                    <TableHeader><TableRow className="bg-muted/50"><TableHead>Lot</TableHead><TableHead>Type</TableHead><TableHead>Dim</TableHead><TableHead>Ln</TableHead><TableHead>Qty</TableHead><TableHead>Cost</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                    <TableBody>
+                                        {items.map((item, idx) => (
+                                            <TableRow key={item._id}>
+                                                <TableCell className="font-mono">{item.lotId}</TableCell>
+                                                <TableCell>{items[idx].profileName.split(' ')[0]}</TableCell>
+                                                <TableCell>{items[idx].profileName.split('(')[0].split(' ').slice(1).join(' ')}</TableCell>
+                                                <TableCell>{item.length}</TableCell>
+                                                <TableCell>{item.quantity}</TableCell>
+                                                <TableCell>{item.totalCost}</TableCell>
+                                                <TableCell><Button size="sm" variant="ghost" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="h-6 w-6 p-0 text-red-500">×</Button></TableCell>
                                             </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {items.map((item, idx) => (
-                                                <TableRow key={item._id}>
-                                                    <TableCell>{item.lotId}</TableCell>
-                                                    <TableCell>{item.profileName}</TableCell>
-                                                    <TableCell>{item.length}</TableCell>
-                                                    <TableCell>{item.quantity}</TableCell>
-                                                    <TableCell>{item.totalCost}</TableCell>
-                                                    <TableCell>
-                                                        <Button size="sm" variant="ghost" onClick={() => setItems(items.filter((_, i) => i !== idx))}>x</Button>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
                         )}
-
-                        <Button onClick={handleSaveAll} className="w-full" disabled={loading || items.length === 0}>
-                            {loading ? 'Saving...' : `Save ${items.length} Items`}
+                        <Button onClick={handleSaveAll} className="w-full mt-4" disabled={loading || items.length === 0} variant={items.length > 0 ? "default" : "secondary"}>
+                            {loading ? 'Saving...' : `Save Batch (${items.length})`}
                         </Button>
                     </div>
                 </div>

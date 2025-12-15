@@ -1,5 +1,6 @@
 import { getInventory, getProfiles, getStandardProfiles, getGrades, deleteInventory, getProfileShapes } from "@/app/actions/inventory"
 import { CreateInventoryDialog } from "@/components/create-inventory-dialog"
+import { CreateUsageDialog } from "@/components/create-usage-dialog"
 import { EditInventoryDialog } from "@/components/edit-inventory-dialog"
 import { InventoryCertActions } from "@/components/inventory-cert-actions"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -33,12 +34,15 @@ export default async function InventoryPage() {
         <div className="container mx-auto py-8">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold">Inventory</h1>
-                <CreateInventoryDialog
-                    profiles={profiles}
-                    standardProfiles={standardProfiles}
-                    grades={grades}
-                    shapes={shapes}
-                />
+                <div className="flex gap-2">
+                    <CreateUsageDialog />
+                    <CreateInventoryDialog
+                        profiles={profiles}
+                        standardProfiles={standardProfiles}
+                        grades={grades}
+                        shapes={shapes}
+                    />
+                </div>
             </div>
 
             <div className="border rounded-md">

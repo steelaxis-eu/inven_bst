@@ -11,9 +11,10 @@ interface FileUploaderProps {
     onUploadComplete: (url: string) => void
     currentValue?: string
     className?: string
+    minimal?: boolean
 }
 
-export function FileUploader({ bucketName, onUploadComplete, currentValue, className }: FileUploaderProps) {
+export function FileUploader({ bucketName, onUploadComplete, currentValue, className, minimal }: FileUploaderProps) {
     const [uploading, setUploading] = useState(false)
     const [fileName, setFileName] = useState<string | null>(currentValue ? currentValue.split('/').pop() || 'File' : null)
 
@@ -47,6 +48,26 @@ export function FileUploader({ bucketName, onUploadComplete, currentValue, class
         } finally {
             setUploading(false)
         }
+    }
+
+    if (minimal) {
+        return (
+            <div className={className}>
+                <div className="flex items-center gap-2">
+                    <label className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 w-9">
+                        <UploadCloud className="h-4 w-4" />
+                        <span className="sr-only">Upload</span>
+                        <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
+                    </label>
+                    {uploading && <Loader2 className="animate-spin h-4 w-4 text-muted-foreground" />}
+                    {currentValue && !uploading && (
+                        <span className="text-xs text-green-600 truncate max-w-[100px]" title={fileName || ''}>
+                            {fileName || "✓"}
+                        </span>
+                    )}
+                </div>
+            </div>
+        )
     }
 
     return (
