@@ -23,6 +23,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Analytics } from "@vercel/analytics/react"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 // ...
 
@@ -64,6 +65,7 @@ export default function RootLayout({
           </main>
           <Toaster />
           <Analytics />
+          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>

@@ -12,6 +12,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     try {
+        // Fetch Project for filename
+        const project = await prisma.project.findUnique({
+            where: { id: projectId }
+        })
+
+        if (!project) {
+            return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+        }
+
         // 1. Find all usage lines for this project
         const usageLines = await prisma.usageLine.findMany({
             where: {
@@ -103,7 +112,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         return new Response(responseStream, {
             headers: {
                 'Content-Type': 'application/zip',
-                'Content-Disposition': `attachment; filename="project-${projectId}-certificates.zip"`,
+                'Content-Disposition': `attachment; filename="${project.projectNumber}.zip"`,
             },
         })
     } catch (error: any) {
