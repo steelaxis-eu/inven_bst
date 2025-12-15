@@ -1,5 +1,6 @@
 import { getInventory, getProfiles, deleteInventory } from "@/app/actions/inventory"
 import { CreateInventoryDialog } from "@/components/create-inventory-dialog"
+import { InventoryCertActions } from "@/components/inventory-cert-actions"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { revalidatePath } from "next/cache"
@@ -51,7 +52,9 @@ export default async function InventoryPage() {
                                 <TableCell>{item.profile.dimensions}</TableCell>
                                 <TableCell>{item.length} mm</TableCell>
                                 <TableCell>{item.quantityAtHand} / {item.quantityReceived}</TableCell>
-                                <TableCell>{item.certificateFilename || '-'}</TableCell>
+                                <TableCell>
+                                    <InventoryCertActions id={item.id} certificate={item.certificateFilename} />
+                                </TableCell>
                                 <TableCell>{item.status}</TableCell>
                                 <TableCell className="text-sm text-gray-500">{item.createdBy || '-'}</TableCell>
                                 <TableCell>

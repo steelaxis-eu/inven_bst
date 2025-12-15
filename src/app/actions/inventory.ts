@@ -54,6 +54,18 @@ export async function createInventory(data: {
     revalidatePath('/stock') // It affects stock search too
 }
 
+export async function updateInventoryCertificate(id: string, path: string) {
+    try {
+        await prisma.inventory.update({
+            where: { id },
+            data: { certificateFilename: path }
+        })
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
 export async function deleteInventory(id: string) {
     try {
         await prisma.inventory.delete({ where: { id } })

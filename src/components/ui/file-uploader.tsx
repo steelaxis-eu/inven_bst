@@ -25,7 +25,11 @@ export function FileUploader({ bucketName, onUploadComplete, currentValue, class
             }
             const file = event.target.files[0]
             const fileExt = file.name.split('.').pop()
-            const filePath = `${Math.random()}.${fileExt}`
+            const date = new Date()
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            // Path: YYYY/MM/random-id.ext
+            const filePath = `${year}/${month}/${Math.random().toString(36).substring(7)}.${fileExt}`
 
             const { error: uploadError } = await supabase.storage.from(bucketName).upload(filePath, file)
 
