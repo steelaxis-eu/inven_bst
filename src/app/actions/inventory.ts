@@ -20,6 +20,12 @@ export async function getStandardProfiles() {
     })
 }
 
+export async function getProfileShapes() {
+    return await prisma.profileShape.findMany({
+        orderBy: { id: 'asc' }
+    })
+}
+
 export async function getGrades() {
     return await prisma.materialGrade.findMany({
         orderBy: { name: 'asc' }
@@ -218,6 +224,33 @@ export async function createInventoryBatch(items: {
 
         revalidatePath('/inventory')
         revalidatePath('/stock')
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
+export async function createStandardProfile(data: { type: string, dimensions: string, weight: number, area?: number }) {
+    try {
+        await prisma.standardProfile.create({
+            data: {
+                type: data.type,
+                dimensions: data.dimensions,
+                weightPerMeter: data.weight,
+                crossSectionArea: data.area
+            }
+        })
+        revalidatePath('/settings')
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
+export async function deleteStandardProfile(id: string) {
+    try {
+        await prisma.standardProfile.delete({ where: { id } })
+        revalidatePath('/settings')
         return { success: true }
     } catch (e: any) {
         return { success: false, error: e.message }

@@ -38,22 +38,50 @@ async function main() {
         }
     })
     // 2.1 Seed Material Grades
-    const GRADES = ['S355', 'S235', 'S275', 'SS304', 'SS316']
+    const GRADES = [
+        { name: 'S235', density: 7.85 },
+        { name: 'S275', density: 7.85 },
+        { name: 'S355', density: 7.85 },
+        { name: 'SS304', density: 7.90 },
+        { name: 'SS316', density: 7.95 }
+    ]
     for (const g of GRADES) {
         await prisma.materialGrade.upsert({
-            where: { name: g },
-            update: {},
-            create: { name: g }
+            where: { name: g.name },
+            update: { density: g.density },
+            create: { name: g.name, density: g.density }
         })
     }
     console.log('✓ Grades seeded')
 
-    // 2.2 Seed Standard Profiles Catalog
+    // 2.2 Seed Profile Shapes (Definitions for Custom)
+    const SHAPES = [
+        { id: 'Plate', name: 'Plate / Flat Bar', params: ['w', 't'], formula: 'w * t * 1' },
+        { id: 'Round', name: 'Round Bar', params: ['d'], formula: 'PI * (d/2)^2' },
+        { id: 'RHS', name: 'Rectangular Hollow Section', params: ['h', 'w', 't'], formula: 'Advanced' },
+        { id: 'SHS', name: 'Square Hollow Section', params: ['s', 't'], formula: 'Advanced' },
+        { id: 'CHS', name: 'Circular Hollow Section', params: ['d', 't'], formula: 'Advanced' },
+    ]
+    for (const s of SHAPES) {
+        await prisma.profileShape.upsert({
+            where: { id: s.id },
+            update: { name: s.name, params: s.params, formula: s.formula },
+            create: { id: s.id, name: s.name, params: s.params as any, formula: s.formula }
+        })
+    }
+    console.log('✓ Profile Shapes seeded')
+
+    // 2.3 Seed Standard Profiles Catalog (Fuller mock)
+    // NOTE: In a real app, this would be thousands of lines. Accessing a limited set here.
     const STANDARD_PROFILES: Record<string, Record<string, number>> = {
         HEA: {
             "100": 16.7, "120": 19.9, "140": 24.7, "160": 30.4, "180": 35.5,
             "200": 42.3, "220": 50.5, "240": 60.3, "260": 68.2, "280": 76.4,
             "300": 88.3, "320": 97.6, "340": 105.0, "360": 112.0, "400": 125.0
+        },
+        HEB: {
+            "100": 20.4, "120": 26.7, "140": 33.7, "160": 42.6, "180": 51.2,
+            "200": 61.3, "220": 71.5
         },
         IPE: {
             "80": 6.0, "100": 8.1, "120": 10.4, "140": 12.9, "160": 15.8, "180": 18.8,
@@ -63,8 +91,11 @@ async function main() {
             "80": 8.6, "100": 10.6, "120": 13.4, "140": 16.0, "160": 18.8, "180": 22.0,
             "200": 25.3, "220": 29.4
         },
-        SHS: {
-            "100x100x4": 12.0, "100x100x5": 15.0 // Mock examples
+        UPE: {
+            "80": 7.9, "100": 9.82, "120": 12.1, "140": 14.5
+        },
+        L: {
+            "50x5": 3.77, "60x6": 5.42, "100x10": 15.1
         }
     }
 

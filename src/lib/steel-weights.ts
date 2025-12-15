@@ -1,85 +1,82 @@
-
 // Standard Steel Weights (kg/m)
 // Sources: European Standard Tables (EN 10025, etc.)
 
-import { Decimal } from 'decimal.js'
+import Decimal from 'decimal.js'
 
-export function calculateCustomWeight(type: string, params: { w?: number, h?: number, t?: number, d?: number, s?: number }) {
+// Helper to calculate Cross Section Area in mm²
+export function calculateCrossSectionArea(type: string, params: { w?: number, h?: number, t?: number, d?: number, s?: number }): number {
+    let area = new Decimal(0)
+
+    if (type === 'Plate' || type === 'PL' || type === 'FB' || type === 'FL' || type === 'Flach') {
+        // Width * Thickness
+        if (params.w && params.t) {
+            area = new Decimal(params.w).times(params.t)
+        }
+    } else if (type === 'Round' || type === 'R' || type === 'Rd' || type === 'Rund') {
+        // PI * r^2
+        if (params.d) {
+            const r = new Decimal(params.d).dividedBy(2)
+            area = r.pow(2).times(Math.PI)
+        }
+    } else if (type === 'SQB' || type === 'Vierkant') {
+        // Square Bar: s * s
+        if (params.s) area = new Decimal(params.s).pow(2)
+        else if (params.w) area = new Decimal(params.w).pow(2)
+    } else if (type === 'RHS') {
+        // Box: Outer Area - Inner Area
+        // Outer: h * w
+        // Inner: (h - 2t) * (w - 2t)
+        if (params.h && params.w && params.t) {
+            const outer = new Decimal(params.h).times(params.w)
+            const innerH = new Decimal(params.h).minus(new Decimal(2).times(params.t))
+            const innerW = new Decimal(params.w).minus(new Decimal(2).times(params.t))
+            if (innerH.isPositive() && innerW.isPositive()) {
+                const inner = innerH.times(innerW)
+                area = outer.minus(inner)
+            }
+        }
+    } else if (type === 'SHS') {
+        // Square Hollow
+        if (params.s && params.t) {
+            const outer = new Decimal(params.s).pow(2)
+            const innerS = new Decimal(params.s).minus(new Decimal(2).times(params.t))
+            if (innerS.isPositive()) {
+                const inner = innerS.pow(2)
+                area = outer.minus(inner)
+            }
+        }
+    } else if (type === 'CHS') {
+        // Pipe: Outer Circle - Inner Circle
+        if (params.d && params.t) {
+            const outerR = new Decimal(params.d).dividedBy(2)
+            const innerR = outerR.minus(params.t)
+            if (innerR.isPositive()) {
+                const outerArea = outerR.pow(2).times(Math.PI)
+                const innerArea = innerR.pow(2).times(Math.PI)
+                area = outerArea.minus(innerArea)
+            }
+        }
+    }
+
+    return area.toNumber()
+}
+
+export function calculateCustomWeight(type: string, params: { w?: number, h?: number, t?: number, d?: number, s?: number, density?: number }) {
     // All inputs in mm
-    // Convert Area to m2: Area(mm2) / 1,000,000
-    // Weight = Area(m2) * 1 * 7850
-    // Density = 7850 kg/m3
+    // Area in mm2
+    // Weight (kg/m) = Area(mm2) / 1,000,000 (to m2) * 1(m) * Density(kg/m3)
 
-    const DENSITY = new Decimal(7850)
-    let areaMM2 = new Decimal(0)
+    // Default Density 7.85 kg/dm3 = 7850 kg/m3
+    const densityVal = params.density ? params.density * 1000 : 7850
+    const DENSITY = new Decimal(densityVal)
 
-    // Safely convert inputs to Decimal, defaulting to 0 if undefined
-    const w = params.w ? new Decimal(params.w) : new Decimal(0)
-    const h = params.h ? new Decimal(params.h) : new Decimal(0)
-    const t = params.t ? new Decimal(params.t) : new Decimal(0)
-    const d = params.d ? new Decimal(params.d) : new Decimal(0)
-    const s = params.s ? new Decimal(params.s) : new Decimal(0)
+    const areaMm2 = calculateCrossSectionArea(type, params)
 
-    // Constants
-    const PI = new Decimal(Math.PI)
+    if (areaMm2 <= 0) return 0
 
-    switch (type) {
-        case 'PL': // Plate / Flat Bar (FB)
-        case 'FB':
-            if (params.w && params.t) {
-                areaMM2 = w.times(t)
-            }
-            break
-        case 'R': // Round Bar
-            if (params.d) {
-                const r = d.div(2)
-                areaMM2 = PI.times(r).times(r)
-            }
-            break
-        case 'SQB': // Square Bar
-            if (params.s) {
-                areaMM2 = s.times(s)
-            }
-            break
-        case 'RHS': // Rectangular Hollow Section (EN 10219/10210)
-        case 'SHS':
-            if (params.w && params.h && params.t) {
-                const B = Decimal.min(w, h)
-                const H = Decimal.max(w, h)
-                const T = t
+    // Calculate Weight
+    const areaM2 = new Decimal(areaMm2).dividedBy(1000000)
+    const weight = areaM2.times(DENSITY)
 
-                // Determine ro (external corner radius)
-                let ro = T.times(2.0)
-                if (T.gt(6) && T.lte(10)) ro = T.times(2.5)
-                if (T.gt(10)) ro = T.times(3.0)
-
-                const ri = ro.minus(T)
-
-                // Formula from EN standard
-                // Cross-sectional Area A
-                // A = 2*t*(b + h - 2*t) - (4 - pi)*(ro^2 - ri^2)
-
-                const term1 = T.times(2).times(B.plus(H).minus(T.times(2)))
-                const cornerFactor = new Decimal(4).minus(PI)
-                const cornerArea = cornerFactor.times(ro.pow(2).minus(ri.pow(2)))
-
-                areaMM2 = term1.minus(cornerArea)
-            }
-            break
-        case 'CHS': // Circular Hollow Section (Pipe)
-            if (params.d && params.t) {
-                const ro = d.div(2)
-                const ri = ro.minus(t)
-                const areaOuter = PI.times(ro.pow(2))
-                const areaInner = PI.times(ri.pow(2))
-                areaMM2 = areaOuter.minus(areaInner)
-            }
-            break
-    }
-
-    if (areaMM2.gt(0)) {
-        // Result = (Area / 1,000,000) * Density
-        return areaMM2.div(1000000).times(DENSITY).toNumber()
-    }
-    return 0
+    return weight.toNumber()
 }

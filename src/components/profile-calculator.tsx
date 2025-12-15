@@ -84,7 +84,7 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                 let weight = 0
                 if (mode === 'STANDARD') {
                     if (type && dim) {
-                        weight = await calculateProfileWeight(type, { mode: 'STANDARD', dimension: dim })
+                        weight = await calculateProfileWeight(type, { dimensions: dim })
                     }
                 } else {
                     // Custom

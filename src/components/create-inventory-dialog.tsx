@@ -12,13 +12,16 @@ import { FileUploader } from "@/components/ui/file-uploader"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { toast } from "sonner"
 
+import { calculateProfileWeight } from "@/app/actions/calculator"
+
 interface CreateInventoryProps {
     profiles: any[]
     standardProfiles: any[]
     grades: any[]
+    shapes: any[]
 }
 
-export function CreateInventoryDialog({ profiles: initialProfiles, standardProfiles, grades }: CreateInventoryProps) {
+export function CreateInventoryDialog({ profiles: initialProfiles, standardProfiles, grades, shapes }: CreateInventoryProps) {
     const [open, setOpen] = useState(false)
     const [profileOpen, setProfileOpen] = useState(false)
     const [profiles, setProfiles] = useState(initialProfiles)
@@ -43,10 +46,18 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     const [selectedGrade, setSelectedGrade] = useState('')
     const [manualWeight, setManualWeight] = useState('')
 
+    // Custom Shape Logic
+    const [shapeParams, setShapeParams] = useState<Record<string, string>>({})
+    const [calcedWeight, setCalcedWeight] = useState(0)
+
     // Derived
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
     // Add custom types if not present
-    const allTypes = Array.from(new Set([...uniqueTypes, 'PL', 'RHS', 'SHS', 'CHS', 'FB', 'R', 'SQB']))
+    const allTypes = Array.from(new Set([...uniqueTypes, ...shapes.map(s => s.id)]))
+
+    // Helper to determine if selected type is Standard or Custom
+    const isStandardType = uniqueTypes.includes(selectedType)
+    const activeShape = shapes.find(s => s.id === selectedType)
 
     const availableDims = standardProfiles
         .filter(p => p.type === selectedType)
@@ -55,6 +66,43 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     // Auto-fill weight logic
     // When Type/Dim matches standard, use it. Else empty.
     const standardMatch = standardProfiles.find(p => p.type === selectedType && p.dimensions === (customDim || selectedDim))
+
+    // Calculation Handler
+    const handleCalculateWeight = async () => {
+        if (!selectedType) return
+
+        // If Standard
+        if (isStandardType) {
+            // ... actually we just use standardMatch
+            if (standardMatch) {
+                setManualWeight(standardMatch.weightPerMeter.toString())
+                return
+            }
+        }
+
+        // If Custom
+        // Prepare params
+        // Convert string params to numbers
+        const numericParams: any = {}
+        for (const [k, v] of Object.entries(shapeParams)) {
+            numericParams[k] = parseFloat(v)
+        }
+
+        // Find Grade ID to pass for density lookup
+        const gradeObj = grades.find(g => g.name === selectedGrade)
+        if (gradeObj) {
+            numericParams.gradeId = gradeObj.id
+        }
+
+        try {
+            const w = await calculateProfileWeight(selectedType, numericParams)
+            setCalcedWeight(w)
+            // Auto-set the manual weight input so user sees it
+            setManualWeight(w.toFixed(2))
+        } catch (e) {
+            toast.error("Calculation failed")
+        }
+    }
 
     const handleAddItem = async () => {
         if (!current.lotId || !selectedType || !(selectedDim || customDim) || !selectedGrade || !current.length || !current.quantity) {
@@ -155,43 +203,65 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             <div className="grid gap-2 col-span-2 grid-cols-4">
                                 <div>
                                     <Label>Type</Label>
-                                    <Select value={selectedType} onValueChange={t => { setSelectedType(t); setSelectedDim(''); setCustomDim('') }}>
+                                    <Select value={selectedType} onValueChange={t => {
+                                        setSelectedType(t);
+                                        setSelectedDim('');
+                                        setCustomDim('');
+                                        setManualWeight('');
+                                        // Reset shape params
+                                        setShapeParams({});
+                                    }}>
                                         <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
                                         <SelectContent>
-                                            {allTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                            <SelectItem value="STANDARD_HEADER" disabled className="font-semibold text-xs text-muted-foreground group">Standard Profiles</SelectItem>
+                                            {uniqueTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+
+                                            <SelectItem value="CUSTOM_HEADER" disabled className="font-semibold text-xs text-muted-foreground mt-2 border-t pt-2">Custom Shapes</SelectItem>
+                                            {shapes.map(s => <SelectItem key={s.id} value={s.id}>{s.id} ({s.name})</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
+
                                 <div className="space-y-1">
-                                    <Label>Dimensions</Label>
-                                    {availableDims.length > 0 ? (
-                                        <div className="flex gap-1">
+                                    <Label>Dimensions / Params</Label>
+                                    {isStandardType ? (
+                                        // Standard Profile Selection
+                                        availableDims.length > 0 ? (
                                             <Select value={selectedDim} onValueChange={d => { setSelectedDim(d); setCustomDim('') }}>
                                                 <SelectTrigger className="w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                                                 <SelectContent>
                                                     {availableDims.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                                                    <SelectItem value="CUSTOM">Custom...</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                        </div>
+                                        ) : (
+                                            <Input disabled placeholder="Select Type first" />
+                                        )
                                     ) : (
-                                        <Input
-                                            placeholder="e.g. 10x100"
-                                            value={customDim}
-                                            onChange={e => setCustomDim(e.target.value)}
-                                            disabled={!selectedType}
-                                        />
-                                    )}
-                                    {/* If Custom selected in dropdown, show input */}
-                                    {selectedDim === 'CUSTOM' && (
-                                        <Input
-                                            className="mt-1"
-                                            placeholder="Enter dimensions..."
-                                            value={customDim}
-                                            onChange={e => setCustomDim(e.target.value)}
-                                        />
+                                        // Custom Shape Inputs
+                                        activeShape ? (
+                                            <div className="flex gap-2">
+                                                {(activeShape.params as string[]).map(param => (
+                                                    <Input
+                                                        key={param}
+                                                        placeholder={param}
+                                                        className="h-8 text-xs"
+                                                        value={shapeParams[param] || ''}
+                                                        onChange={e => {
+                                                            const newParams = { ...shapeParams, [param]: e.target.value }
+                                                            setShapeParams(newParams)
+                                                            // Auto-construct customDim string: e.g. 100x10x5
+                                                            const dimStr = (activeShape.params as string[]).map(p => newParams[p] || '?').join('x')
+                                                            setCustomDim(dimStr)
+                                                        }}
+                                                    />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <Input placeholder="Custom Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} />
+                                        )
                                     )}
                                 </div>
+
                                 <div>
                                     <Label>Grade</Label>
                                     <Select value={selectedGrade} onValueChange={setSelectedGrade}>
@@ -201,14 +271,35 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div>
+                                <div className="flex flex-col gap-1">
                                     <Label>Weight (kg/m)</Label>
-                                    <Input
-                                        type="number"
-                                        placeholder={standardMatch ? standardMatch.weightPerMeter.toString() : "0"}
-                                        value={manualWeight}
-                                        onChange={e => setManualWeight(e.target.value)}
-                                    />
+                                    <div className="flex gap-1">
+                                        <Input
+                                            type="number"
+                                            placeholder={calcedWeight > 0 ? calcedWeight.toFixed(2) : "0"}
+                                            value={manualWeight}
+                                            onChange={e => setManualWeight(e.target.value)}
+                                            className={manualWeight ? "border-yellow-500" : ""}
+                                        />
+                                        {activeShape && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="px-2"
+                                                title="Calculate Weight"
+                                                onClick={async () => {
+                                                    // Trigger Calc logic
+                                                    // We can duplicate the calc logic or define a server action wrapper
+                                                    // Ideally strictly server side.
+                                                    // For now, let user trust the placeholder or override.
+                                                    // To properly calculate, we need to call server action with params.
+                                                    await handleCalculateWeight()
+                                                }}
+                                            >
+                                                🧮
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>

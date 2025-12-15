@@ -48,13 +48,23 @@ model StandardProfile {
   type            String   // e.g., HEA, IPE
   dimensions      String   // e.g., 200, 300
   weightPerMeter  Float    // kg/m
+  crossSectionArea Float?  // mm^2, optional for legacy or simple profiles
   
   @@unique([type, dimensions])
 }
 
+// ProfileShape defines custom shapes (e.g. "RHS") and their input parameters
+model ProfileShape {
+  id      String   @id // e.g., "RHS"
+  name    String   // e.g., "Rectangular Hollow Section"
+  params  Json     // e.g., ["h", "w", "t"]
+  formula String?  // Documentation only for now
+}
+
 model MaterialGrade {
-  id    String @id @default(uuid())
-  name  String @unique // e.g., S355
+  id      String @id @default(uuid())
+  name    String @unique // e.g., S355
+  density Float  @default(7.85) // kg/dm3
   
   inventory Inventory[]
   remnants  Remnant[]

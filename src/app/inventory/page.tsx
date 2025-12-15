@@ -1,4 +1,4 @@
-import { getInventory, getProfiles, getStandardProfiles, getGrades, deleteInventory } from "@/app/actions/inventory"
+import { getInventory, getProfiles, getStandardProfiles, getGrades, deleteInventory, getProfileShapes } from "@/app/actions/inventory"
 import { CreateInventoryDialog } from "@/components/create-inventory-dialog"
 import { EditInventoryDialog } from "@/components/edit-inventory-dialog"
 import { InventoryCertActions } from "@/components/inventory-cert-actions"
@@ -14,11 +14,13 @@ export default async function InventoryPage() {
     let profiles: any[] = []
     let standardProfiles: any[] = []
     let grades: any[] = []
+    let shapes: any[] = []
     try {
         inventory = await getInventory()
         profiles = await getProfiles()
         standardProfiles = await getStandardProfiles()
         grades = await getGrades()
+        shapes = await getProfileShapes()
     } catch (e) { }
 
     async function deleteItem(formData: FormData) {
@@ -30,11 +32,12 @@ export default async function InventoryPage() {
     return (
         <div className="container mx-auto py-8">
             <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-bold">Inventory Management</h1>
+                <h1 className="text-3xl font-bold">Inventory</h1>
                 <CreateInventoryDialog
                     profiles={profiles}
                     standardProfiles={standardProfiles}
                     grades={grades}
+                    shapes={shapes}
                 />
             </div>
 
