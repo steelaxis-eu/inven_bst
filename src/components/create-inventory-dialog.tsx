@@ -10,6 +10,7 @@ import { createInventoryBatch } from "@/app/actions/inventory"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ProfileCalculator } from "./profile-calculator"
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import { FileUploader } from "@/components/ui/file-uploader"
 
 export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles: any[] }) {
     const [open, setOpen] = useState(false)
@@ -207,8 +208,12 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
                         </div>
 
                         <div className="grid gap-2">
-                            <Label>Certificate</Label>
-                            <Input className="bg-background" value={current.certificate} onChange={e => setCurrent({ ...current, certificate: e.target.value })} placeholder="cert.pdf" />
+                            <Label>Certificate (PDF)</Label>
+                            <FileUploader
+                                bucketName="certificates"
+                                currentValue={current.certificate}
+                                onUploadComplete={(url) => setCurrent({ ...current, certificate: url })}
+                            />
                         </div>
 
                         <Button type="button" onClick={handleAddItem} variant="secondary">Add to Batch</Button>
