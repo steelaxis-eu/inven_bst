@@ -40,6 +40,107 @@ export async function updateProfileWeight(id: string, weight: number) {
     revalidatePath('/settings')
 }
 
+export async function createInventory(data: {
+    lotId: string,
+    profileId: string,
+    gradeId: string, // Required
+    length: number,
+    quantity: number,
+    certificate: string,
+    totalCost: number
+}) {
+    const totalLengthMeters = (data.length * data.quantity) / 1000
+    const costPerMeter = totalLengthMeters > 0 ? data.totalCost / totalLengthMeters : 0
+
+    await prisma.inventory.create({
+        data: {
+            lotId: data.lotId,
+            profileId: data.profileId,
+            gradeId: data.gradeId, // New field
+            length: data.length,
+            quantityReceived: data.quantity,
+            quantityAtHand: data.quantity, // Initially same
+            costPerMeter: costPerMeter,
+            certificateFilename: data.certificate,
+            status: 'ACTIVE',
+            createdBy: 'System', // TODO: Get real user
+            modifiedBy: 'System'
+        }
+    })
+    revalidatePath('/inventory')
+    revalidatePath('/stock') // It affects stock search too
+}
+
+export async function updateInventoryCertificate(id: string, path: string) {
+    try {
+        await prisma.inventory.update({
+            where: { id },
+            data: { certificateFilename: path }
+        })
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
+export async function deleteInventory(id: string) {
+    try {
+        await prisma.inventory.delete({ where: { id } })
+        revalidatePath('/inventory')
+        revalidatePath('/stock')
+        return { success: true }
+    } catch (e) {
+        return { success: false, error: "Cannot delete item (likely in use)" }
+    }
+}
+
+export async function updateInventory(id: string, data: {
+    lotId: string,
+    length: number,
+    quantityAtHand: number,
+    status: string,
+    totalCost?: number
+}) {
+    try {
+        const updateData: any = {
+            lotId: data.lotId,
+            length: data.length,
+            quantityAtHand: data.quantityAtHand,
+            status: data.status
+        }
+
+        // If total cost is provided, recalculate cost per meter
+        if (data.totalCost !== undefined) {
+            const totalLengthMeters = (data.length * data.quantityAtHand) / 1000
+            const costPerMeter = totalLengthMeters > 0 ? data.totalCost / totalLengthMeters : 0
+            updateData.costPerMeter = costPerMeter
+        }
+
+        await prisma.inventory.update({
+            where: { id },
+            data: updateData
+        })
+        revalidatePath('/inventory')
+        revalidatePath('/stock')
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
+export async function createProfile(data: { type: string, dimensions: string }) {
+    // Grade removed from profile creation
+    const profile = await prisma.steelProfile.create({
+        data: {
+            type: data.type,
+            dimensions: data.dimensions,
+            weightPerMeter: 0
+        }
+    })
+    revalidatePath('/inventory')
+    return profile
+}
+
 // Ensure Profile (Shape) Only
 export async function ensureProfile(data: { type: string, dimensions: string, weight?: number }) {
     // Check if exists

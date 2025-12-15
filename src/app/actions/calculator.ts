@@ -4,9 +4,8 @@ import { calculateCustomWeight } from "@/lib/steel-weights"
 import prisma from "@/lib/prisma"
 
 export async function getStandardProfileTypes() {
-    // Fetch distinct types for CATALOG grade
-    const types = await prisma.steelProfile.findMany({
-        where: { grade: 'CATALOG' },
+    // Fetch distinct types from StandardProfile
+    const types = await prisma.standardProfile.findMany({
         distinct: ['type'],
         select: { type: true },
         orderBy: { type: 'asc' }
@@ -15,14 +14,10 @@ export async function getStandardProfileTypes() {
 }
 
 export async function getStandardProfileDimensions(type: string) {
-    // Fetch dimensions for CATALOG grade for specific type
-    const profiles = await prisma.steelProfile.findMany({
-        where: {
-            type: type,
-            grade: 'CATALOG'
-        },
+    // Fetch dimensions for specific type from StandardProfile
+    const profiles = await prisma.standardProfile.findMany({
+        where: { type: type },
         select: { dimensions: true, weightPerMeter: true },
-        // Simple alphanumeric sort might be messy (100 vs 80), but let's just get them first
     })
 
     // Check if dimensions are simple numbers or strings like "20x20x3"
@@ -41,11 +36,10 @@ export async function getStandardProfileDimensions(type: string) {
 export async function calculateProfileWeight(type: string, params: any) {
     if (params.mode === 'STANDARD') {
         const { dimension } = params
-        const profile = await prisma.steelProfile.findFirst({
+        const profile = await prisma.standardProfile.findFirst({
             where: {
                 type: type,
-                dimensions: dimension,
-                grade: 'CATALOG'
+                dimensions: dimension
             }
         })
         return profile ? profile.weightPerMeter : 0

@@ -44,7 +44,10 @@ export async function searchStock(query?: string, profileType?: string, dimensio
             OR,
             profile: whereProfile
         },
-        include: { profile: true }
+        include: {
+            profile: true,
+            grade: true
+        }
     })
 
     // 2. Fetch Remnants
@@ -57,7 +60,10 @@ export async function searchStock(query?: string, profileType?: string, dimensio
             ]) : undefined,
             profile: whereProfile
         },
-        include: { profile: true }
+        include: {
+            profile: true,
+            grade: true
+        }
     })
 
     // 3. Unify
@@ -68,7 +74,7 @@ export async function searchStock(query?: string, profileType?: string, dimensio
             type: 'INVENTORY' as const,
             profileType: i.profile.type,
             dimensions: i.profile.dimensions,
-            grade: i.profile.grade,
+            grade: i.grade?.name || 'Unknown', // Use relation
             length: i.length,
             quantity: i.quantityAtHand,
             weightPerMeter: i.profile.weightPerMeter,
@@ -81,7 +87,7 @@ export async function searchStock(query?: string, profileType?: string, dimensio
             type: 'REMNANT' as const,
             profileType: r.profile.type,
             dimensions: r.profile.dimensions,
-            grade: r.profile.grade,
+            grade: r.grade?.name || 'Unknown', // Use relation
             length: r.length,
             quantity: 1,
             weightPerMeter: r.profile.weightPerMeter,

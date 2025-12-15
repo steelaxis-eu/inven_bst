@@ -98,6 +98,7 @@ export async function updateUsageLine(
                         length: newRemainingLength,
                         costPerMeter: costPerMeter,
                         status: newStatus, // SCRAP or AVAILABLE
+                        gradeId: source.gradeId,
                         projectId: usageLine.projectId || undefined, // inherit project linkage? or null? 
                         // Original logic in route.ts used usage.projectId for scrap tracking.
                         // usageLine has optional projectId. 
@@ -143,6 +144,7 @@ export async function createUsage(projectId: string, userId: string, lines: any[
                 let rootLotId = ''
                 let originalLength = 0
                 let profileId = ''
+                let gradeId = ''
                 let costPerMeter = 0
                 let item = null
 
@@ -155,6 +157,7 @@ export async function createUsage(projectId: string, userId: string, lines: any[
                     rootLotId = inventory.lotId
                     originalLength = inventory.length
                     profileId = inventory.profileId
+                    gradeId = inventory.gradeId
                     costPerMeter = inventory.costPerMeter || 0
 
                     // Decrement quantity
@@ -172,6 +175,7 @@ export async function createUsage(projectId: string, userId: string, lines: any[
                     rootLotId = remnant.rootLotId
                     originalLength = remnant.length
                     profileId = remnant.profileId
+                    gradeId = remnant.gradeId
                     costPerMeter = remnant.costPerMeter || 0
 
                     // Mark as USED
@@ -214,6 +218,7 @@ export async function createUsage(projectId: string, userId: string, lines: any[
                                 id: newRemnantId,
                                 rootLotId,
                                 profileId,
+                                gradeId,
                                 length: remainingLength,
                                 costPerMeter: costPerMeter, // Propagate cost
                                 status: createRemnant ? 'AVAILABLE' : 'SCRAP', // TRUE = Remnant, FALSE = Scrap
