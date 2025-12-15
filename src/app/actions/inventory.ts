@@ -14,6 +14,16 @@ export async function getInventory() {
     })
 }
 
+export async function getInventoryItemByLot(lotId: string) {
+    return await prisma.inventory.findUnique({
+        where: { lotId },
+        include: {
+            profile: true,
+            grade: true
+        }
+    })
+}
+
 export async function getStandardProfiles() {
     return await prisma.standardProfile.findMany({
         orderBy: [{ type: 'asc' }, { dimensions: 'asc' }]

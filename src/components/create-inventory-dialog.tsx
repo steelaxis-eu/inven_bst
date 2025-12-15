@@ -294,7 +294,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
             <DialogTrigger asChild>
                 <Button>Add Inventory</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] w-auto min-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-[95vw] sm:max-w-7xl w-full max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Add Inventory Batch</DialogTitle>
                     <DialogDescription>Add multiple items to your stock. You can calculate profile weights if needed.</DialogDescription>
@@ -305,9 +305,9 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                     <div className="border p-4 rounded bg-muted/50">
                         <div className="space-y-4">
                             {/* Row 1: Identification & Profile */}
-                            <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-end">
+                            <div className="flex flex-col xl:flex-row gap-3 items-start xl:items-end w-full">
                                 {/* Lot ID */}
-                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                <div className="space-y-2 w-full xl:w-36 shrink-0 xl:shrink">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Lot ID</Label>
                                     <Input
                                         placeholder="L-500"
@@ -318,7 +318,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 </div>
 
                                 {/* Type */}
-                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                <div className="space-y-2 w-full xl:w-40 shrink-0 xl:shrink">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Type</Label>
                                     <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
                                         <PopoverTrigger asChild>
@@ -355,7 +355,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 </div>
 
                                 {/* Dimensions - Flexible Width */}
-                                <div className="space-y-2 w-full md:flex-1 min-w-[200px]">
+                                <div className="space-y-2 w-full flex-1 min-w-[180px]">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Dimensions</Label>
                                     {isStandardType ? (
                                         <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
@@ -402,10 +402,10 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                         activeShape ? (
                                             <div className="flex gap-2">
                                                 {(activeShape.params as string[]).map(param => (
-                                                    <div key={param} className="relative flex-1 min-w-[60px]">
+                                                    <div key={param} className="relative flex-1 min-w-[50px]">
                                                         <Input
                                                             placeholder={param}
-                                                            className="h-9 px-2 text-center font-mono bg-card"
+                                                            className="h-9 px-1 text-center font-mono bg-card"
                                                             value={shapeParams[param] || ''}
                                                             onChange={e => updateShapeParam(param, e.target.value)}
                                                         />
@@ -418,7 +418,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 </div>
 
                                 {/* Grade */}
-                                <div className="space-y-2 w-full md:w-28 shrink-0">
+                                <div className="space-y-2 w-full xl:w-28 shrink-0">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Grade</Label>
                                     <Select value={selectedGrade} onValueChange={setSelectedGrade}>
                                         <SelectTrigger className="bg-card h-9"><SelectValue placeholder="Grade" /></SelectTrigger>
@@ -430,27 +430,27 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             </div>
 
                             {/* Row 2: Quantities, Cost, Weight, Action */}
-                            <div className="flex flex-col md:flex-row gap-4 items-start md:items-end pt-2">
+                            <div className="flex flex-col xl:flex-row gap-3 items-start xl:items-end pt-2 w-full">
                                 {/* Length */}
-                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                <div className="space-y-2 w-full xl:w-32 shrink-0">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Length (mm)</Label>
                                     <Input type="number" value={current.length} onChange={e => setCurrent({ ...current, length: e.target.value })} className="bg-card h-9" />
                                 </div>
 
                                 {/* Qty */}
-                                <div className="space-y-2 w-full md:w-20 shrink-0">
+                                <div className="space-y-2 w-full xl:w-20 shrink-0">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Qty</Label>
                                     <Input type="number" value={current.quantity} onChange={e => setCurrent({ ...current, quantity: e.target.value })} className="bg-card h-9" />
                                 </div>
 
                                 {/* Cost */}
-                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                <div className="space-y-2 w-full xl:w-32 shrink-0 xl:shrink">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cost (€)</Label>
                                     <Input type="number" step="0.01" value={current.totalCost} onChange={e => setCurrent({ ...current, totalCost: e.target.value })} className="bg-card h-9 text-right font-mono" />
                                 </div>
 
                                 {/* Weight (Manual/Calc) */}
-                                <div className="space-y-2 w-full md:w-32 shrink-0">
+                                <div className="space-y-2 w-full xl:w-32 shrink-0 xl:shrink">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Weight (kg/m)</Label>
                                     <div className="relative">
                                         <Input
