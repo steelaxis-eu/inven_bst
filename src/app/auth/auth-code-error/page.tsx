@@ -11,7 +11,7 @@ export default function AuthErrorPage() {
             <div className="bg-white p-4 rounded shadow text-left text-sm font-mono text-gray-800 border">
                 <p className="font-bold mb-2">Troubleshooting:</p>
                 <ol className="list-decimal list-inside space-y-1">
-                    <li>Go to Supabase Dashboard -> Authentication -> URL Configuration.</li>
+                    <li>Go to Supabase Dashboard → Authentication → URL Configuration.</li>
                     <li>Under <strong>Redirect URLs</strong>, add your Vercel URL:</li>
                     <li className="bg-gray-100 p-1 mt-1 break-all">
                         https://[your-app].vercel.app/auth/callback
