@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { InventoryCertActions } from "@/components/inventory-cert-actions"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { AlertTriangle, FileWarning, CheckCircle } from "lucide-react"
+import { DownloadCertificatesButton } from "@/components/download-certificates-button"
 
 export default async function ProjectDashboard({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -56,9 +57,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                             </div>
                         </div>
                     ) : (
-                        <a href={`/api/projects/${project.id}/certificates/zip`} download>
-                            <Button>Download Certs (ZIP)</Button>
-                        </a>
+                        <DownloadCertificatesButton projectId={project.id} projectNumber={project.projectNumber} />
                     )}
                 </div>
             </div>

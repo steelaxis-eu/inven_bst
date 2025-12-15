@@ -15,9 +15,10 @@ interface EditUsageProps {
     cost: number
     costPerMeter: number
     profile: string
+    initialStatus?: 'SCRAP' | 'AVAILABLE'
 }
 
-export function EditUsageDialog({ usageId, originalLength, cost, costPerMeter, profile }: EditUsageProps) {
+export function EditUsageDialog({ usageId, originalLength, cost, costPerMeter, profile, initialStatus }: EditUsageProps) {
     const router = useRouter()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -25,7 +26,7 @@ export function EditUsageDialog({ usageId, originalLength, cost, costPerMeter, p
     // Calculate initial values
     const initialLengthUsed = costPerMeter > 0 ? (cost / costPerMeter) * 1000 : 0
     const [lengthUsed, setLengthUsed] = useState(initialLengthUsed.toFixed(0))
-    const [status, setStatus] = useState<'SCRAP' | 'AVAILABLE'>('SCRAP') // Default to Scrap if editing? Or check logic?
+    const [status, setStatus] = useState<'SCRAP' | 'AVAILABLE'>(initialStatus || 'SCRAP')
     // Actually, we don't know the current status of the generated remnant easily without fetching.
     // But we are regenerating it. Let's default to 'AVAILABLE' if length is significant, or let user choose.
 

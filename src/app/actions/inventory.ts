@@ -11,6 +11,18 @@ export async function getInventory() {
     })
 }
 
+export async function getStandardProfiles() {
+    return await prisma.standardProfile.findMany({
+        orderBy: [{ type: 'asc' }, { dimensions: 'asc' }]
+    })
+}
+
+export async function getGrades() {
+    return await prisma.materialGrade.findMany({
+        orderBy: { name: 'asc' }
+    })
+}
+
 export async function getProfiles() {
     return await prisma.steelProfile.findMany({
         orderBy: { type: 'asc' }
@@ -74,6 +86,30 @@ export async function deleteInventory(id: string) {
         return { success: true }
     } catch (e) {
         return { success: false, error: "Cannot delete item (likely in use)" }
+    }
+}
+
+export async function updateInventory(id: string, data: {
+    lotId: string,
+    length: number,
+    quantityAtHand: number,
+    status: string
+}) {
+    try {
+        await prisma.inventory.update({
+            where: { id },
+            data: {
+                lotId: data.lotId,
+                length: data.length,
+                quantityAtHand: data.quantityAtHand,
+                status: data.status
+            }
+        })
+        revalidatePath('/inventory')
+        revalidatePath('/stock')
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
     }
 }
 

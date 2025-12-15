@@ -6,15 +6,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createInventoryBatch } from "@/app/actions/inventory"
+import { ensureProfile, createInventoryBatch } from "@/app/actions/inventory"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ProfileCalculator } from "./profile-calculator"
-import { SearchableSelect } from "@/components/ui/searchable-select"
 import { FileUploader } from "@/components/ui/file-uploader"
 import { FileViewer } from "@/components/ui/file-viewer"
 import { toast } from "sonner"
 
-export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles: any[] }) {
+interface CreateInventoryProps {
+    profiles: any[]
+    standardProfiles: any[]
+    grades: any[]
+}
+
+export function CreateInventoryDialog({ profiles: initialProfiles, standardProfiles, grades }: CreateInventoryProps) {
     const [open, setOpen] = useState(false)
     const [profileOpen, setProfileOpen] = useState(false)
     const [profiles, setProfiles] = useState(initialProfiles)
@@ -26,12 +30,27 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
     // Current Form State
     const [current, setCurrent] = useState({
         lotId: '',
-        profileId: '',
         length: '',
         quantity: '1',
         certificate: '',
         totalCost: ''
     })
+
+    // New Profile Selection State
+    const [selectedType, setSelectedType] = useState('')
+    const [selectedDim, setSelectedDim] = useState('')
+    const [selectedGrade, setSelectedGrade] = useState('')
+    const [manualWeight, setManualWeight] = useState('') // For overrides or custom
+
+    // Derived
+    const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
+    const availableDims = standardProfiles
+        .filter(p => p.type === selectedType)
+        .map(p => p.dimensions)
+
+    // Auto-fill weight logic
+    // const calculatedWeight = ... (do inside render or effect?)
+
 
     // Profile Form State
     const [newProfile, setNewProfile] = useState({ type: '', dimensions: '', grade: '' })
@@ -53,31 +72,47 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
         }
     }
 
-    const handleAddItem = () => {
-        if (!current.lotId || !current.profileId || !current.length || !current.quantity) {
-            toast.warning("Please fill required fields (Lot ID, Profile, Length, Qty)")
+    const handleAddItem = async () => {
+        if (!current.lotId || !selectedType || !selectedDim || !selectedGrade || !current.length || !current.quantity) {
+            toast.warning("Please fill required fields (Lot ID, Type, Dim, Grade, Length, Qty)")
             return
         }
 
-        // Find profile name for display
-        const p = profiles.find(p => p.id === current.profileId)
+        setLoading(true)
+        try {
+            // 1. Resolve Profile ID
+            // Find standard weight
+            const std = standardProfiles.find(p => p.type === selectedType && p.dimensions === selectedDim)
+            const weight = manualWeight ? parseFloat(manualWeight) : (std?.weightPerMeter || 0)
 
-        setItems([...items, {
-            ...current,
-            profileName: p ? `${p.type} ${p.dimensions}` : '?',
-            _id: Math.random().toString() // temp id for list
-        }])
+            const profile = await ensureProfile({
+                type: selectedType,
+                dimensions: selectedDim,
+                grade: selectedGrade,
+                weight: weight
+            })
 
-        // Reset fields but keep some context? Maybe keep profile?
-        // Resetting LotID usually increments? Let's just reset fields for now.
-        setCurrent({
-            lotId: '',
-            profileId: current.profileId, // Keep profile logic?
-            length: current.length,       // Keep length logic? Often similar items.
-            quantity: '1',
-            certificate: current.certificate, // Keep cert?
-            totalCost: ''
-        })
+            setItems([...items, {
+                ...current,
+                profileId: profile.id,
+                profileName: `${profile.type} ${profile.dimensions} (${profile.grade})`,
+                _id: Math.random().toString()
+            }])
+
+            // Reset fields
+            setCurrent({
+                lotId: '',
+                length: current.length,
+                quantity: '1',
+                certificate: current.certificate,
+                totalCost: ''
+            })
+            // Keep Type/Dim/Grade? usually yes.
+        } catch (e) {
+            toast.error("Failed to resolve profile")
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleSaveAll = async () => {
@@ -132,67 +167,44 @@ export function CreateInventoryDialog({ profiles: initialProfiles }: { profiles:
                                     placeholder="e.g. L-500"
                                 />
                             </div>
-                            <div className="grid gap-2">
-                                <Label>Profile</Label>
-                                <div className="flex gap-2 min-w-0">
-                                    <SearchableSelect
-                                        className="flex-1 min-w-0" // Allow shrinking
-                                        value={current.profileId}
-                                        onValueChange={v => setCurrent({ ...current, profileId: v })}
-                                        placeholder="Select Profile"
-                                        searchPlaceholder="Search profile..."
-                                        items={profiles.map(p => ({
-                                            value: p.id,
-                                            label: `${p.type} ${p.dimensions} (${p.grade}) [${p.weightPerMeter || 0} kg/m]`
-                                        }))}
-                                    />
 
-                                    <ProfileCalculator
-                                        trigger={
-                                            <Button type="button" variant="outline" size="icon" title="Find/Calculate Profile" className="shrink-0">
-                                                <span className="text-xl">+</span>
-                                            </Button>
-                                        }
-                                        onSelect={async (calcResult) => {
-                                            // User selected a profile from calculator. We need to Ensure it exists in DB.
-                                            // We need a grade for it. Let's ask for it or default?
-                                            // The calculator doesn't have Grade input.
-                                            // For now, let's pop a prompt or small overlay? Or just default to S355?
-                                            // Actually, best to let user select grade AFTER calculator? 
-                                            // Let's add Grade to the Ensure call, but we need UI for it.
-                                            // IMPROVEMENT: Add Grade input to the dialog state that triggered this?
-                                            // OR: Just assume S355 for now or prompt.
-
-                                            // Better UX: Show a mini-dialog to confirm Grade before saving?
-                                            // Let's simplify: Default S355, user can edit later if needed? No, grade is key.
-                                            // Let's prompt.
-                                            const grade = prompt("Enter Material Grade (e.g. S355, S235, SS304):", "S355")
-                                            if (!grade) return
-
-                                            setLoading(true)
-                                            try {
-                                                const { ensureProfile } = await import("@/app/actions/inventory")
-                                                const p = await ensureProfile({
-                                                    type: calcResult.type,
-                                                    dimensions: calcResult.dimensions,
-                                                    weight: calcResult.weight,
-                                                    grade: grade
-                                                })
-
-                                                // Update local list
-                                                const exists = profiles.find(x => x.id === p.id)
-                                                if (!exists) {
-                                                    setProfiles([...profiles, p])
-                                                }
-
-                                                // Select it
-                                                setCurrent({ ...current, profileId: p.id })
-                                            } catch (e) {
-                                                toast.error("Error creating profile")
-                                            } finally {
-                                                setLoading(false)
-                                            }
-                                        }}
+                            {/* New Profile Selectors */}
+                            <div className="grid gap-2 col-span-2 grid-cols-4">
+                                <div>
+                                    <Label>Type</Label>
+                                    <Select value={selectedType} onValueChange={t => { setSelectedType(t); setSelectedDim('') }}>
+                                        <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+                                        <SelectContent>
+                                            {uniqueTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label>Dimensions</Label>
+                                    <Select value={selectedDim} onValueChange={setSelectedDim} disabled={!selectedType}>
+                                        <SelectTrigger><SelectValue placeholder="Dim" /></SelectTrigger>
+                                        <SelectContent>
+                                            {availableDims.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label>Grade</Label>
+                                    <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                                        <SelectTrigger><SelectValue placeholder="Grade" /></SelectTrigger>
+                                        <SelectContent>
+                                            {grades.map(g => <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label>Weight (kg/m)</Label>
+                                    {/* Show calculated or allow override */}
+                                    <Input
+                                        type="number"
+                                        placeholder={(standardProfiles.find(p => p.type === selectedType && p.dimensions === selectedDim)?.weightPerMeter || 0).toString()}
+                                        value={manualWeight}
+                                        onChange={e => setManualWeight(e.target.value)}
                                     />
                                 </div>
                             </div>

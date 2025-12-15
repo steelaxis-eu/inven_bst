@@ -43,6 +43,20 @@ model SteelProfile {
   @@unique([type, dimensions, grade])
 }
 
+model StandardProfile {
+  id              String   @id @default(uuid())
+  type            String   // e.g., HEA, IPE
+  dimensions      String   // e.g., 200, 300
+  weightPerMeter  Float    // kg/m
+  
+  @@unique([type, dimensions])
+}
+
+model MaterialGrade {
+  id    String @id @default(uuid())
+  name  String @unique // e.g., S355
+}
+
 model Inventory {
   id                String   @id @default(uuid())
   lotId             String   @unique

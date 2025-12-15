@@ -26,10 +26,9 @@ export async function getGlobalUsageHistory() {
         if (l.remnant?.rootLotId) rootLotIds.add(l.remnant.rootLotId)
     })
 
-    // Fetch related Scrap Remnants
-    const potentialScraps = await prisma.remnant.findMany({
+    // Fetch related Remnants (Scrap or Available/Used)
+    const potentialRemnants = await prisma.remnant.findMany({
         where: {
-            status: 'SCRAP',
             rootLotId: { in: Array.from(rootLotIds) }
         },
         include: { profile: true }
@@ -56,18 +55,24 @@ export async function getGlobalUsageHistory() {
             certificateFilename = certMap.get(rootLotId) || null
         }
 
-        // Attempt to find generated scrap
+        // Attempt to find generated scrap/remnant
         // Heuristic: Created within 5 minutes of usage and matching rootLotId
-        // This is imperfect but likely sufficient for single-user scenarios
         let scrapValue = 0
+        let generatedRemnantId: string | null = null
+        let generatedRemnantStatus: string | null = null
+
         if (rootLotId) {
-            const match = potentialScraps.find(s => {
+            const match = potentialRemnants.find(s => {
                 const timeDiff = Math.abs(s.createdAt.getTime() - line.usage.date.getTime())
                 return s.rootLotId === rootLotId && timeDiff < 1000 * 60 * 5 // 5 mins
             })
             if (match) {
-                const weight = (match.length / 1000) * match.profile.weightPerMeter
-                scrapValue = weight * scrapPrice
+                generatedRemnantId = match.id
+                generatedRemnantStatus = match.status
+                if (match.status === 'SCRAP') {
+                    const weight = (match.length / 1000) * match.profile.weightPerMeter
+                    scrapValue = weight * scrapPrice
+                }
             }
         }
 
@@ -82,6 +87,8 @@ export async function getGlobalUsageHistory() {
             quantityUsed: line.quantityUsed,
             createdBy: line.usage.createdBy,
             scrapValue, // New Field
+            generatedRemnantId,
+            generatedRemnantStatus,
             certificateFilename, // New Field
             // For Editing
             cost: line.cost,

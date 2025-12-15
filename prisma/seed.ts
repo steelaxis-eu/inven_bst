@@ -37,20 +37,52 @@ async function main() {
             modifiedBy: 'Admin'
         }
     })
-    console.log('✓ Projects seeded')
+    // 2.1 Seed Material Grades
+    const GRADES = ['S355', 'S235', 'S275', 'SS304', 'SS316']
+    for (const g of GRADES) {
+        await prisma.materialGrade.upsert({
+            where: { name: g },
+            update: {},
+            create: { name: g }
+        })
+    }
+    console.log('✓ Grades seeded')
 
-    // 3. Seed Standard Reference Profiles (Catalog)
+    // 2.2 Seed Standard Profiles Catalog
     const STANDARD_PROFILES: Record<string, Record<string, number>> = {
         HEA: {
-            "200": 42.3, "240": 60.3, "300": 88.3
+            "100": 16.7, "120": 19.9, "140": 24.7, "160": 30.4, "180": 35.5,
+            "200": 42.3, "220": 50.5, "240": 60.3, "260": 68.2, "280": 76.4,
+            "300": 88.3, "320": 97.6, "340": 105.0, "360": 112.0, "400": 125.0
         },
         IPE: {
-            "160": 15.8, "200": 22.4, "300": 42.2
+            "80": 6.0, "100": 8.1, "120": 10.4, "140": 12.9, "160": 15.8, "180": 18.8,
+            "200": 22.4, "220": 26.2, "240": 30.7, "270": 36.1, "300": 42.2, "330": 49.1
         },
         UPN: {
-            "200": 25.3
+            "80": 8.6, "100": 10.6, "120": 13.4, "140": 16.0, "160": 18.8, "180": 22.0,
+            "200": 25.3, "220": 29.4
+        },
+        SHS: {
+            "100x100x4": 12.0, "100x100x5": 15.0 // Mock examples
         }
     }
+
+    for (const type of Object.keys(STANDARD_PROFILES)) {
+        for (const dim of Object.keys(STANDARD_PROFILES[type])) {
+            const w = STANDARD_PROFILES[type][dim]
+            await prisma.standardProfile.upsert({
+                where: { type_dimensions: { type, dimensions: dim } },
+                update: { weightPerMeter: w },
+                create: { type, dimensions: dim, weightPerMeter: w }
+            })
+        }
+    }
+    console.log('✓ Standard Catalog seeded')
+
+
+    // 3. Seed SteelProfiles (Legacy/Linker) using the same data
+    // We iterate again or reuse the object.
 
     const profiles: any[] = []
     for (const type of Object.keys(STANDARD_PROFILES)) {

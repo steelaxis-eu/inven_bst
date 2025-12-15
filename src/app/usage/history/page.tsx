@@ -42,9 +42,15 @@ export default async function HistoryPage() {
                                 <TableCell>{row.source}</TableCell>
                                 <TableCell>{row.quantityUsed}</TableCell>
                                 <TableCell>
-                                    {row.scrapValue > 0 ? (
-                                        <span className="text-green-600 font-medium">+€{row.scrapValue.toFixed(2)}</span>
-                                    ) : '-'}
+                                    {row.generatedRemnantStatus === 'SCRAP' ? (
+                                        row.scrapValue > 0 ? (
+                                            <span className="text-green-600 font-medium">+€{row.scrapValue.toFixed(2)}</span>
+                                        ) : '-'
+                                    ) : row.generatedRemnantStatus === 'AVAILABLE' ? (
+                                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Remnant</span>
+                                    ) : (
+                                        '-'
+                                    )}
                                 </TableCell>
                                 <TableCell className="text-gray-500">{row.createdBy || '-'}</TableCell>
                                 <TableCell>
@@ -64,6 +70,7 @@ export default async function HistoryPage() {
                                         cost={row.cost}
                                         costPerMeter={row.costPerMeter}
                                         profile={row.profile}
+                                        initialStatus={row.generatedRemnantStatus as any}
                                     />
                                 </TableCell>
                             </TableRow>
