@@ -68,9 +68,25 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     const isStandardType = uniqueTypes.includes(selectedType)
     const activeShape = shapes.find(s => s.id === selectedType)
 
-    const availableDims = standardProfiles
+    // Dimensions Logic
+    // 1. Active: Profiles already in 'profiles' (SteelProfile table)
+    const activeDims = profiles
         .filter(p => p.type === selectedType)
         .map(p => p.dimensions)
+        .sort()
+
+    // 2. Catalog: From 'standardProfiles', excluding active ones to avoid duplicates
+    const catalogDims = standardProfiles
+        .filter(p => p.type === selectedType)
+        .map(p => p.dimensions)
+        .filter(d => !activeDims.includes(d))
+        .sort((a: string, b: string) => {
+            // Numeric sort for dimensions if possible (e.g. "100x100" vs "120x120")
+            const getVal = (s: string) => parseFloat(s.split(/[xX]/)[0]) || 0
+            return getVal(a) - getVal(b)
+        })
+
+    const hasAnyDims = activeDims.length > 0 || catalogDims.length > 0
 
     // Calculation Effect
     useEffect(() => {
@@ -303,7 +319,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     <Label>Dimensions / Params</Label>
                                     {isStandardType ? (
                                         // Standard Profile Selection
-                                        availableDims.length > 0 ? (
+                                        hasAnyDims ? (
                                             <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
                                                 <PopoverTrigger asChild>
                                                     <Button variant="outline" role="combobox" aria-expanded={openDimCombo} className="w-full justify-between px-3 font-normal">
@@ -336,14 +352,31 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                                                     </Button>
                                                                 </div>
                                                             </CommandEmpty>
-                                                            <CommandGroup heading="Catalog Dimensions">
-                                                                {availableDims.map(d => (
+                                                            <CommandGroup heading="Active Profiles">
+                                                                {activeDims.map(d => (
                                                                     <CommandItem
                                                                         key={d}
                                                                         value={d}
                                                                         onSelect={(currentValue) => {
                                                                             setSelectedDim(currentValue === selectedDim ? "" : currentValue)
                                                                             setCustomDim('')
+                                                                            setOpenDimCombo(false)
+                                                                        }}
+                                                                    >
+                                                                        <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                        {d}
+                                                                    </CommandItem>
+                                                                ))}
+                                                                {activeDims.length === 0 && <p className="text-xs text-muted-foreground px-2 py-1">No active profiles for this type.</p>}
+                                                            </CommandGroup>
+                                                            <CommandGroup heading="Standard Catalog">
+                                                                {catalogDims.map(d => (
+                                                                    <CommandItem
+                                                                        key={d}
+                                                                        value={d}
+                                                                        onSelect={(currentValue) => {
+                                                                            setSelectedDim(currentValue === selectedDim ? "" : currentValue)
+                                                                            setCustomDim('') // Logic to create new profile on save will be handled by backend or submit handler
                                                                             setOpenDimCombo(false)
                                                                         }}
                                                                     >
