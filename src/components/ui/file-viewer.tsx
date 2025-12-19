@@ -35,7 +35,14 @@ export function FileViewer({ bucketName, path, fileName = "View Certificate" }: 
 
             if (data?.signedUrl) {
                 console.log('[FileViewer] Got signed URL:', data.signedUrl)
-                window.open(data.signedUrl, '_blank')
+                // Use anchor element instead of window.open to avoid popup blocker
+                const link = document.createElement('a')
+                link.href = data.signedUrl
+                link.target = '_blank'
+                link.rel = 'noopener noreferrer'
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
             } else {
                 console.error('[FileViewer] No signed URL returned')
                 alert("Could not generate download link")
