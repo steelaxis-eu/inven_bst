@@ -483,10 +483,10 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 {/* Supplier */}
                                 <div className="space-y-2 w-full xl:w-36 shrink-0">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Supplier</Label>
-                                    <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
+                                    <Select value={selectedSupplier || 'none'} onValueChange={(v) => setSelectedSupplier(v === 'none' ? '' : v)}>
                                         <SelectTrigger className="bg-card h-9"><SelectValue placeholder="Optional" /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="">None</SelectItem>
+                                            <SelectItem value="none">None</SelectItem>
                                             {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
