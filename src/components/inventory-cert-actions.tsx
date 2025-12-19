@@ -27,7 +27,7 @@ export function InventoryCertActions({ id, certificate }: { id: string, certific
                 <FileViewer bucketName="certificates" path={path} fileName="View Cert" />
                 <Popover open={openP} onOpenChange={setOpenP}>
                     <PopoverTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-black">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">
                             <Upload className="h-3 w-3" />
                         </Button>
                     </PopoverTrigger>

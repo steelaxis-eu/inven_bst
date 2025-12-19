@@ -3,6 +3,7 @@ import { CreateInventoryDialog } from "@/components/create-inventory-dialog"
 import { CreateUsageDialog } from "@/components/create-usage-dialog"
 import { EditInventoryDialog } from "@/components/edit-inventory-dialog"
 import { InventoryCertActions } from "@/components/inventory-cert-actions"
+import { CSVImportDialog } from "@/components/csv-import-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { revalidatePath } from "next/cache"
@@ -35,6 +36,7 @@ export default async function InventoryPage() {
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold">Inventory</h1>
                 <div className="flex gap-2">
+                    <CSVImportDialog />
                     <CreateUsageDialog />
                     <CreateInventoryDialog
                         profiles={profiles}
@@ -72,7 +74,7 @@ export default async function InventoryPage() {
                                     <InventoryCertActions id={item.id} certificate={item.certificateFilename} />
                                 </TableCell>
                                 <TableCell>{item.status}</TableCell>
-                                <TableCell className="text-sm text-gray-500">{item.createdBy || '-'}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">{item.createdBy || '-'}</TableCell>
                                 <TableCell>
                                     <div className="flex items-center gap-2">
                                         <EditInventoryDialog item={item} />

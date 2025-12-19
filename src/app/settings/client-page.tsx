@@ -11,19 +11,21 @@ import { createStandardProfile, deleteStandardProfile } from "@/app/actions/inve
 import { createSteelProfile, deleteSteelProfile } from "@/app/actions/profiles"
 import { createProfileShape, deleteProfileShape } from "@/app/actions/shapes"
 import { updateGrade } from "@/app/actions/grades"
+import { createSupplier, updateSupplier, deleteSupplier } from "@/app/actions/suppliers"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Pencil } from "lucide-react"
+import { Pencil, Trash2 } from "lucide-react"
 
 interface SettingsClientProps {
     initialShapes: any[]
     initialGrades: any[]
     initialStandardProfiles: any[]
     initialSteelProfiles: any[]
+    initialSuppliers: any[]
 }
 
-export function SettingsClient({ initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles }: SettingsClientProps) {
+export function SettingsClient({ initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles, initialSuppliers }: SettingsClientProps) {
     // Standard Profile State
     const [profileDialogOpen, setProfileDialogOpen] = useState(false)
     const [newProfile, setNewProfile] = useState({ type: '', dimensions: '', weight: '', area: '' })
@@ -44,6 +46,12 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
     const [gradeForm, setGradeForm] = useState({ density: '', scrapPrice: '' })
     const [gradeDialogOpen, setGradeDialogOpen] = useState(false)
     const [loadingGrade, setLoadingGrade] = useState(false)
+
+    // Supplier State
+    const [supplierDialogOpen, setSupplierDialogOpen] = useState(false)
+    const [editingSupplier, setEditingSupplier] = useState<any>(null)
+    const [supplierForm, setSupplierForm] = useState({ name: '', code: '', contact: '', email: '', phone: '', notes: '' })
+    const [loadingSupplier, setLoadingSupplier] = useState(false)
 
     // Handlers
     const handleAddProfile = async () => {
@@ -160,13 +168,66 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
         }
     }
 
+    // Supplier Handlers
+    const handleOpenSupplierDialog = (supplier?: any) => {
+        if (supplier) {
+            setEditingSupplier(supplier)
+            setSupplierForm({
+                name: supplier.name,
+                code: supplier.code || '',
+                contact: supplier.contact || '',
+                email: supplier.email || '',
+                phone: supplier.phone || '',
+                notes: supplier.notes || ''
+            })
+        } else {
+            setEditingSupplier(null)
+            setSupplierForm({ name: '', code: '', contact: '', email: '', phone: '', notes: '' })
+        }
+        setSupplierDialogOpen(true)
+    }
+
+    const handleSaveSupplier = async () => {
+        if (!supplierForm.name.trim()) {
+            toast.error("Supplier name is required")
+            return
+        }
+        setLoadingSupplier(true)
+        try {
+            const result = editingSupplier
+                ? await updateSupplier(editingSupplier.id, supplierForm)
+                : await createSupplier(supplierForm)
+
+            if (!result.success) throw new Error(result.error)
+
+            setSupplierDialogOpen(false)
+            setEditingSupplier(null)
+            toast.success(editingSupplier ? "Supplier updated" : "Supplier created")
+        } catch (e: any) {
+            toast.error(e.message || "Failed to save supplier")
+        } finally {
+            setLoadingSupplier(false)
+        }
+    }
+
+    const handleDeleteSupplier = async (id: string) => {
+        if (!confirm("Delete this supplier?")) return
+        const result = await deleteSupplier(id)
+        if (result.success) {
+            toast.success("Supplier deleted")
+        } else {
+            toast.error(result.error || "Failed to delete")
+        }
+    }
+
     return (
         <Tabs defaultValue="profiles" className="space-y-4">
-            <TabsList className="flex w-full overflow-x-auto md:grid md:grid-cols-4 h-auto">
+            <TabsList className="flex w-full overflow-x-auto md:grid md:grid-cols-5 h-auto">
                 <TabsTrigger value="profiles">Active Profiles</TabsTrigger>
                 <TabsTrigger value="shapes">Shapes</TabsTrigger>
                 <TabsTrigger value="catalog">Standard Catalog</TabsTrigger>
                 <TabsTrigger value="grades">Grades</TabsTrigger>
+                <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profiles">
@@ -350,6 +411,106 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                     </CardContent>
                 </Card>
             </TabsContent>
+
+            <TabsContent value="suppliers">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Suppliers</CardTitle>
+                        <CardDescription>Manage material suppliers for inventory tracking.</CardDescription>
+                        <div className="flex justify-end">
+                            <Button size="sm" onClick={() => handleOpenSupplierDialog()}>Add Supplier</Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Name</TableHead>
+                                        <TableHead>Code</TableHead>
+                                        <TableHead>Contact</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Phone</TableHead>
+                                        <TableHead></TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {initialSuppliers.map(supplier => (
+                                        <TableRow key={supplier.id}>
+                                            <TableCell className="font-medium">{supplier.name}</TableCell>
+                                            <TableCell>{supplier.code || '-'}</TableCell>
+                                            <TableCell>{supplier.contact || '-'}</TableCell>
+                                            <TableCell>{supplier.email || '-'}</TableCell>
+                                            <TableCell>{supplier.phone || '-'}</TableCell>
+                                            <TableCell>
+                                                <div className="flex gap-1">
+                                                    <Button variant="ghost" size="sm" onClick={() => handleOpenSupplierDialog(supplier)}>
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="sm" onClick={() => handleDeleteSupplier(supplier.id)} className="text-destructive">
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {initialSuppliers.length === 0 && (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                                No suppliers configured. Add one to get started.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+
+                        <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
+                            <DialogContent className="sm:max-w-[500px]">
+                                <DialogHeader>
+                                    <DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid gap-2">
+                                        <Label>Name *</Label>
+                                        <Input placeholder="Supplier name" value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                            <Label>Code</Label>
+                                            <Input placeholder="SUP001" value={supplierForm.code} onChange={e => setSupplierForm({ ...supplierForm, code: e.target.value })} />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Contact</Label>
+                                            <Input placeholder="Contact name" value={supplierForm.contact} onChange={e => setSupplierForm({ ...supplierForm, contact: e.target.value })} />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                            <Label>Email</Label>
+                                            <Input type="email" placeholder="email@example.com" value={supplierForm.email} onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label>Phone</Label>
+                                            <Input placeholder="+371..." value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Notes</Label>
+                                        <Input placeholder="Optional notes" value={supplierForm.notes} onChange={e => setSupplierForm({ ...supplierForm, notes: e.target.value })} />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button onClick={handleSaveSupplier} disabled={loadingSupplier}>
+                                        {loadingSupplier ? 'Saving...' : (editingSupplier ? 'Update' : 'Create')}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </CardContent>
+                </Card>
+            </TabsContent>
         </Tabs>
     )
 }
+

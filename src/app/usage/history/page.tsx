@@ -52,7 +52,7 @@ export default async function HistoryPage() {
                                         '-'
                                     )}
                                 </TableCell>
-                                <TableCell className="text-gray-500">{row.createdBy || '-'}</TableCell>
+                                <TableCell className="text-muted-foreground">{row.createdBy || '-'}</TableCell>
                                 <TableCell>
                                     {row.certificateFilename ? (
                                         <a href={`/api/certificates/${row.certificateFilename}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 flex items-center gap-1">
@@ -60,7 +60,7 @@ export default async function HistoryPage() {
                                             <span className="text-xs">View</span>
                                         </a>
                                     ) : (
-                                        <span className="text-gray-300 text-xs">-</span>
+                                        <span className="text-muted-foreground/50 text-xs">-</span>
                                     )}
                                 </TableCell>
                                 <TableCell>

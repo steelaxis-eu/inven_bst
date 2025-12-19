@@ -27,8 +27,8 @@ export default async function ProjectsPage() {
                             <ProjectCardActions id={p.id} name={p.name} />
                         </CardHeader>
                         <CardContent>
-                            <p className="mb-4 text-gray-600 font-bold">{p.name}</p>
-                            <p className="mb-4 text-sm text-gray-500">Status: {p.status}</p>
+                            <p className="mb-4 text-muted-foreground font-bold">{p.name}</p>
+                            <p className="mb-4 text-sm text-muted-foreground">Status: {p.status}</p>
                             <Link href={`/projects/${p.id}`}>
                                 <Button variant="outline" className="w-full">View Dashboard</Button>
                             </Link>

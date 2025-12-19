@@ -128,10 +128,10 @@ export function UsageWizard({ projects, scrapPrice }: { projects: any[], scrapPr
                     </div>
 
                     {searchResults.length > 0 && (
-                        <div className="border rounded p-2 max-h-40 overflow-auto bg-slate-50">
+                        <div className="border rounded p-2 max-h-40 overflow-auto bg-muted">
                             {searchResults.map(item => (
                                 <div key={item.id}
-                                    className="p-2 hover:bg-slate-200 cursor-pointer flex justify-between"
+                                    className="p-2 hover:bg-muted/80 cursor-pointer flex justify-between"
                                     onClick={() => handleSelect(item)}
                                 >
                                     <span className="font-mono font-bold">{item.originalId}</span>
@@ -142,7 +142,7 @@ export function UsageWizard({ projects, scrapPrice }: { projects: any[], scrapPr
                     )}
 
                     {selectedItem && (
-                        <div className="border p-4 rounded bg-slate-100 space-y-4">
+                        <div className="border p-4 rounded bg-muted/50 space-y-4">
                             <div className="font-semibold">Selected: {selectedItem.originalId} ({selectedItem.length}mm)</div>
 
                             <div className="flex items-end gap-4">
@@ -167,7 +167,7 @@ export function UsageWizard({ projects, scrapPrice }: { projects: any[], scrapPr
                             </div>
 
                             {showRemnantOption && (
-                                <div className="bg-white p-3 rounded border space-y-2">
+                                <div className="bg-card p-3 rounded border space-y-2">
                                     <Label className="text-sm font-semibold">Remaining Material Action ({remainingLength}mm):</Label>
                                     <div className="flex flex-col gap-2">
                                         <label className="flex items-center space-x-2 cursor-pointer">

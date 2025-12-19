@@ -55,7 +55,7 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
                         ))}
                         {stock.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                                     No stock found matching criteria.
                                 </TableCell>
                             </TableRow>

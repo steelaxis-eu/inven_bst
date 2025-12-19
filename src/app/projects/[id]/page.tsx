@@ -34,11 +34,11 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-3xl font-bold mb-2">{project.projectNumber} - {project.name}</h1>
-                    <div className="text-gray-500 space-y-1">
+                    <div className="text-muted-foreground space-y-1">
                         <div>Status: {project.status}</div>
                         <div>Total Material: <span className="font-bold">€{totalProjectCost.toFixed(2)}</span></div>
                         {totalScrapValue > 0 && (
-                            <div className="text-sm text-gray-400">
+                            <div className="text-sm text-muted-foreground/80">
                                 Less Scrap ({totalScrapWeight.toFixed(1)}kg @ €{scrapPrice}/kg): <span className="text-green-600">-€{totalScrapValue.toFixed(2)}</span>
                             </div>
                         )}
@@ -78,7 +78,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         <TableBody>
                             {materialSummary.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-center text-gray-400">No materials used.</TableCell>
+                                    <TableCell colSpan={4} className="text-center text-muted-foreground">No materials used.</TableCell>
                                 </TableRow>
                             ) : (
                                 materialSummary.map((stat: any) => (

@@ -1,26 +1,21 @@
-import { getSettings } from "@/app/actions/settings"
-import prisma from "@/lib/prisma"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { getProfileShapes, getGrades, getStandardProfiles, getProfiles } from "@/app/actions/inventory"
+import { getSuppliers } from "@/app/actions/suppliers"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { revalidatePath } from "next/cache"
 import Link from "next/link"
 import { SettingsClient } from "@/app/settings/client-page"
 
 export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
-    // Fetch all necessary settings data
-    const shapes = await prisma.profileShape.findMany({ orderBy: { id: 'asc' } })
-    const grades = await prisma.materialGrade.findMany({ orderBy: { name: 'asc' } })
-    const standardProfiles = await prisma.standardProfile.findMany({
-        orderBy: [{ type: 'asc' }, { dimensions: 'asc' }],
-        take: 1000 // Increased to show full catalog including L and U profiles
-    })
-    const steelProfiles = await prisma.steelProfile.findMany({
-        orderBy: [{ type: 'asc' }, { dimensions: 'asc' }]
-    })
+    // Fetch all necessary settings data via server actions
+    const [shapes, grades, standardProfiles, steelProfiles, suppliers] = await Promise.all([
+        getProfileShapes(),
+        getGrades(),
+        getStandardProfiles(),
+        getProfiles(),
+        getSuppliers()
+    ])
+
     return (
         <div className="container py-10">
             <div className="flex items-center gap-4 mb-8">
@@ -33,7 +28,10 @@ export default async function SettingsPage() {
                 initialGrades={grades}
                 initialStandardProfiles={standardProfiles}
                 initialSteelProfiles={steelProfiles}
+                initialSuppliers={suppliers}
             />
         </div>
     )
 }
+
+

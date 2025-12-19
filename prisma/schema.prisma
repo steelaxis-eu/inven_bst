@@ -70,11 +70,26 @@ model MaterialGrade {
   remnants  Remnant[]
 }
 
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String?  // Short code for reference
+  contact   String?  // Contact person name
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventory Inventory[]
+}
+
 model Inventory {
   id                String   @id @default(uuid())
   lotId             String   @unique
   profileId         String
   gradeId           String
+  supplierId        String?  // Optional supplier reference
   length            Float    // mm
   quantityReceived  Int
   quantityAtHand    Int
@@ -88,7 +103,13 @@ model Inventory {
 
   profile           SteelProfile @relation(fields: [profileId], references: [id])
   grade             MaterialGrade @relation(fields: [gradeId], references: [id])
+  supplier          Supplier?    @relation(fields: [supplierId], references: [id])
   usageLines        UsageLine[]
+
+  @@index([status])
+  @@index([profileId])
+  @@index([gradeId])
+  @@index([supplierId])
 }
 
 model Remnant {
@@ -110,6 +131,10 @@ model Remnant {
   grade       MaterialGrade @relation(fields: [gradeId], references: [id])
   project     Project?     @relation(fields: [projectId], references: [id])
   usageLines  UsageLine[]
+
+  @@index([status])
+  @@index([rootLotId])
+  @@index([projectId])
 }
 
 model Usage {
@@ -122,6 +147,9 @@ model Usage {
   
   project   Project  @relation(fields: [projectId], references: [id])
   lines     UsageLine[]
+
+  @@index([projectId])
+  @@index([date])
 }
 
 model UsageLine {
@@ -137,4 +165,8 @@ model UsageLine {
   inventory    Inventory? @relation(fields: [inventoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   remnant      Remnant?   @relation(fields: [remnantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   project      Project?   @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([usageId])
+  @@index([inventoryId])
+  @@index([remnantId])
 }
