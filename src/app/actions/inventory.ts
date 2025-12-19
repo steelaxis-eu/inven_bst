@@ -60,6 +60,8 @@ export async function createInventory(data: {
     lotId: string,
     profileId: string,
     gradeId: string, // Required
+    supplierId?: string,
+    invoiceNumber?: string,
     length: number,
     quantity: number,
     certificate: string,
@@ -73,6 +75,8 @@ export async function createInventory(data: {
             lotId: data.lotId,
             profileId: data.profileId,
             gradeId: data.gradeId, // New field
+            supplierId: data.supplierId || null,
+            invoiceNumber: data.invoiceNumber || null,
             length: data.length,
             quantityReceived: data.quantity,
             quantityAtHand: data.quantity, // Initially same
@@ -193,6 +197,8 @@ export async function createInventoryBatch(items: {
     profileId: string,
     gradeName?: string, // If passed name, we resolve it
     gradeId?: string,   // Ideally passed ID
+    supplierId?: string,
+    invoiceNumber?: string,
     length: number,
     quantity: number,
     certificate: string,
@@ -219,6 +225,8 @@ export async function createInventoryBatch(items: {
                         lotId: data.lotId,
                         profileId: data.profileId,
                         gradeId: gradeId,
+                        supplierId: data.supplierId || null,
+                        invoiceNumber: data.invoiceNumber || null,
                         length: data.length,
                         quantityReceived: data.quantity,
                         quantityAtHand: data.quantity,

@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Upload, Download, AlertTriangle, CheckCircle } from 'lucide-react'
-import { generateCSVTemplate, parseCSV, ParsedInventoryRow } from '@/lib/csv-parser'
+import { Upload, Download, AlertTriangle, CheckCircle, FileSpreadsheet } from 'lucide-react'
+import { generateCSVTemplate, generateExcelTemplate, parseCSV, parseExcel, ParsedInventoryRow } from '@/lib/csv-parser'
 import { importInventoryBatch } from '@/app/actions/import'
 
 export function CSVImportDialog() {
@@ -17,7 +17,7 @@ export function CSVImportDialog() {
     const [fileName, setFileName] = useState('')
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const handleDownloadTemplate = () => {
+    const handleDownloadCSV = () => {
         const csv = generateCSVTemplate()
         const blob = new Blob([csv], { type: 'text/csv' })
         const url = URL.createObjectURL(blob)
@@ -28,14 +28,34 @@ export function CSVImportDialog() {
         URL.revokeObjectURL(url)
     }
 
+    const handleDownloadExcel = () => {
+        const data = generateExcelTemplate()
+        const blob = new Blob([data.buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'inventory-template.xlsx'
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
 
         setFileName(file.name)
 
-        const text = await file.text()
-        const result = parseCSV(text)
+        const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+
+        let result
+        if (isExcel) {
+            const buffer = await file.arrayBuffer()
+            result = parseExcel(buffer)
+        } else {
+            const text = await file.text()
+            result = parseCSV(text)
+        }
+
         setParsedRows(result.rows)
 
         if (result.totalInvalid > 0) {
@@ -61,7 +81,8 @@ export function CSVImportDialog() {
                 quantity: r.quantity,
                 totalCost: r.totalCost,
                 certificate: r.certificate,
-                supplier: r.supplier
+                supplier: r.supplier,
+                invoiceNumber: r.invoiceNumber
             })))
 
             if (result.created > 0) {
@@ -92,31 +113,37 @@ export function CSVImportDialog() {
             <DialogTrigger asChild>
                 <Button variant="outline">
                     <Upload className="mr-2 h-4 w-4" />
-                    Import CSV
+                    Import
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>Import Inventory from CSV</DialogTitle>
+                    <DialogTitle>Import Inventory from CSV/Excel</DialogTitle>
                 </DialogHeader>
 
                 <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-                    <div className="flex gap-4 items-center">
-                        <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
                             <Download className="mr-2 h-4 w-4" />
-                            Download Template
+                            CSV Template
                         </Button>
+                        <Button variant="outline" size="sm" onClick={handleDownloadExcel}>
+                            <FileSpreadsheet className="mr-2 h-4 w-4" />
+                            Excel Template
+                        </Button>
+
+                        <div className="h-6 border-l mx-2" />
 
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept=".csv"
+                            accept=".csv,.xlsx,.xls"
                             onChange={handleFileSelect}
                             className="hidden"
                         />
                         <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
                             <Upload className="mr-2 h-4 w-4" />
-                            Select CSV File
+                            Select File
                         </Button>
 
                         {fileName && (
@@ -147,9 +174,10 @@ export function CSVImportDialog() {
                                             <TableHead>Lot ID</TableHead>
                                             <TableHead>Profile</TableHead>
                                             <TableHead>Grade</TableHead>
-                                            <TableHead>Length (mm)</TableHead>
+                                            <TableHead>Length</TableHead>
                                             <TableHead>Qty</TableHead>
                                             <TableHead>Cost</TableHead>
+                                            <TableHead>Invoice</TableHead>
                                             <TableHead>Errors</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -169,6 +197,7 @@ export function CSVImportDialog() {
                                                 <TableCell>{row.lengthMm}</TableCell>
                                                 <TableCell>{row.quantity}</TableCell>
                                                 <TableCell>€{row.totalCost.toFixed(2)}</TableCell>
+                                                <TableCell className="font-mono text-xs">{row.invoiceNumber || '-'}</TableCell>
                                                 <TableCell className="text-destructive text-xs">
                                                     {row.errors.join(', ')}
                                                 </TableCell>

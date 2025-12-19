@@ -90,6 +90,7 @@ model Inventory {
   profileId         String
   gradeId           String
   supplierId        String?  // Optional supplier reference
+  invoiceNumber     String?  // Purchase invoice reference
   length            Float    // mm
   quantityReceived  Int
   quantityAtHand    Int

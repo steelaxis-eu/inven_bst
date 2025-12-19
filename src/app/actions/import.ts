@@ -14,6 +14,7 @@ export interface ImportInventoryItem {
     totalCost: number
     certificate: string
     supplier?: string
+    invoiceNumber?: string
 }
 
 export interface ImportResult {
@@ -93,6 +94,7 @@ export async function importInventoryBatch(items: ImportInventoryItem[]): Promis
                     profileId: profile.id,
                     gradeId: grade.id,
                     supplierId,
+                    invoiceNumber: item.invoiceNumber || null,
                     length: item.lengthMm,
                     quantityReceived: item.quantity,
                     quantityAtHand: item.quantity,

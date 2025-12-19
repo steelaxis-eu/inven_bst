@@ -24,9 +24,10 @@ interface CreateInventoryProps {
     standardProfiles: any[]
     grades: any[]
     shapes: any[]
+    suppliers: any[]
 }
 
-export function CreateInventoryDialog({ profiles: initialProfiles, standardProfiles, grades, shapes }: CreateInventoryProps) {
+export function CreateInventoryDialog({ profiles: initialProfiles, standardProfiles, grades, shapes, suppliers }: CreateInventoryProps) {
     const [open, setOpen] = useState(false)
     const [profileOpen, setProfileOpen] = useState(false)
     const [profiles, setProfiles] = useState(initialProfiles)
@@ -41,8 +42,12 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
         length: '',
         quantity: '1',
         certificate: '',
-        totalCost: ''
+        totalCost: '',
+        invoiceNumber: ''
     })
+
+    // Supplier State
+    const [selectedSupplier, setSelectedSupplier] = useState('')
 
     // New Profile Selection State
     const [selectedType, setSelectedType] = useState('')
@@ -241,6 +246,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 ...current,
                 profileId: profile.id,
                 gradeName: selectedGrade, // Pass name to batch creator to resolve ID
+                supplierId: selectedSupplier || null,
                 profileName: `${profile.type} ${profile.dimensions} (${selectedGrade})`,
                 _id: Math.random().toString()
             }])
@@ -251,7 +257,8 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 length: current.length,
                 quantity: '1',
                 certificate: current.certificate,
-                totalCost: ''
+                totalCost: '',
+                invoiceNumber: current.invoiceNumber
             })
         } catch (e) {
             toast.error("Failed to resolve profile")
@@ -269,6 +276,8 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 lotId: i.lotId,
                 profileId: i.profileId,
                 gradeName: i.gradeName, // Pass grade name
+                supplierId: i.supplierId || null,
+                invoiceNumber: i.invoiceNumber || null,
                 length: parseFloat(i.length),
                 quantity: parseInt(i.quantity),
                 certificate: i.certificate,
@@ -444,13 +453,13 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 </div>
 
                                 {/* Cost */}
-                                <div className="space-y-2 w-full xl:w-32 shrink-0 xl:shrink">
+                                <div className="space-y-2 w-full xl:w-28 shrink-0 xl:shrink">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cost (€)</Label>
                                     <Input type="number" step="0.01" value={current.totalCost} onChange={e => setCurrent({ ...current, totalCost: e.target.value })} className="bg-card h-9 text-right font-mono" />
                                 </div>
 
                                 {/* Weight (Manual/Calc) */}
-                                <div className="space-y-2 w-full xl:w-32 shrink-0 xl:shrink">
+                                <div className="space-y-2 w-full xl:w-28 shrink-0 xl:shrink">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Weight (kg/m)</Label>
                                     <div className="relative">
                                         <Input
@@ -471,8 +480,26 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     </div>
                                 </div>
 
+                                {/* Supplier */}
+                                <div className="space-y-2 w-full xl:w-36 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Supplier</Label>
+                                    <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
+                                        <SelectTrigger className="bg-card h-9"><SelectValue placeholder="Optional" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="">None</SelectItem>
+                                            {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Invoice Number */}
+                                <div className="space-y-2 w-full xl:w-32 shrink-0">
+                                    <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Invoice #</Label>
+                                    <Input placeholder="INV-001" value={current.invoiceNumber} onChange={e => setCurrent({ ...current, invoiceNumber: e.target.value })} className="bg-card h-9 font-mono" />
+                                </div>
+
                                 {/* File Upload (Condensed) */}
-                                <div className="space-y-2 w-full md:flex-1 min-w-[150px]">
+                                <div className="space-y-2 w-full md:flex-1 min-w-[120px]">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cert</Label>
                                     <div className="flex gap-2 items-center">
                                         <div className="flex-1">

@@ -1,4 +1,5 @@
 import { getInventory, getProfiles, getStandardProfiles, getGrades, deleteInventory, getProfileShapes } from "@/app/actions/inventory"
+import { getSuppliers } from "@/app/actions/suppliers"
 import { CreateInventoryDialog } from "@/components/create-inventory-dialog"
 import { CreateUsageDialog } from "@/components/create-usage-dialog"
 import { EditInventoryDialog } from "@/components/edit-inventory-dialog"
@@ -17,12 +18,14 @@ export default async function InventoryPage() {
     let standardProfiles: any[] = []
     let grades: any[] = []
     let shapes: any[] = []
+    let suppliers: any[] = []
     try {
         inventory = await getInventory()
         profiles = await getProfiles()
         standardProfiles = await getStandardProfiles()
         grades = await getGrades()
         shapes = await getProfileShapes()
+        suppliers = await getSuppliers()
     } catch (e) { }
 
     async function deleteItem(formData: FormData) {
@@ -43,6 +46,7 @@ export default async function InventoryPage() {
                         standardProfiles={standardProfiles}
                         grades={grades}
                         shapes={shapes}
+                        suppliers={suppliers}
                     />
                 </div>
             </div>
