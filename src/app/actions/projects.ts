@@ -187,6 +187,8 @@ export async function getProject(id: string) {
         }
     })
 
+    const averageScrapPrice = totalScrapWeight > 0 ? (totalScrapValue / totalScrapWeight) : 0
+
     const netCost = totalProjectCost - totalScrapValue
 
     return {
@@ -199,7 +201,7 @@ export async function getProject(id: string) {
             totalScrapWeight,
             netCost,
             materialSummary: Array.from(summaryMap.values()),
-            scrapPrice: 0 // No single global price anymore
+            scrapPrice: averageScrapPrice
         }
     }
 }

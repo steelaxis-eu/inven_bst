@@ -39,7 +39,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         <div>Total Material: <span className="font-bold">€{totalProjectCost.toFixed(2)}</span></div>
                         {totalScrapValue > 0 && (
                             <div className="text-sm text-muted-foreground/80">
-                                Less Scrap ({totalScrapWeight.toFixed(1)}kg @ €{scrapPrice}/kg): <span className="text-green-600">-€{totalScrapValue.toFixed(2)}</span>
+                                Less Scrap ({totalScrapWeight.toFixed(1)}kg @ ~€{typeof scrapPrice === 'number' ? scrapPrice.toFixed(2) : '0.00'}/kg): <span className="text-green-600">-€{totalScrapValue.toFixed(2)}</span>
                             </div>
                         )}
                         <div className="text-xl mt-2 font-bold border-t pt-2 w-fit">
