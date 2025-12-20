@@ -124,19 +124,7 @@ export function CreateUsageDialog({ projects, trigger }: CreateUsageDialogProps)
             // *Check action*: createUsage(projectId, ..., lines). It uses header project.
             // Lines table has `projectId` optional override. 
 
-            // Map lines to action format
-            const payload = lines.map(line => ({
-                type: line.item.type,
-                id: line.item.id,
-                lengthUsed: line.usedLength,
-                createRemnant: line.createRemnant
-                // Note: The backend action `createUsage` currently accepts `projectId` as a header arg,
-                // BUT `usageLine` model has `projectId` column.
-                // The `createUsage` function DOES write `projectId` to `UsageLine` if we pass it?
-                // Looking at action code: `data: { ... projectId }` is used in newRemnant creation (for origin),
-                // and `usageLine.create` uses header `projectId`.
-                // Let's pass the LINE Specific projectID if different, or global.
-            }))
+            // Preparing submission...
 
             // Wait, existing action `createUsage` logic:
             // `createUsage(projectId, userId, lines)` returns usage.
@@ -156,13 +144,19 @@ export function CreateUsageDialog({ projects, trigger }: CreateUsageDialogProps)
             // So I should arguably update `createUsage` to read `line.projectId` if present.
             // I'll proceed with this Component assuming I'll fix the Action next.
 
+            // Map lines to action format (Corrected)
+            const payload = lines.map(line => ({
+                type: line.item.type,
+                id: line.item.id,
+                lengthUsed: line.usedLength,
+                createRemnant: line.createRemnant,
+                projectId: line.project || globalProject
+            }))
+
             const res = await createUsage(
                 globalProject,
-                'user-id', // TODO: Get real user ID
-                lines.map(l => ({
-                    ...l,
-                    projectId: l.project || globalProject // Explicitly pass row project
-                }))
+                '',
+                payload
             )
 
             if (res.success) {
