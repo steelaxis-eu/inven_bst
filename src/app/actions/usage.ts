@@ -3,6 +3,51 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+export async function getUsageItem(query: string) {
+    if (!query) return null
+    const q = query.trim().toUpperCase()
+
+    // 1. Try Inventory
+    const inv = await prisma.inventory.findUnique({
+        where: { lotId: q },
+        include: { profile: true, grade: true }
+    })
+
+    if (inv) {
+        return {
+            type: 'INVENTORY',
+            id: inv.id,
+            lotId: inv.lotId,
+            profile: inv.profile,
+            grade: inv.grade,
+            length: inv.length,
+            quantity: inv.quantityAtHand,
+            costPerMeter: inv.costPerMeter
+        }
+    }
+
+    // 2. Try Remnants
+    const rem = await prisma.remnant.findUnique({
+        where: { id: q },
+        include: { profile: true, grade: true }
+    })
+
+    if (rem && rem.status === 'AVAILABLE') {
+        return {
+            type: 'REMNANT',
+            id: rem.id,
+            lotId: rem.id, // Remnant ID serves as Lot ID
+            profile: rem.profile,
+            grade: rem.grade,
+            length: rem.length,
+            quantity: 1, // Remnants are individual
+            costPerMeter: rem.costPerMeter
+        }
+    }
+
+    return null
+}
+
 export async function updateUsageLine(
     usageLineId: string,
     newLengthUsed: number,

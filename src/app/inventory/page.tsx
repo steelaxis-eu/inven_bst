@@ -1,5 +1,6 @@
 import { getInventory, getProfiles, getStandardProfiles, getGrades, deleteInventory, getProfileShapes } from "@/app/actions/inventory"
 import { getSuppliers } from "@/app/actions/suppliers"
+import { getActiveProjects } from "@/app/actions/projects"
 import { CreateInventoryDialog } from "@/components/create-inventory-dialog"
 import { CreateUsageDialog } from "@/components/create-usage-dialog"
 import { EditInventoryDialog } from "@/components/edit-inventory-dialog"
@@ -19,6 +20,7 @@ export default async function InventoryPage() {
     let grades: any[] = []
     let shapes: any[] = []
     let suppliers: any[] = []
+    let projects: any[] = []
     try {
         inventory = await getInventory()
         profiles = await getProfiles()
@@ -26,6 +28,7 @@ export default async function InventoryPage() {
         grades = await getGrades()
         shapes = await getProfileShapes()
         suppliers = await getSuppliers()
+        projects = await getActiveProjects()
     } catch (e) { }
 
     async function deleteItem(formData: FormData) {
@@ -40,7 +43,7 @@ export default async function InventoryPage() {
                 <h1 className="text-3xl font-bold">Inventory</h1>
                 <div className="flex gap-2">
                     <CSVImportDialog />
-                    <CreateUsageDialog />
+                    <CreateUsageDialog projects={projects} />
                     <CreateInventoryDialog
                         profiles={profiles}
                         standardProfiles={standardProfiles}
