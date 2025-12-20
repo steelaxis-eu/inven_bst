@@ -70,6 +70,31 @@ export async function calculateProfileWeight(type: string, params: { gradeId?: s
         }
     }
 
-    // 3. Custom Shape Calculation
+    // 3. Custom Shape Calculation (Formula based)
+    // Check if shape exists in DB to use its formula
+    const shape = await prisma.profileShape.findUnique({ where: { id: type } })
+    if (shape && shape.formula) {
+        // Evaluate formula
+        const { evaluateFormula } = await import('@/lib/formula')
+        const numericParams: Record<string, number> = {}
+
+        // Map params
+        if (params.w) numericParams.w = params.w
+        if (params.h) numericParams.h = params.h
+        if (params.t) numericParams.t = params.t
+        if (params.d) numericParams.d = params.d
+        if (params.s) numericParams.s = params.s
+
+        try {
+            const areaMm2 = evaluateFormula(shape.formula, numericParams)
+            // Weight = Area(mm2) * 0.001 * Density(kg/dm3) 
+            // (See explanation: mm2 -> m2 is /1e6. Density kg/m3 is *1000. So factor is /1000.)
+            return (areaMm2 / 1000000) * (density * 1000)
+        } catch (e) {
+            console.error("Formula eval failed:", e)
+        }
+    }
+
+    // Fallback to hardcoded logic if no DB shape found
     return calculateCustomWeight(type, { ...params, density })
 }

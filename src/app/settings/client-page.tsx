@@ -296,14 +296,17 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                             <Table>
                                 <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Params</TableHead><TableHead>Formula</TableHead><TableHead></TableHead></TableRow></TableHeader>
                                 <TableBody>
-                                    {initialShapes.map(shape => (
-                                        <TableRow key={shape.id}>
-                                            <TableCell>{shape.id}</TableCell><TableCell>{shape.name}</TableCell>
-                                            <TableCell><div className="flex gap-1 flex-wrap">{(shape.params as string[]).map(p => <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>)}</div></TableCell>
-                                            <TableCell className="font-mono text-sm">{shape.formula || '-'}</TableCell>
-                                            <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {initialShapes
+                                        // Hide system standard shapes (RHS, SHS, CHS and their variants)
+                                        .filter(s => !['RHS', 'SHS', 'CHS'].some(prefix => s.id.startsWith(prefix)))
+                                        .map(shape => (
+                                            <TableRow key={shape.id}>
+                                                <TableCell>{shape.id}</TableCell><TableCell>{shape.name}</TableCell>
+                                                <TableCell><div className="flex gap-1 flex-wrap">{(shape.params as string[]).map(p => <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>)}</div></TableCell>
+                                                <TableCell className="font-mono text-sm">{shape.formula || '-'}</TableCell>
+                                                <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
+                                            </TableRow>
+                                        ))}
                                 </TableBody>
                             </Table>
                         </div>

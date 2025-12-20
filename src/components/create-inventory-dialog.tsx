@@ -366,23 +366,32 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 {/* Dimensions - Flexible Width */}
                                 <div className="space-y-2 w-full flex-1 min-w-[180px]">
                                     <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Dimensions</Label>
-                                    {isStandardType ? (
+
+                                    <div className="space-y-2">
+                                        {/* Step 1: Always offer Active Profiles Combobox */}
                                         <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
                                             <PopoverTrigger asChild>
                                                 <Button variant="outline" role="combobox" className="w-full justify-between px-2 font-normal bg-card h-9">
-                                                    {selectedDim || <span className="text-muted-foreground">Select Dimensions...</span>}
+                                                    {selectedDim || <span className="text-muted-foreground">Select / Custom...</span>}
                                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                 </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-[240px] p-0" align="start">
                                                 <Command>
-                                                    <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search dims..." />
+                                                    <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search or type custom..." />
                                                     <CommandList>
                                                         <CommandEmpty>
-                                                            <Button onClick={() => { setSelectedDim(dimSearch); setCustomDim(dimSearch); setOpenDimCombo(false) }} variant="ghost" className="w-full h-8 text-xs">
-                                                                Use "{dimSearch}"
+                                                            <Button onClick={() => {
+                                                                setSelectedDim(dimSearch);
+                                                                setCustomDim(dimSearch);
+                                                                // If it's a shape, try to auto-parse the custom input
+                                                                // e.g. "100x100x5" -> populate params
+                                                                setOpenDimCombo(false)
+                                                            }} variant="ghost" className="w-full h-8 text-xs">
+                                                                Use Custom "{dimSearch}"
                                                             </Button>
                                                         </CommandEmpty>
+
                                                         {activeDims.length > 0 && (
                                                             <CommandGroup heading="Active Profiles">
                                                                 {activeDims.map(d => (
@@ -393,7 +402,9 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                                                 ))}
                                                             </CommandGroup>
                                                         )}
-                                                        {catalogDims.length > 0 && (
+
+                                                        {/* Only show Standard Catalog for Standard Types (not generic shapes) to prevent noise */}
+                                                        {isStandardType && catalogDims.length > 0 && (
                                                             <CommandGroup heading="Standard Catalog">
                                                                 {catalogDims.map(d => (
                                                                     <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
@@ -407,8 +418,10 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                                 </Command>
                                             </PopoverContent>
                                         </Popover>
-                                    ) : (
-                                        activeShape ? (
+
+                                        {/* Step 2: If Shape (not standard type), show Param Inputs */}
+                                        {/* Always show this for Shapes so user can see/edit the params derived from the selection */}
+                                        {!isStandardType && activeShape && (
                                             <div className="flex gap-2">
                                                 {(activeShape.params as string[]).map(param => (
                                                     <div key={param} className="relative flex-1 min-w-[50px]">
@@ -422,8 +435,13 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                                     </div>
                                                 ))}
                                             </div>
-                                        ) : <Input placeholder="Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} className="h-9 bg-card" />
-                                    )}
+                                        )}
+
+                                        {/* Fallback for "Custom" if no shape selected (shouldn't happen if logic correct) */}
+                                        {!isStandardType && !activeShape && (
+                                            <Input placeholder="Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} className="h-9 bg-card" />
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Grade */}
