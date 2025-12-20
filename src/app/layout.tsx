@@ -27,11 +27,18 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 
 // ...
 
-export default function RootLayout({
+import { getCurrentUser } from "@/lib/auth"
+import { UserNav } from "@/components/user-nav"
+
+// ...
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getCurrentUser()
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -57,7 +64,10 @@ export default function RootLayout({
                   <Link href="/projects" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Projects</Link>
                   <Link href="/settings" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Settings</Link>
                 </nav>
-                <ModeToggle />
+                <div className="flex items-center gap-2">
+                  <ModeToggle />
+                  <UserNav userEmail={user?.email} />
+                </div>
               </div>
             </div>
           </header>

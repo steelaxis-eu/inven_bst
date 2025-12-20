@@ -165,8 +165,15 @@ export async function updateUsageLine(
 
 // ... existing updateUsageLine ...
 
-export async function createUsage(projectId: string, userId: string, lines: any[]) {
+import { getCurrentUserId } from '@/lib/auth'
+
+export async function createUsage(projectId: string, _ignoredUserId: string, lines: any[]) {
     try {
+        const userId = await getCurrentUserId(null!) // Pass null to signify explicit fail if missing
+        if (!userId) {
+            throw new Error('Unauthorized: You must be logged in to register usage.')
+        }
+
         if (!projectId || !lines || lines.length === 0) {
             throw new Error('Missing required fields')
         }
@@ -176,9 +183,9 @@ export async function createUsage(projectId: string, userId: string, lines: any[
             const usage = await tx.usage.create({
                 data: {
                     projectId,
-                    userId: userId || 'system',
-                    createdBy: userId || 'system',
-                    modifiedBy: userId || 'system'
+                    userId,
+                    createdBy: userId,
+                    modifiedBy: userId
                 }
             })
 
