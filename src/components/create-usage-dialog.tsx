@@ -18,9 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 interface CreateUsageDialogProps {
     projects: any[]
+    trigger?: React.ReactNode
 }
 
-export function CreateUsageDialog({ projects }: CreateUsageDialogProps) {
+export function CreateUsageDialog({ projects, trigger }: CreateUsageDialogProps) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
 
@@ -186,7 +187,7 @@ export function CreateUsageDialog({ projects }: CreateUsageDialogProps) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button>Register Usage</Button>
+                {trigger ? trigger : <Button>Register Usage</Button>}
             </DialogTrigger>
             <DialogContent className="max-w-[95vw] w-full lg:max-w-6xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>

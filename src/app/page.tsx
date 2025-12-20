@@ -27,10 +27,7 @@ export default async function Home() {
             Welcome back, <span className="font-medium text-foreground">{user?.email || "Guest"}</span>
           </p>
 
-          {/* Quick Actions */}
-          <div className="flex justify-center gap-4 pt-4">
-            <CreateUsageDialog projects={projects} />
-          </div>
+          {/* Quick Actions removed - moved to grid */}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -45,6 +42,24 @@ export default async function Home() {
               </div>
             </div>
           </Link>
+
+          {/* Create Usage Dialog Card */}
+          <CreateUsageDialog
+            projects={projects}
+            trigger={
+              <div className="group block cursor-pointer">
+                <div className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:border-primary/20 hover:-translate-y-1 h-full">
+                  <div className="flex flex-col items-center justify-center text-center space-y-3">
+                    <div className="p-3 rounded-full bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><path d="M3 3v18h18" /><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" /></svg>
+                    </div>
+                    <h2 className="text-xl font-bold tracking-tight">Register Usage</h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">Record material consumption and generate remnants.</p>
+                  </div>
+                </div>
+              </div>
+            }
+          />
 
           {/* Usage History (Replaces "Register Usage" page link since we have dialog above) */}
           <Link href="/usage/history" className="group block">
