@@ -79,13 +79,13 @@ export async function getGlobalUsageHistory() {
         return {
             id: line.id,
             date: line.usage.date,
-            user: line.usage.userId,
+            user: (line.usage as any).userName || line.usage.userId,
             projectName: project ? `${project.projectNumber} ${project.name}` : 'Unknown',
             itemId: line.inventory?.lotId || line.remnant?.id || '?',
             profile: item ? `${item.profile.type} ${item.profile.dimensions}` : '?',
             source: line.inventory ? 'Inventory' : 'Remnant',
             quantityUsed: line.quantityUsed,
-            createdBy: line.usage.createdBy,
+            createdBy: (line.usage as any).userName || line.usage.createdBy,
             scrapValue, // New Field
             generatedRemnantId,
             generatedRemnantStatus,

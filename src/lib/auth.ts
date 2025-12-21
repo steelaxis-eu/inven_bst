@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase-server'
 export interface AuthUser {
     id: string
     email: string | null
+    name: string | null
 }
 
 /**
@@ -23,9 +24,12 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
             return null
         }
 
+        const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User'
+
         return {
             id: user.id,
             email: user.email ?? null,
+            name: name
         }
     } catch (error) {
         console.error('Error getting current user:', error)

@@ -165,12 +165,12 @@ export async function updateUsageLine(
 
 // ... existing updateUsageLine ...
 
-import { getCurrentUserId } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/auth'
 
 export async function createUsage(projectId: string, _ignoredUserId: string, lines: any[]) {
     try {
-        const userId = await getCurrentUserId(null!) // Pass null to signify explicit fail if missing
-        if (!userId) {
+        const user = await getCurrentUser()
+        if (!user || !user.id) {
             throw new Error('Unauthorized: You must be logged in to register usage.')
         }
 
@@ -183,9 +183,10 @@ export async function createUsage(projectId: string, _ignoredUserId: string, lin
             const usage = await tx.usage.create({
                 data: {
                     projectId,
-                    userId,
-                    createdBy: userId,
-                    modifiedBy: userId
+                    userId: user.id,
+                    userName: user.name, // Save snapshot of name
+                    createdBy: user.id,
+                    modifiedBy: user.id
                 }
             })
 
@@ -275,8 +276,8 @@ export async function createUsage(projectId: string, _ignoredUserId: string, lin
                                 costPerMeter: costPerMeter, // Propagate cost
                                 status: createRemnant ? 'AVAILABLE' : 'SCRAP', // TRUE = Remnant, FALSE = Scrap
                                 projectId, // Link to Origin Project for Scrap tracking
-                                createdBy: userId || 'system',
-                                modifiedBy: userId || 'system'
+                                createdBy: user.id || 'system',
+                                modifiedBy: user.id || 'system'
                             }
                         })
                     }

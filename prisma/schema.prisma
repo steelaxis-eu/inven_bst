@@ -143,6 +143,7 @@ model Usage {
   projectId String
   date      DateTime @default(now())
   userId    String   // NextAuth user ID
+  userName  String?  // Human readable name (snapshot)
   createdBy String?
   modifiedBy String?
   
