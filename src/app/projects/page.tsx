@@ -21,16 +21,18 @@ export default async function ProjectsPage() {
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {projects.map(p => (
-                    <Card key={p.id}>
+                    <Card key={p.id} className="relative group hover:shadow-md transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-xl font-bold">{p.projectNumber}</CardTitle>
-                            <ProjectCardActions id={p.id} name={p.name} />
+                            <div className="relative z-10">
+                                <ProjectCardActions id={p.id} name={p.name} />
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <p className="mb-4 text-muted-foreground font-bold">{p.name}</p>
                             <p className="mb-4 text-sm text-muted-foreground">Status: {p.status}</p>
-                            <Link href={`/projects/${p.id}`}>
-                                <Button variant="outline" className="w-full">View Dashboard</Button>
+                            <Link href={`/projects/${p.id}`} className="absolute inset-0 z-0 focus:outline-none">
+                                <span className="sr-only">View Dashboard</span>
                             </Link>
                         </CardContent>
                     </Card>
