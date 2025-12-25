@@ -273,12 +273,12 @@ export function CreateAssemblyDialog({
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label className="text-xs uppercase text-muted-foreground">Parent Assembly</Label>
-                                <Select value={parentId} onValueChange={setParentId}>
+                                <Select value={parentId || '_none'} onValueChange={(v) => setParentId(v === '_none' ? '' : v)}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="None (Top-level)" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="">None (Top-level)</SelectItem>
+                                        <SelectItem value="_none">None (Top-level)</SelectItem>
                                         {existingAssemblies.map(a => (
                                             <SelectItem key={a.id} value={a.id}>
                                                 {a.assemblyNumber} - {a.name}
