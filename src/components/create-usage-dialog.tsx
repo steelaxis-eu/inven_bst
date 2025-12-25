@@ -183,7 +183,7 @@ export function CreateUsageDialog({ projects, trigger }: CreateUsageDialogProps)
             <DialogTrigger asChild>
                 {trigger ? trigger : <Button>Register Usage</Button>}
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] w-full lg:max-w-6xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-h-[100dvh] h-full w-full max-w-none rounded-none sm:h-auto sm:max-h-[90vh] sm:max-w-6xl sm:rounded-lg overflow-y-auto p-4 sm:p-6 !translate-y-0 !top-0 !left-0 !translate-x-0 sm:fixed sm:!top-[50%] sm:!left-[50%] sm:!translate-x-[-50%] sm:!translate-y-[-50%]">
                 <DialogHeader>
                     <DialogTitle>Register Material Usage</DialogTitle>
                     <DialogDescription>Record material consumption and track offcuts.</DialogDescription>

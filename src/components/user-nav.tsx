@@ -64,7 +64,13 @@ export function UserNav({ userEmail }: UserNavProps) {
                     </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* Can add Profile/Settings links here later */}
+                <DropdownMenuItem asChild>
+                    <Link href="/settings/profile" className="cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} disabled={loading} className="text-red-600 focus:text-red-600 cursor-pointer">
                     {loading ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
