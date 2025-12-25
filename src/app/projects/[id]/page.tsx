@@ -15,6 +15,7 @@ import { DownloadCertificatesButton } from "@/components/download-certificates-b
 
 import { PartsTable } from "@/components/project/parts-table"
 import { CreatePartDialog } from "@/components/project/create-part-dialog"
+import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialog"
 import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
 import { WorkOrdersList, WorkOrderSummary } from "@/components/project/workorders-list"
@@ -32,7 +33,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     const cleanId = decodeURIComponent(id).trim()
 
     // Fetch all project data in parallel
-    const [project, parts, assemblies, workOrders, qualityChecks, plateParts, deliveries, profiles, grades, inventoryStock] =
+    const [project, parts, assemblies, workOrders, qualityChecks, plateParts, deliveries, profiles, grades, inventoryStock, standardProfiles, shapes] =
         await Promise.all([
             getProject(cleanId),
             getProjectParts(cleanId),
@@ -46,7 +47,9 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
             prisma.inventory.groupBy({
                 by: ['profileId'],
                 _sum: { quantityAtHand: true }
-            })
+            }),
+            prisma.standardProfile.findMany({ orderBy: [{ type: 'asc' }, { dimensions: 'asc' }] }),
+            prisma.profileShape.findMany()
         ])
 
     if (!project) {
@@ -236,7 +239,9 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         <CreatePartDialog
                             projectId={cleanId}
                             profiles={profiles.map((p: { id: string; type: string; dimensions: string; weightPerMeter: number }) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            standardProfiles={standardProfiles.map((p: { type: string; dimensions: string; weightPerMeter: number }) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
                             grades={grades.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))}
+                            shapes={shapes.map((s: { id: string; params: unknown; formula: string | null }) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
                             inventory={inventoryMap}
                         />
                     </div>
@@ -247,6 +252,12 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                 <TabsContent value="assemblies" className="mt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-semibold">Assemblies</h2>
+                        <CreateAssemblyDialog
+                            projectId={cleanId}
+                            existingParts={(parts as { id: string; partNumber: string; description: string | null; profile?: { type: string; dimensions: string } | null }[])}
+                            existingAssemblies={(assemblies as { id: string; assemblyNumber: string; name: string }[])}
+                            grades={grades.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))}
+                        />
                     </div>
                     <AssemblySummary assemblies={assemblies as any} />
                     <AssembliesTree assemblies={assemblies as any} />

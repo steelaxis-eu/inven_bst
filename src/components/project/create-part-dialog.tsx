@@ -7,37 +7,34 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useRouter } from 'next/navigation'
 import { createPart } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
-import { Plus, Package, Scissors, AlertTriangle, Check } from 'lucide-react'
-
-// Profile type definitions with standards
-const PROFILE_TYPES = [
-    { type: 'HEA', name: 'HE A (Wide Flange)', standard: 'EN 10025' },
-    { type: 'HEB', name: 'HE B (Wide Flange)', standard: 'EN 10025' },
-    { type: 'HEM', name: 'HE M (Wide Flange)', standard: 'EN 10025' },
-    { type: 'IPE', name: 'IPE (I-Beam)', standard: 'EN 10025' },
-    { type: 'UPN', name: 'UPN (Channel)', standard: 'EN 10025' },
-    { type: 'UPE', name: 'UPE (Channel)', standard: 'EN 10025' },
-    { type: 'RHS', name: 'RHS (Rectangular Hollow)', standard: 'EN 10219' },
-    { type: 'SHS', name: 'SHS (Square Hollow)', standard: 'EN 10219' },
-    { type: 'CHS', name: 'CHS (Circular Hollow)', standard: 'EN 10219' },
-    { type: 'L', name: 'L (Angle)', standard: 'EN 10056' },
-    { type: 'T', name: 'T (Tee)', standard: 'EN 10055' },
-    { type: 'FB', name: 'Flat Bar', standard: 'EN 10058' },
-    { type: 'RB', name: 'Round Bar', standard: 'EN 10060' },
-]
+import { ensureProfile } from '@/app/actions/inventory'
+import { calculateProfileWeight } from '@/app/actions/calculator'
+import { toast } from 'sonner'
+import { Plus, Package, Scissors, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface CreatePartDialogProps {
     projectId: string
     profiles: { id: string; type: string; dimensions: string; weightPerMeter: number }[]
+    standardProfiles?: { type: string; dimensions: string; weightPerMeter: number }[]
     grades: { id: string; name: string }[]
+    shapes?: { id: string; params: string[]; formula: string | null }[]
     inventory?: { profileId: string; quantity: number }[]  // Available stock
 }
 
-export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }: CreatePartDialogProps) {
+export function CreatePartDialog({
+    projectId,
+    profiles,
+    standardProfiles = [],
+    grades,
+    shapes = [],
+    inventory = []
+}: CreatePartDialogProps) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [tab, setTab] = useState<'profile' | 'plate'>('profile')
@@ -49,12 +46,19 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
     const [gradeId, setGradeId] = useState('')
     const [quantity, setQuantity] = useState('1')
 
-    // Profile part fields
-    const [profileSource, setProfileSource] = useState<'existing' | 'custom'>('existing')
-    const [profileId, setProfileId] = useState('')
-    const [profileType, setProfileType] = useState('')
-    const [profileDimensions, setProfileDimensions] = useState('')
-    const [profileStandard, setProfileStandard] = useState('')
+    // Profile selection state (matching inventory dialog pattern)
+    const [selectedType, setSelectedType] = useState('')
+    const [selectedDim, setSelectedDim] = useState('')
+    const [customDim, setCustomDim] = useState('')
+    const [shapeParams, setShapeParams] = useState<Record<string, string>>({})
+    const [manualWeight, setManualWeight] = useState('')
+
+    // Combobox open states
+    const [openTypeCombo, setOpenTypeCombo] = useState(false)
+    const [openDimCombo, setOpenDimCombo] = useState(false)
+    const [dimSearch, setDimSearch] = useState('')
+
+    // Other profile fields
     const [length, setLength] = useState('')
     const [requiresWelding, setRequiresWelding] = useState(false)
     const [isOutsourcedCut, setIsOutsourcedCut] = useState(false)
@@ -66,37 +70,130 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
     const [unitWeight, setUnitWeight] = useState('')
     const [supplier, setSupplier] = useState('')
 
+    // Derived values
+    const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
+    const allTypes = Array.from(new Set([...uniqueTypes, ...shapes.map(s => s.id)]))
+    const isStandardType = uniqueTypes.includes(selectedType)
+    const activeShape = shapes.find(s => s.id === selectedType)
+
+    // Active dims (from profiles table)
+    const activeDims = profiles
+        .filter(p => p.type === selectedType)
+        .map(p => p.dimensions)
+        .sort()
+
+    // Catalog dims (from standardProfiles, excluding active ones)
+    const catalogDims = standardProfiles
+        .filter(p => p.type === selectedType)
+        .map(p => p.dimensions)
+        .filter(d => !activeDims.includes(d))
+        .sort((a, b) => {
+            const getVal = (s: string) => parseFloat(s.split(/[xX]/)[0]) || 0
+            return getVal(a) - getVal(b)
+        })
+
+    // Find matching standard profile for weight
+    const standardMatch = standardProfiles.find(
+        p => p.type === selectedType && p.dimensions === (customDim || selectedDim)
+    )
+
+    // Find active profile for inventory check
+    const activeProfile = profiles.find(
+        p => p.type === selectedType && p.dimensions === (customDim || selectedDim)
+    )
+
     // Inventory check
-    const [inventoryStatus, setInventoryStatus] = useState<'unknown' | 'available' | 'insufficient' | 'missing'>('unknown')
-    const [availableQty, setAvailableQty] = useState(0)
+    const stock = activeProfile ? inventory.find(i => i.profileId === activeProfile.id) : null
+    const needed = parseInt(quantity) || 0
+    const available = stock?.quantity || 0
+    const inventoryStatus = activeProfile
+        ? (available >= needed ? 'available' : available > 0 ? 'insufficient' : 'missing')
+        : 'unknown'
 
-    // Check inventory availability when profile changes
+    // Auto-parse dimension string for shape params
     useEffect(() => {
-        if (tab === 'profile' && profileId && quantity) {
-            const stock = inventory.find(i => i.profileId === profileId)
-            const needed = parseInt(quantity) || 0
-            const available = stock?.quantity || 0
-            setAvailableQty(available)
+        if (!selectedDim || !activeShape) return
 
-            if (available >= needed) {
-                setInventoryStatus('available')
-            } else if (available > 0) {
-                setInventoryStatus('insufficient')
-            } else {
-                setInventoryStatus('missing')
+        const parts = selectedDim.toLowerCase().split(/[x* ]+/).map(s => parseFloat(s)).filter(n => !isNaN(n))
+        const params = activeShape.params as string[]
+
+        if (parts.length > 0 && params.length > 0) {
+            const newParams: Record<string, string> = {}
+            params.forEach((param, i) => {
+                if (parts[i] !== undefined) {
+                    newParams[param] = parts[i].toString()
+                }
+            })
+            const isDiff = Object.entries(newParams).some(([k, v]) => shapeParams[k] !== v)
+            if (isDiff) {
+                setShapeParams(prev => ({ ...prev, ...newParams }))
             }
-        } else {
-            setInventoryStatus('unknown')
         }
-    }, [profileId, quantity, inventory, tab])
+    }, [selectedDim, activeShape])
 
-    // Set standard when profile type changes
+    // Auto-set weight from standard profile
     useEffect(() => {
-        const pt = PROFILE_TYPES.find(p => p.type === profileType)
-        if (pt) {
-            setProfileStandard(pt.standard)
+        if (standardMatch && !manualWeight) {
+            setManualWeight(standardMatch.weightPerMeter.toFixed(2))
+        } else if (activeProfile && !manualWeight) {
+            setManualWeight(activeProfile.weightPerMeter.toFixed(2))
         }
-    }, [profileType])
+    }, [standardMatch, activeProfile])
+
+    // Handlers
+    const handleTypeSelect = (t: string) => {
+        const val = t === selectedType ? '' : t
+        setSelectedType(val)
+        setSelectedDim('')
+        setCustomDim('')
+        setManualWeight('')
+        setShapeParams({})
+        setOpenTypeCombo(false)
+    }
+
+    const handleDimSelect = (d: string) => {
+        setSelectedDim(d)
+        setCustomDim('')
+        setOpenDimCombo(false)
+    }
+
+    const updateShapeParam = (param: string, val: string) => {
+        const newParams = { ...shapeParams, [param]: val }
+        setShapeParams(newParams)
+
+        if (activeShape) {
+            const dimStr = (activeShape.params as string[]).map(p => newParams[p] || '?').join('x')
+            setCustomDim(dimStr)
+        }
+    }
+
+    const handleCalculateWeight = async () => {
+        if (!selectedType) return
+
+        if (standardMatch) {
+            setManualWeight(standardMatch.weightPerMeter.toFixed(2))
+            return
+        }
+
+        if (activeShape) {
+            const numericParams: Record<string, number> = {}
+            for (const [k, v] of Object.entries(shapeParams)) {
+                numericParams[k] = parseFloat(v)
+            }
+
+            const gradeObj = grades.find(g => g.id === gradeId)
+            if (gradeObj) {
+                (numericParams as any).gradeId = gradeObj.id
+            }
+
+            try {
+                const w = await calculateProfileWeight(selectedType, numericParams)
+                setManualWeight(w.toFixed(2))
+            } catch (e) {
+                toast.error('Weight calculation failed')
+            }
+        }
+    }
 
     const handleSubmit = async () => {
         if (!partNumber || !quantity) return
@@ -104,23 +201,37 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
 
         try {
             if (tab === 'profile') {
+                if (!selectedType || !(selectedDim || customDim)) {
+                    toast.warning('Please select a profile type and dimensions')
+                    setLoading(false)
+                    return
+                }
+
+                // Ensure profile exists
+                const finalDim = customDim || selectedDim
+                const weight = manualWeight ? parseFloat(manualWeight) : (standardMatch?.weightPerMeter || 0)
+
+                const profile = await ensureProfile({
+                    type: selectedType,
+                    dimensions: finalDim,
+                    weight: weight
+                })
+
                 const res = await createPart({
                     projectId,
                     partNumber,
                     description: description || undefined,
-                    profileId: profileSource === 'existing' ? profileId : undefined,
+                    profileId: profile.id,
                     gradeId: gradeId || undefined,
-                    profileType: profileSource === 'custom' ? profileType : undefined,
-                    profileDimensions: profileSource === 'custom' ? profileDimensions : undefined,
-                    profileStandard: profileSource === 'custom' ? profileStandard : undefined,
                     length: length ? parseFloat(length) : undefined,
                     quantity: parseInt(quantity),
                     requiresWelding,
                     isOutsourcedCut,
                     cutVendor: isOutsourcedCut ? cutVendor : undefined
                 })
+
                 if (!res.success) {
-                    alert(`Error: ${res.error}`)
+                    toast.error(`Error: ${res.error}`)
                     setLoading(false)
                     return
                 }
@@ -136,8 +247,9 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                     unitWeight: unitWeight ? parseFloat(unitWeight) : undefined,
                     supplier: supplier || undefined
                 })
+
                 if (!res.success) {
-                    alert(`Error: ${res.error}`)
+                    toast.error(`Error: ${res.error}`)
                     setLoading(false)
                     return
                 }
@@ -146,9 +258,10 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
             setOpen(false)
             resetForm()
             router.refresh()
+            toast.success('Part created successfully')
 
         } catch (e: any) {
-            alert("Failed to create part")
+            toast.error('Failed to create part')
         } finally {
             setLoading(false)
         }
@@ -159,11 +272,11 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
         setDescription('')
         setGradeId('')
         setQuantity('1')
-        setProfileSource('existing')
-        setProfileId('')
-        setProfileType('')
-        setProfileDimensions('')
-        setProfileStandard('')
+        setSelectedType('')
+        setSelectedDim('')
+        setCustomDim('')
+        setShapeParams({})
+        setManualWeight('')
         setLength('')
         setRequiresWelding(false)
         setIsOutsourcedCut(false)
@@ -173,13 +286,6 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
         setUnitWeight('')
         setSupplier('')
     }
-
-    // Group existing profiles by type
-    const profilesByType = profiles.reduce((acc, p) => {
-        if (!acc[p.type]) acc[p.type] = []
-        acc[p.type].push(p)
-        return acc
-    }, {} as Record<string, typeof profiles>)
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -192,7 +298,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                 <DialogHeader>
                     <DialogTitle>Add New Part</DialogTitle>
                     <DialogDescription>
-                        Add a profile part (in-house/outsourced cutting) or a plate part (outsourced laser/plasma).
+                        Add a profile part (standard or custom) or a plate part for outsourced cutting.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -210,15 +316,16 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                     <div className="grid gap-4 py-4 border-b mb-4">
                         <div className="grid grid-cols-3 gap-4">
                             <div className="grid gap-2">
-                                <Label>Part Number *</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Part Number *</Label>
                                 <Input
                                     value={partNumber}
                                     onChange={e => setPartNumber(e.target.value)}
                                     placeholder={tab === 'profile' ? 'B-101' : 'PL-001'}
+                                    className="font-mono uppercase"
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Quantity *</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Quantity *</Label>
                                 <Input
                                     type="number"
                                     min="1"
@@ -227,7 +334,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Grade</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Grade</Label>
                                 <Select value={gradeId} onValueChange={setGradeId}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select grade" />
@@ -241,7 +348,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                             </div>
                         </div>
                         <div className="grid gap-2">
-                            <Label>Description</Label>
+                            <Label className="text-xs uppercase text-muted-foreground">Description</Label>
                             <Input
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
@@ -252,92 +359,126 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
 
                     {/* Profile Part Tab */}
                     <TabsContent value="profile" className="space-y-4 mt-0">
-                        <div className="grid gap-2">
-                            <Label>Profile Source</Label>
-                            <Select value={profileSource} onValueChange={(v) => setProfileSource(v as 'existing' | 'custom')}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="existing">From Active Profiles</SelectItem>
-                                    <SelectItem value="custom">Custom Profile (New)</SelectItem>
-                                </SelectContent>
-                            </Select>
+                        {/* Type Selection */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Type</Label>
+                                <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" role="combobox" className="w-full justify-between">
+                                            {selectedType || <span className="text-muted-foreground">Select type...</span>}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[200px] p-0" align="start">
+                                        <Command>
+                                            <CommandInput placeholder="Search type..." />
+                                            <CommandList>
+                                                <CommandEmpty>No type found.</CommandEmpty>
+                                                <CommandGroup heading="Standard Profiles">
+                                                    {uniqueTypes.map(t => (
+                                                        <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
+                                                            <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
+                                                            {t}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                                {shapes.length > 0 && (
+                                                    <CommandGroup heading="Custom Shapes">
+                                                        {shapes.map(s => (
+                                                            <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
+                                                                {s.id}
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                )}
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+
+                            {/* Dimensions Selection */}
+                            <div className="grid gap-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Dimensions</Label>
+                                <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" role="combobox" className="w-full justify-between" disabled={!selectedType}>
+                                            {customDim || selectedDim || <span className="text-muted-foreground">Select / Custom...</span>}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[240px] p-0" align="start">
+                                        <Command>
+                                            <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search or type custom..." />
+                                            <CommandList>
+                                                <CommandEmpty>
+                                                    <Button
+                                                        onClick={() => {
+                                                            setSelectedDim(dimSearch)
+                                                            setCustomDim(dimSearch)
+                                                            setOpenDimCombo(false)
+                                                        }}
+                                                        variant="ghost"
+                                                        className="w-full h-8 text-xs"
+                                                    >
+                                                        Use Custom "{dimSearch}"
+                                                    </Button>
+                                                </CommandEmpty>
+
+                                                {activeDims.length > 0 && (
+                                                    <CommandGroup heading="Active Profiles">
+                                                        {activeDims.map(d => (
+                                                            <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                {d}
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                )}
+
+                                                {isStandardType && catalogDims.length > 0 && (
+                                                    <CommandGroup heading="Standard Catalog">
+                                                        {catalogDims.map(d => (
+                                                            <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                {d}
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                )}
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                         </div>
 
-                        {profileSource === 'existing' ? (
+                        {/* Shape Parameter Inputs (for custom shapes like RHS, SHS, CHS) */}
+                        {!isStandardType && activeShape && (
                             <div className="grid gap-2">
-                                <Label>Select Profile</Label>
-                                <Select value={profileId} onValueChange={setProfileId}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select profile" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {Object.entries(profilesByType).map(([type, profs]) => (
-                                            <div key={type}>
-                                                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground bg-muted">{type}</div>
-                                                {profs.map(p => (
-                                                    <SelectItem key={p.id} value={p.id}>
-                                                        {p.type} {p.dimensions} ({p.weightPerMeter.toFixed(2)} kg/m)
-                                                    </SelectItem>
-                                                ))}
-                                            </div>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                {inventoryStatus !== 'unknown' && (
-                                    <div className={`flex items-center gap-2 text-sm mt-1 ${inventoryStatus === 'available' ? 'text-green-600' :
-                                            inventoryStatus === 'insufficient' ? 'text-orange-600' : 'text-red-600'
-                                        }`}>
-                                        {inventoryStatus === 'available' ? (
-                                            <><Check className="h-4 w-4" /> {availableQty} in stock</>
-                                        ) : inventoryStatus === 'insufficient' ? (
-                                            <><AlertTriangle className="h-4 w-4" /> Only {availableQty} in stock (need {quantity})</>
-                                        ) : (
-                                            <><AlertTriangle className="h-4 w-4" /> Not in stock - will need RFQ</>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Profile Type *</Label>
-                                    <Select value={profileType} onValueChange={setProfileType}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {PROFILE_TYPES.map(pt => (
-                                                <SelectItem key={pt.type} value={pt.type}>
-                                                    {pt.type} - {pt.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Dimensions *</Label>
-                                    <Input
-                                        value={profileDimensions}
-                                        onChange={e => setProfileDimensions(e.target.value)}
-                                        placeholder={profileType === 'CHS' ? '139.7x6.3' : '100x50x4'}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Standard</Label>
-                                    <Input
-                                        value={profileStandard}
-                                        onChange={e => setProfileStandard(e.target.value)}
-                                        placeholder="EN 10219"
-                                    />
+                                <Label className="text-xs uppercase text-muted-foreground">Parameters</Label>
+                                <div className="flex gap-2">
+                                    {(activeShape.params as string[]).map(param => (
+                                        <div key={param} className="relative flex-1 min-w-[50px]">
+                                            <Input
+                                                placeholder={param}
+                                                className="text-center font-mono"
+                                                value={shapeParams[param] || ''}
+                                                onChange={e => updateShapeParam(param, e.target.value)}
+                                            />
+                                            <span className="absolute -bottom-4 left-0 w-full text-[9px] text-center text-muted-foreground uppercase">{param}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* Length & Weight */}
+                        <div className="grid grid-cols-3 gap-4 pt-2">
                             <div className="grid gap-2">
-                                <Label>Length (mm)</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
                                 <Input
                                     type="number"
                                     value={length}
@@ -346,11 +487,29 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Requires Welding</Label>
-                                <Select
-                                    value={requiresWelding ? 'yes' : 'no'}
-                                    onValueChange={v => setRequiresWelding(v === 'yes')}
-                                >
+                                <Label className="text-xs uppercase text-muted-foreground">Weight (kg/m)</Label>
+                                <div className="relative">
+                                    <Input
+                                        value={manualWeight}
+                                        onChange={e => setManualWeight(e.target.value)}
+                                        className={cn("pr-8", manualWeight ? "font-medium" : "")}
+                                        placeholder="Auto"
+                                    />
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute right-0 top-0 h-9 w-9"
+                                        onClick={handleCalculateWeight}
+                                        disabled={!selectedType}
+                                        title="Calculate weight"
+                                    >
+                                        <span className="text-sm">🧮</span>
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Requires Welding</Label>
+                                <Select value={requiresWelding ? 'yes' : 'no'} onValueChange={v => setRequiresWelding(v === 'yes')}>
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
@@ -362,6 +521,23 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                             </div>
                         </div>
 
+                        {/* Inventory Status */}
+                        {inventoryStatus !== 'unknown' && (
+                            <div className={cn("flex items-center gap-2 text-sm p-2 rounded",
+                                inventoryStatus === 'available' ? 'bg-green-50 text-green-700' :
+                                    inventoryStatus === 'insufficient' ? 'bg-orange-50 text-orange-700' : 'bg-red-50 text-red-700'
+                            )}>
+                                {inventoryStatus === 'available' ? (
+                                    <><Check className="h-4 w-4" /> {available} in stock</>
+                                ) : inventoryStatus === 'insufficient' ? (
+                                    <><AlertTriangle className="h-4 w-4" /> Only {available} in stock (need {needed})</>
+                                ) : (
+                                    <><AlertTriangle className="h-4 w-4" /> Not in stock - will need RFQ</>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Outsourced Cutting */}
                         <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
                             <div className="flex items-center gap-2">
                                 <input
@@ -377,7 +553,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                             </div>
                             {isOutsourcedCut && (
                                 <div className="grid gap-2">
-                                    <Label>Cutting Vendor</Label>
+                                    <Label className="text-xs uppercase text-muted-foreground">Cutting Vendor</Label>
                                     <Input
                                         value={cutVendor}
                                         onChange={e => setCutVendor(e.target.value)}
@@ -397,7 +573,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label>Material</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Material</Label>
                                 <Input
                                     value={material}
                                     onChange={e => setMaterial(e.target.value)}
@@ -405,7 +581,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Thickness (mm)</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Thickness (mm)</Label>
                                 <Input
                                     type="number"
                                     value={thickness}
@@ -417,7 +593,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label>Unit Weight (kg)</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Unit Weight (kg)</Label>
                                 <Input
                                     type="number"
                                     value={unitWeight}
@@ -426,7 +602,7 @@ export function CreatePartDialog({ projectId, profiles, grades, inventory = [] }
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label>Supplier</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Supplier</Label>
                                 <Input
                                     value={supplier}
                                     onChange={e => setSupplier(e.target.value)}
