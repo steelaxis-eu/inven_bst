@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button"
 import Link from 'next/link'
 
+export const dynamic = 'force-dynamic'
+
 export default function AuthErrorPage() {
     return (
         <div className="flex h-screen w-full flex-col items-center justify-center bg-background gap-4 p-4 text-center">
