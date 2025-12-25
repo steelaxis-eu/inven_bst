@@ -18,6 +18,8 @@ model Project {
   scheduledStart  DateTime?
   scheduledEnd    DateTime?
   status          String      @default("ACTIVE") // ACTIVE, COMPLETED, ON_HOLD, ARCHIVED
+  coatingType     String?              // HDG, PAINTED, POWDER_COATED, etc.
+  coatingSpec     String?              // Coating specification details (e.g., "RAL 7016")
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   createdBy       String?
@@ -200,12 +202,18 @@ model Part {
   projectId       String
   partNumber      String              // e.g., "P-001", "B-101"
   description     String?
-  profileId       String?             // Link to SteelProfile
+  profileId       String?             // Link to SteelProfile (if exists)
   gradeId         String?             // Link to MaterialGrade
+  // Custom profile fields (when profileId is null or custom dimensions)
+  profileType     String?             // e.g., "RHS", "CHS", "SHS", "HEA", etc.
+  profileDimensions String?           // e.g., "100x50x4", "139.7x6.3"
+  profileStandard String?             // e.g., "EN 10219", "EN 10210"
   length          Float?              // mm
   quantity        Int                 // Total pieces needed
   unitWeight      Float    @default(0)  // kg per piece (calculated)
   requiresWelding Boolean  @default(false)
+  isOutsourcedCut Boolean  @default(false) // Laser/plasma cut by external vendor
+  cutVendor       String?             // Vendor name for outsourced cutting
   drawingRef      String?             // Drawing number/link
   notes           String?
   createdAt       DateTime @default(now())

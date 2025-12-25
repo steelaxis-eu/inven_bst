@@ -43,6 +43,32 @@ export async function archiveProject(id: string) {
     }
 }
 
+export interface UpdateProjectInput {
+    name?: string
+    client?: string
+    description?: string
+    priority?: string
+    coatingType?: string
+    coatingSpec?: string
+    scheduledStart?: Date | null
+    scheduledEnd?: Date | null
+}
+
+export async function updateProject(id: string, data: UpdateProjectInput) {
+    try {
+        await prisma.project.update({
+            where: { id },
+            data: {
+                ...data,
+                modifiedBy: 'System'
+            }
+        })
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
 export async function getProject(id: string) {
     console.log(`[getProject] Fetching project with ID: "${id}"`) // Server log for debug
 

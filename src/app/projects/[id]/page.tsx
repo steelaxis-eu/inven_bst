@@ -15,6 +15,7 @@ import { DownloadCertificatesButton } from "@/components/download-certificates-b
 
 import { PartsTable } from "@/components/project/parts-table"
 import { CreatePartDialog } from "@/components/project/create-part-dialog"
+import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
 import { WorkOrdersList, WorkOrderSummary } from "@/components/project/workorders-list"
 import { QualityChecksList, QualitySummary } from "@/components/project/quality-checks-list"
@@ -31,7 +32,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     const cleanId = decodeURIComponent(id).trim()
 
     // Fetch all project data in parallel
-    const [project, parts, assemblies, workOrders, qualityChecks, plateParts, deliveries, profiles, grades] =
+    const [project, parts, assemblies, workOrders, qualityChecks, plateParts, deliveries, profiles, grades, inventoryStock] =
         await Promise.all([
             getProject(cleanId),
             getProjectParts(cleanId),
@@ -41,7 +42,11 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
             getProjectPlateParts(cleanId),
             getProjectDeliverySchedules(cleanId),
             prisma.steelProfile.findMany({ orderBy: { type: 'asc' } }),
-            prisma.materialGrade.findMany({ orderBy: { name: 'asc' } })
+            prisma.materialGrade.findMany({ orderBy: { name: 'asc' } }),
+            prisma.inventory.groupBy({
+                by: ['profileId'],
+                _sum: { quantityAtHand: true }
+            })
         ])
 
     if (!project) {
@@ -53,9 +58,16 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     }
 
     // Calculate overall progress
-    const totalPieces = parts.reduce((sum, p) => sum + p.pieces.length, 0)
-    const readyPieces = parts.reduce((sum, p) => sum + p.pieces.filter(pc => pc.status === 'READY').length, 0)
+    type PartData = { pieces: { status: string }[] }
+    const totalPieces = parts.reduce((sum: number, p: PartData) => sum + p.pieces.length, 0)
+    const readyPieces = parts.reduce((sum: number, p: PartData) => sum + p.pieces.filter((pc: { status: string }) => pc.status === 'READY').length, 0)
     const overallProgress = totalPieces > 0 ? Math.round((readyPieces / totalPieces) * 100) : 0
+
+    // Map inventory stock for dialog
+    const inventoryMap = inventoryStock.map((i: { profileId: string; _sum: { quantityAtHand: number | null } }) => ({
+        profileId: i.profileId,
+        quantity: i._sum.quantityAtHand || 0
+    }))
 
     // Stats from existing project data
     const {
@@ -80,6 +92,12 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     {project.client && (
                         <p className="text-sm text-muted-foreground">Client: {project.client}</p>
                     )}
+                    {project.coatingType && (
+                        <p className="text-sm text-muted-foreground">
+                            Coating: <span className="font-medium">{project.coatingType}</span>
+                            {project.coatingSpec && ` - ${project.coatingSpec}`}
+                        </p>
+                    )}
                 </div>
                 <div className="flex gap-4 items-center">
                     {missingCertCount > 0 ? (
@@ -90,6 +108,15 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     ) : (
                         <DownloadCertificatesButton projectId={project.id} projectNumber={project.projectNumber} />
                     )}
+                    <EditProjectDialog project={{
+                        id: project.id,
+                        name: project.name,
+                        client: project.client,
+                        description: project.description,
+                        priority: project.priority,
+                        coatingType: project.coatingType,
+                        coatingSpec: project.coatingSpec
+                    }} />
                 </div>
             </div>
 
@@ -127,7 +154,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     <CardContent>
                         <div className="text-2xl font-bold">{assemblies.length}</div>
                         <p className="text-xs text-muted-foreground">
-                            {assemblies.filter(a => a.status === 'SHIPPED').length} shipped
+                            {(assemblies as { status: string }[]).filter((a: { status: string }) => a.status === 'SHIPPED').length} shipped
                         </p>
                     </CardContent>
                 </Card>
@@ -139,10 +166,10 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {workOrders.filter(w => w.status === 'IN_PROGRESS').length}
+                            {(workOrders as { status: string }[]).filter((w: { status: string }) => w.status === 'IN_PROGRESS').length}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            {workOrders.filter(w => w.status === 'PENDING').length} pending
+                            {(workOrders as { status: string }[]).filter((w: { status: string }) => w.status === 'PENDING').length} pending
                         </p>
                     </CardContent>
                 </Card>
@@ -155,7 +182,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     <CardContent>
                         <div className="text-2xl font-bold">{plateParts.length}</div>
                         <p className="text-xs text-muted-foreground">
-                            {plateParts.filter(p => p.status === 'RECEIVED' || p.status === 'QC_PASSED').length} received
+                            {(plateParts as { status: string }[]).filter((p: { status: string }) => p.status === 'RECEIVED' || p.status === 'QC_PASSED').length} received
                         </p>
                     </CardContent>
                 </Card>
@@ -167,10 +194,10 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {deliveries.filter(d => d.status === 'PENDING').length}
+                            {(deliveries as { status: string }[]).filter((d: { status: string }) => d.status === 'PENDING').length}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            {deliveries.filter(d => d.status === 'DELIVERED').length} completed
+                            {(deliveries as { status: string }[]).filter((d: { status: string }) => d.status === 'DELIVERED').length} completed
                         </p>
                     </CardContent>
                 </Card>
@@ -208,8 +235,9 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         <h2 className="text-xl font-semibold">Bill of Materials</h2>
                         <CreatePartDialog
                             projectId={cleanId}
-                            profiles={profiles.map(p => ({ id: p.id, type: p.type, dimensions: p.dimensions }))}
-                            grades={grades.map(g => ({ id: g.id, name: g.name }))}
+                            profiles={profiles.map((p: { id: string; type: string; dimensions: string; weightPerMeter: number }) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            grades={grades.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))}
+                            inventory={inventoryMap}
                         />
                     </div>
                     <PartsTable parts={parts as any} />

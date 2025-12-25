@@ -100,6 +100,8 @@ export interface Project {
     scheduledStart: Date | null
     scheduledEnd: Date | null
     status: ProjectStatus
+    coatingType: string | null
+    coatingSpec: string | null
     createdAt: Date
     updatedAt: Date
     createdBy: string | null
@@ -119,10 +121,15 @@ export interface Part {
     description: string | null
     profileId: string | null
     gradeId: string | null
+    profileType: string | null          // e.g., "RHS", "CHS", "SHS"
+    profileDimensions: string | null    // e.g., "100x50x4"
+    profileStandard: string | null      // e.g., "EN 10219"
     length: number | null
     quantity: number
     unitWeight: number
     requiresWelding: boolean
+    isOutsourcedCut: boolean
+    cutVendor: string | null
     drawingRef: string | null
     notes: string | null
     createdAt: Date

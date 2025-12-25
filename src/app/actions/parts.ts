@@ -14,9 +14,15 @@ export interface CreatePartInput {
     description?: string
     profileId?: string
     gradeId?: string
+    // Custom profile fields (when not selecting from existing profiles)
+    profileType?: string          // e.g., "RHS", "CHS", "SHS", "HEA"
+    profileDimensions?: string    // e.g., "100x50x4"
+    profileStandard?: string      // e.g., "EN 10219"
     length?: number
     quantity: number
     requiresWelding?: boolean
+    isOutsourcedCut?: boolean
+    cutVendor?: string
     drawingRef?: string
     notes?: string
 }
