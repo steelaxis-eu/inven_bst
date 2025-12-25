@@ -9,18 +9,30 @@ datasource db {
 }
 
 model Project {
-  id            String      @id @default(uuid())
-  projectNumber String      @unique
-  name          String
-  status        String      @default("ACTIVE") // ACTIVE, ARCHIVED
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  createdBy     String?
-  modifiedBy    String?
+  id              String      @id @default(uuid())
+  projectNumber   String      @unique
+  name            String
+  client          String?              // Customer name
+  description     String?
+  priority        String      @default("MEDIUM")  // LOW, MEDIUM, HIGH, CRITICAL
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  status          String      @default("ACTIVE") // ACTIVE, COMPLETED, ON_HOLD, ARCHIVED
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  createdBy       String?
+  modifiedBy      String?
 
-  usages        Usage[]
-  usageLines    UsageLine[]
-  remnants      Remnant[] // Scrap or Remnants produced by this project
+  usages            Usage[]
+  usageLines        UsageLine[]
+  remnants          Remnant[]           // Scrap or Remnants produced by this project
+  parts             Part[]
+  assemblies        Assembly[]
+  deliverySchedules DeliverySchedule[]
+  qualityChecks     QualityCheck[]
+  workOrders        WorkOrder[]
+  documents         ProjectDocument[]
+  plateParts        PlatePart[]
 }
 
 
@@ -38,6 +50,7 @@ model SteelProfile {
   
   inventory  Inventory[]
   remnants   Remnant[]
+  parts      Part[]
 
   @@unique([type, dimensions])
 }
@@ -66,8 +79,10 @@ model MaterialGrade {
   density    Float  @default(7.85) // kg/dm3
   scrapPrice Float  @default(0)    // €/kg
   
-  inventory Inventory[]
-  remnants  Remnant[]
+  inventory  Inventory[]
+  remnants   Remnant[]
+  parts      Part[]
+  plateParts PlatePart[]
 }
 
 model Supplier {
@@ -106,6 +121,7 @@ model Inventory {
   grade             MaterialGrade @relation(fields: [gradeId], references: [id])
   supplier          Supplier?    @relation(fields: [supplierId], references: [id])
   usageLines        UsageLine[]
+  partPieces        PartPiece[]
 
   @@index([status])
   @@index([profileId])
@@ -132,6 +148,7 @@ model Remnant {
   grade       MaterialGrade @relation(fields: [gradeId], references: [id])
   project     Project?     @relation(fields: [projectId], references: [id])
   usageLines  UsageLine[]
+  partPieces  PartPiece[]
 
   @@index([status])
   @@index([rootLotId])
@@ -171,4 +188,340 @@ model UsageLine {
   @@index([usageId])
   @@index([inventoryId])
   @@index([remnantId])
+}
+
+// ============================================================================
+// PROJECT MANAGEMENT MODULE
+// ============================================================================
+
+// Part: Master part definition (project-scoped)
+model Part {
+  id              String   @id @default(uuid())
+  projectId       String
+  partNumber      String              // e.g., "P-001", "B-101"
+  description     String?
+  profileId       String?             // Link to SteelProfile
+  gradeId         String?             // Link to MaterialGrade
+  length          Float?              // mm
+  quantity        Int                 // Total pieces needed
+  unitWeight      Float    @default(0)  // kg per piece (calculated)
+  requiresWelding Boolean  @default(false)
+  drawingRef      String?             // Drawing number/link
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  project         Project        @relation(fields: [projectId], references: [id])
+  profile         SteelProfile?  @relation(fields: [profileId], references: [id])
+  grade           MaterialGrade? @relation(fields: [gradeId], references: [id])
+  pieces          PartPiece[]
+  assemblyParts   AssemblyPart[]
+
+  @@unique([projectId, partNumber])
+  @@index([projectId])
+  @@index([profileId])
+  @@index([gradeId])
+}
+
+// PartPiece: Individual piece tracking (piece 1 of 6, piece 2 of 6, etc.)
+model PartPiece {
+  id              String    @id @default(uuid())
+  partId          String
+  pieceNumber     Int                 // 1, 2, 3... up to Part.quantity
+  status          String    @default("PENDING")
+                  // PENDING → CUT → FABRICATED → WELDED → PAINTED → READY
+  inventoryId     String?             // Material source (inventory lot)
+  remnantId       String?             // Or material from remnant
+  cutAt           DateTime?
+  fabricatedAt    DateTime?
+  weldedAt        DateTime?
+  paintedAt       DateTime?
+  completedAt     DateTime?
+  completedBy     String?
+  notes           String?
+
+  // Relations
+  part            Part              @relation(fields: [partId], references: [id], onDelete: Cascade)
+  inventory       Inventory?        @relation(fields: [inventoryId], references: [id])
+  remnant         Remnant?          @relation(fields: [remnantId], references: [id])
+  documents       ProjectDocument[]
+  workOrderItems  WorkOrderItem[]
+
+  @@unique([partId, pieceNumber])
+  @@index([partId])
+  @@index([status])
+  @@index([inventoryId])
+  @@index([remnantId])
+}
+
+// Assembly: Grouping of parts (supports nesting via parentId)
+model Assembly {
+  id              String    @id @default(uuid())
+  projectId       String
+  parentId        String?             // If sub-assembly, points to parent
+  assemblyNumber  String              // e.g., "A-001"
+  name            String              // e.g., "Main Frame Section 1"
+  description     String?
+  sequence        Int       @default(0)  // Fabrication order
+  status          String    @default("NOT_STARTED")
+                  // NOT_STARTED → IN_PROGRESS → ASSEMBLED → QC_PASSED → SHIPPED
+  scheduledDate   DateTime?           // When customer needs it
+  shippedAt       DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  project           Project              @relation(fields: [projectId], references: [id])
+  parent            Assembly?            @relation("SubAssemblies", fields: [parentId], references: [id])
+  children          Assembly[]           @relation("SubAssemblies")
+  assemblyParts     AssemblyPart[]
+  deliveryItems     DeliveryItem[]
+  qualityChecks     QualityCheck[]
+  documents         ProjectDocument[]
+  workOrderItems    WorkOrderItem[]
+  plateAssemblyParts PlateAssemblyPart[]
+
+  @@unique([projectId, assemblyNumber])
+  @@index([projectId])
+  @@index([parentId])
+  @@index([status])
+}
+
+// AssemblyPart: Junction table (which parts belong to which assembly)
+model AssemblyPart {
+  id                  String   @id @default(uuid())
+  assemblyId          String
+  partId              String
+  quantityInAssembly  Int      @default(1)  // How many of this part in this assembly
+  notes               String?
+
+  // Relations
+  assembly            Assembly @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  part                Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@unique([assemblyId, partId])
+  @@index([assemblyId])
+  @@index([partId])
+}
+
+// DeliverySchedule: Customer shipping requirements
+model DeliverySchedule {
+  id            String   @id @default(uuid())
+  projectId     String
+  name          String              // e.g., "Phase 1 Delivery", "Week 3 Shipment"
+  scheduledDate DateTime
+  notes         String?
+  status        String   @default("PENDING")  // PENDING, SHIPPED, DELIVERED
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  project       Project        @relation(fields: [projectId], references: [id])
+  items         DeliveryItem[]
+
+  @@index([projectId])
+  @@index([scheduledDate])
+  @@index([status])
+}
+
+// DeliveryItem: Which assemblies go in each delivery
+model DeliveryItem {
+  id                 String   @id @default(uuid())
+  deliveryScheduleId String
+  assemblyId         String
+
+  // Relations
+  deliverySchedule   DeliverySchedule @relation(fields: [deliveryScheduleId], references: [id], onDelete: Cascade)
+  assembly           Assembly         @relation(fields: [assemblyId], references: [id])
+
+  @@unique([deliveryScheduleId, assemblyId])
+  @@index([deliveryScheduleId])
+  @@index([assemblyId])
+}
+
+// ============================================================================
+// QUALITY MANAGEMENT
+// ============================================================================
+
+// QualityCheck: Inspection per assembly or process stage
+model QualityCheck {
+  id            String    @id @default(uuid())
+  projectId     String
+  assemblyId    String?             // Optional - can be project-level or assembly-level
+  processStage  String              // FABRICATION, WELDING, PAINTING, FINAL, etc.
+  type          String              // VISUAL, DIMENSIONAL, NDT, COATING
+  status        String    @default("PENDING")  // PENDING → PASSED → FAILED → WAIVED
+  inspectedBy   String?
+  inspectedAt   DateTime?
+  dueDate       DateTime?
+  findings      String?             // Notes/findings
+  ncr           String?             // NCR reference if failed
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id])
+  assembly      Assembly? @relation(fields: [assemblyId], references: [id])
+  documents     ProjectDocument[]   // QC evidence photos
+
+  @@index([projectId])
+  @@index([assemblyId])
+  @@index([status])
+  @@index([processStage])
+}
+
+// ============================================================================
+// WORK ORDERS
+// ============================================================================
+
+// WorkOrder: Groups pieces/assemblies for a work session
+model WorkOrder {
+  id            String    @id @default(uuid())
+  projectId     String
+  workOrderNumber String             // e.g., "WO-2024-001"
+  title         String
+  description   String?
+  type          String              // CUTTING, FABRICATION, WELDING, PAINTING, ASSEMBLY
+  priority      String    @default("MEDIUM")  // LOW, MEDIUM, HIGH, URGENT
+  status        String    @default("PENDING")  // PENDING → IN_PROGRESS → COMPLETED → CANCELLED
+  assignedTo    String?             // Worker/team
+  scheduledDate DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  project       Project         @relation(fields: [projectId], references: [id])
+  items         WorkOrderItem[]
+
+  @@unique([projectId, workOrderNumber])
+  @@index([projectId])
+  @@index([status])
+  @@index([type])
+  @@index([scheduledDate])
+}
+
+// WorkOrderItem: Links pieces or assemblies to a work order
+model WorkOrderItem {
+  id            String   @id @default(uuid())
+  workOrderId   String
+  pieceId       String?             // Link to PartPiece
+  assemblyId    String?             // Or link to Assembly
+  platePartId   String?             // Or link to PlatePart
+  status        String   @default("PENDING")  // PENDING → IN_PROGRESS → COMPLETED
+  completedAt   DateTime?
+  notes         String?
+
+  // Relations
+  workOrder     WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  piece         PartPiece? @relation(fields: [pieceId], references: [id])
+  assembly      Assembly?  @relation(fields: [assemblyId], references: [id])
+  platePart     PlatePart? @relation(fields: [platePartId], references: [id])
+
+  @@index([workOrderId])
+  @@index([pieceId])
+  @@index([assemblyId])
+  @@index([platePartId])
+}
+
+// ============================================================================
+// DOCUMENTS & PHOTOS
+// ============================================================================
+
+// ProjectDocument: Files attached to project, assembly, piece, or QC
+model ProjectDocument {
+  id              String   @id @default(uuid())
+  projectId       String
+  assemblyId      String?           // Optional link
+  pieceId         String?           // Optional link
+  platePartId     String?           // Optional link
+  qualityCheckId  String?           // Optional link for QC evidence
+  type            String            // DRAWING, PHOTO, CERTIFICATE, SPEC, NCR, OTHER
+  filename        String            // Original filename
+  storagePath     String            // Blob path: projects/{projectId}/documents/{filename}
+  mimeType        String?
+  fileSize        Int?              // bytes
+  description     String?
+  uploadedBy      String?
+  uploadedAt      DateTime @default(now())
+
+  // Relations
+  project         Project       @relation(fields: [projectId], references: [id])
+  assembly        Assembly?     @relation(fields: [assemblyId], references: [id])
+  piece           PartPiece?    @relation(fields: [pieceId], references: [id])
+  platePart       PlatePart?    @relation(fields: [platePartId], references: [id])
+  qualityCheck    QualityCheck? @relation(fields: [qualityCheckId], references: [id])
+
+  @@index([projectId])
+  @@index([assemblyId])
+  @@index([pieceId])
+  @@index([platePartId])
+  @@index([qualityCheckId])
+  @@index([type])
+}
+
+// ============================================================================
+// PLATE PARTS (Outsourced Laser/Plasma Cut)
+// ============================================================================
+
+// PlatePart: Parts cut from plate (outsourced laser/plasma)
+model PlatePart {
+  id              String    @id @default(uuid())
+  projectId       String
+  partNumber      String              // e.g., "PL-001"
+  description     String?
+  material        String?             // e.g., "S355 10mm plate"
+  gradeId         String?             // Link to MaterialGrade
+  thickness       Float?              // mm
+  quantity        Int                 // Total pieces needed
+  unitWeight      Float     @default(0)  // kg per piece
+  dxfFilename     String?             // Original DXF filename
+  dxfStoragePath  String?             // Blob path: projects/{projectId}/Plates/{filename}
+  nestingSheet    String?             // Nesting sheet reference
+  supplier        String?             // Outsource vendor name
+  poNumber        String?             // Purchase order number
+  status          String    @default("PENDING")
+                  // PENDING → ORDERED → IN_PRODUCTION → RECEIVED → QC_PASSED
+  orderedAt       DateTime?
+  expectedDate    DateTime?
+  receivedAt      DateTime?
+  receivedQty     Int       @default(0)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  project         Project        @relation(fields: [projectId], references: [id])
+  grade           MaterialGrade? @relation(fields: [gradeId], references: [id])
+  assemblyParts   PlateAssemblyPart[]
+  documents       ProjectDocument[]
+  workOrderItems  WorkOrderItem[]
+
+  @@unique([projectId, partNumber])
+  @@index([projectId])
+  @@index([status])
+  @@index([supplier])
+}
+
+// PlateAssemblyPart: Junction for plate parts in assemblies
+model PlateAssemblyPart {
+  id                  String   @id @default(uuid())
+  assemblyId          String
+  platePartId         String
+  quantityInAssembly  Int      @default(1)
+  notes               String?
+
+  // Relations
+  assembly            Assembly  @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  platePart           PlatePart @relation(fields: [platePartId], references: [id], onDelete: Cascade)
+
+  @@unique([assemblyId, platePartId])
+  @@index([assemblyId])
+  @@index([platePartId])
 }

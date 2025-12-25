@@ -87,16 +87,262 @@ export interface RemnantWithRelations extends Remnant {
 // Project Types
 // ============================================================================
 
+export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'ARCHIVED'
+export type ProjectPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+
 export interface Project {
     id: string
     projectNumber: string
     name: string
-    status: 'ACTIVE' | 'ARCHIVED' | 'COMPLETED'
+    client: string | null
+    description: string | null
+    priority: ProjectPriority
+    scheduledStart: Date | null
+    scheduledEnd: Date | null
+    status: ProjectStatus
     createdAt: Date
     updatedAt: Date
     createdBy: string | null
     modifiedBy: string | null
 }
+
+// ============================================================================
+// Part & Piece Types (BOM)
+// ============================================================================
+
+export type PartPieceStatus = 'PENDING' | 'CUT' | 'FABRICATED' | 'WELDED' | 'PAINTED' | 'READY'
+
+export interface Part {
+    id: string
+    projectId: string
+    partNumber: string
+    description: string | null
+    profileId: string | null
+    gradeId: string | null
+    length: number | null
+    quantity: number
+    unitWeight: number
+    requiresWelding: boolean
+    drawingRef: string | null
+    notes: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface PartWithRelations extends Part {
+    profile: SteelProfile | null
+    grade: MaterialGrade | null
+    pieces: PartPiece[]
+}
+
+export interface PartPiece {
+    id: string
+    partId: string
+    pieceNumber: number
+    status: PartPieceStatus
+    inventoryId: string | null
+    remnantId: string | null
+    cutAt: Date | null
+    fabricatedAt: Date | null
+    weldedAt: Date | null
+    paintedAt: Date | null
+    completedAt: Date | null
+    completedBy: string | null
+    notes: string | null
+}
+
+// ============================================================================
+// Assembly Types
+// ============================================================================
+
+export type AssemblyStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'ASSEMBLED' | 'QC_PASSED' | 'SHIPPED'
+
+export interface Assembly {
+    id: string
+    projectId: string
+    parentId: string | null
+    assemblyNumber: string
+    name: string
+    description: string | null
+    sequence: number
+    status: AssemblyStatus
+    scheduledDate: Date | null
+    shippedAt: Date | null
+    notes: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface AssemblyWithRelations extends Assembly {
+    parent: Assembly | null
+    children: Assembly[]
+    assemblyParts: AssemblyPartWithRelations[]
+}
+
+export interface AssemblyPart {
+    id: string
+    assemblyId: string
+    partId: string
+    quantityInAssembly: number
+    notes: string | null
+}
+
+export interface AssemblyPartWithRelations extends AssemblyPart {
+    part: PartWithRelations
+}
+
+// ============================================================================
+// Delivery Schedule Types
+// ============================================================================
+
+export type DeliveryStatus = 'PENDING' | 'SHIPPED' | 'DELIVERED'
+
+export interface DeliverySchedule {
+    id: string
+    projectId: string
+    name: string
+    scheduledDate: Date
+    notes: string | null
+    status: DeliveryStatus
+    shippedAt: Date | null
+    deliveredAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface DeliveryItem {
+    id: string
+    deliveryScheduleId: string
+    assemblyId: string
+}
+
+export interface DeliveryScheduleWithRelations extends DeliverySchedule {
+    items: (DeliveryItem & { assembly: Assembly })[]
+}
+
+// ============================================================================
+// Quality Check Types
+// ============================================================================
+
+export type QualityCheckStatus = 'PENDING' | 'PASSED' | 'FAILED' | 'WAIVED'
+export type ProcessStage = 'FABRICATION' | 'WELDING' | 'PAINTING' | 'FINAL'
+export type QualityCheckType = 'VISUAL' | 'DIMENSIONAL' | 'NDT' | 'COATING'
+
+export interface QualityCheck {
+    id: string
+    projectId: string
+    assemblyId: string | null
+    processStage: ProcessStage
+    type: QualityCheckType
+    status: QualityCheckStatus
+    inspectedBy: string | null
+    inspectedAt: Date | null
+    dueDate: Date | null
+    findings: string | null
+    ncr: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+// ============================================================================
+// Work Order Types
+// ============================================================================
+
+export type WorkOrderType = 'CUTTING' | 'FABRICATION' | 'WELDING' | 'PAINTING' | 'ASSEMBLY'
+export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+export type WorkOrderPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+
+export interface WorkOrder {
+    id: string
+    projectId: string
+    workOrderNumber: string
+    title: string
+    description: string | null
+    type: WorkOrderType
+    priority: WorkOrderPriority
+    status: WorkOrderStatus
+    assignedTo: string | null
+    scheduledDate: Date | null
+    startedAt: Date | null
+    completedAt: Date | null
+    notes: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface WorkOrderItem {
+    id: string
+    workOrderId: string
+    pieceId: string | null
+    assemblyId: string | null
+    platePartId: string | null
+    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+    completedAt: Date | null
+    notes: string | null
+}
+
+// ============================================================================
+// Document Types
+// ============================================================================
+
+export type DocumentType = 'DRAWING' | 'PHOTO' | 'CERTIFICATE' | 'SPEC' | 'NCR' | 'OTHER'
+
+export interface ProjectDocument {
+    id: string
+    projectId: string
+    assemblyId: string | null
+    pieceId: string | null
+    platePartId: string | null
+    qualityCheckId: string | null
+    type: DocumentType
+    filename: string
+    storagePath: string
+    mimeType: string | null
+    fileSize: number | null
+    description: string | null
+    uploadedBy: string | null
+    uploadedAt: Date
+}
+
+// ============================================================================
+// Plate Part Types (Outsourced Laser/Plasma)
+// ============================================================================
+
+export type PlatePartStatus = 'PENDING' | 'ORDERED' | 'IN_PRODUCTION' | 'RECEIVED' | 'QC_PASSED'
+
+export interface PlatePart {
+    id: string
+    projectId: string
+    partNumber: string
+    description: string | null
+    material: string | null
+    gradeId: string | null
+    thickness: number | null
+    quantity: number
+    unitWeight: number
+    dxfFilename: string | null
+    dxfStoragePath: string | null  // projects/{projectId}/Plates/{filename}
+    nestingSheet: string | null
+    supplier: string | null
+    poNumber: string | null
+    status: PlatePartStatus
+    orderedAt: Date | null
+    expectedDate: Date | null
+    receivedAt: Date | null
+    receivedQty: number
+    notes: string | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+export interface PlateAssemblyPart {
+    id: string
+    assemblyId: string
+    platePartId: string
+    quantityInAssembly: number
+    notes: string | null
+}
+
 
 // ============================================================================
 // Usage Types
