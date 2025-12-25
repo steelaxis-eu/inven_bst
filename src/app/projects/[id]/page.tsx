@@ -256,7 +256,10 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                             projectId={cleanId}
                             existingParts={(parts as { id: string; partNumber: string; description: string | null; profile?: { type: string; dimensions: string } | null }[])}
                             existingAssemblies={(assemblies as { id: string; assemblyNumber: string; name: string }[])}
+                            profiles={profiles.map((p: { id: string; type: string; dimensions: string; weightPerMeter: number }) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            standardProfiles={standardProfiles.map((p: { type: string; dimensions: string; weightPerMeter: number }) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
                             grades={grades.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))}
+                            shapes={shapes.map((s: { id: string; params: unknown; formula: string | null }) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
                         />
                     </div>
                     <AssemblySummary assemblies={assemblies as any} />

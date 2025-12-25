@@ -489,6 +489,7 @@ model PlatePart {
   thickness       Float?              // mm
   quantity        Int                 // Total pieces needed
   unitWeight      Float     @default(0)  // kg per piece
+  isOutsourced    Boolean   @default(true)  // Default plates are outsourced
   dxfFilename     String?             // Original DXF filename
   dxfStoragePath  String?             // Blob path: projects/{projectId}/Plates/{filename}
   nestingSheet    String?             // Nesting sheet reference

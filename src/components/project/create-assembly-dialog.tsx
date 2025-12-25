@@ -1,24 +1,30 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { useRouter } from 'next/navigation'
 import { createAssembly, addPartToAssembly } from '@/app/actions/assemblies'
 import { createPart } from '@/app/actions/parts'
+import { createPlatePart } from '@/app/actions/plateparts'
 import { ensureProfile } from '@/app/actions/inventory'
 import { toast } from 'sonner'
-import { Plus, Layers, Trash2, Package } from 'lucide-react'
+import { Plus, Layers, Trash2, Package, Scissors, ChevronsUpDown, Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface PartItem {
-    id?: string           // Existing part ID (if selected)
+    id?: string
     partNumber: string
     description: string
+    type: 'profile' | 'plate'
     profileType: string
     profileDimensions: string
     gradeId: string
@@ -26,21 +32,34 @@ interface PartItem {
     length: number
     quantity: number
     quantityInAssembly: number
-    isNew: boolean        // True if creating new part
+    isOutsourcedCut: boolean
+    cutVendor: string
+    // Plate specific
+    material: string
+    thickness: number
+    unitWeight: number
+    supplier: string
+    isNew: boolean
 }
 
 interface CreateAssemblyDialogProps {
     projectId: string
     existingParts: { id: string; partNumber: string; description: string | null; profile?: { type: string; dimensions: string } | null }[]
     existingAssemblies: { id: string; assemblyNumber: string; name: string }[]
+    profiles: { id: string; type: string; dimensions: string; weightPerMeter: number }[]
+    standardProfiles: { type: string; dimensions: string; weightPerMeter: number }[]
     grades: { id: string; name: string }[]
+    shapes: { id: string; params: string[]; formula: string | null }[]
 }
 
 export function CreateAssemblyDialog({
     projectId,
     existingParts,
     existingAssemblies,
-    grades
+    profiles,
+    standardProfiles,
+    grades,
+    shapes
 }: CreateAssemblyDialogProps) {
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -52,24 +71,74 @@ export function CreateAssemblyDialog({
     const [description, setDescription] = useState('')
     const [parentId, setParentId] = useState('')
     const [scheduledDate, setScheduledDate] = useState('')
-    const [notes, setNotes] = useState('')
 
-    // Parts to add to assembly
+    // Parts to add
     const [partItems, setPartItems] = useState<PartItem[]>([])
 
-    // Part selection/creation mode
+    // Part creation mode
     const [partMode, setPartMode] = useState<'existing' | 'new'>('existing')
     const [selectedPartId, setSelectedPartId] = useState('')
     const [qtyInAssembly, setQtyInAssembly] = useState('1')
 
-    // New part fields
+    // New part type (profile or plate)
+    const [newPartType, setNewPartType] = useState<'profile' | 'plate'>('profile')
+
+    // New part common fields
     const [newPartNumber, setNewPartNumber] = useState('')
     const [newDescription, setNewDescription] = useState('')
-    const [newProfileType, setNewProfileType] = useState('')
-    const [newProfileDim, setNewProfileDim] = useState('')
     const [newGradeId, setNewGradeId] = useState('')
-    const [newLength, setNewLength] = useState('')
     const [newQuantity, setNewQuantity] = useState('1')
+
+    // Profile fields
+    const [selectedType, setSelectedType] = useState('')
+    const [selectedDim, setSelectedDim] = useState('')
+    const [customDim, setCustomDim] = useState('')
+    const [newLength, setNewLength] = useState('')
+    const [isOutsourcedCut, setIsOutsourcedCut] = useState(false)
+    const [cutVendor, setCutVendor] = useState('')
+
+    // Plate fields
+    const [plateMaterial, setPlateMaterial] = useState('')
+    const [plateThickness, setPlateThickness] = useState('')
+    const [plateWeight, setPlateWeight] = useState('')
+    const [plateSupplier, setPlateSupplier] = useState('')
+    const [isPlateOutsourced, setIsPlateOutsourced] = useState(true) // Default outsourced
+
+    // Combobox states
+    const [openTypeCombo, setOpenTypeCombo] = useState(false)
+    const [openDimCombo, setOpenDimCombo] = useState(false)
+    const [dimSearch, setDimSearch] = useState('')
+
+    // Derived values
+    const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
+    const isStandardType = uniqueTypes.includes(selectedType)
+
+    const activeDims = profiles
+        .filter(p => p.type === selectedType)
+        .map(p => p.dimensions)
+        .sort()
+
+    const catalogDims = standardProfiles
+        .filter(p => p.type === selectedType)
+        .map(p => p.dimensions)
+        .filter(d => !activeDims.includes(d))
+        .sort((a, b) => {
+            const getVal = (s: string) => parseFloat(s.split(/[xX]/)[0]) || 0
+            return getVal(a) - getVal(b)
+        })
+
+    const handleTypeSelect = (t: string) => {
+        setSelectedType(t === selectedType ? '' : t)
+        setSelectedDim('')
+        setCustomDim('')
+        setOpenTypeCombo(false)
+    }
+
+    const handleDimSelect = (d: string) => {
+        setSelectedDim(d)
+        setCustomDim('')
+        setOpenDimCombo(false)
+    }
 
     const handleAddExistingPart = () => {
         if (!selectedPartId || !qtyInAssembly) return
@@ -77,9 +146,8 @@ export function CreateAssemblyDialog({
         const part = existingParts.find(p => p.id === selectedPartId)
         if (!part) return
 
-        // Check if already added
         if (partItems.some(p => p.id === selectedPartId)) {
-            toast.warning('Part already added to assembly')
+            toast.warning('Part already added')
             return
         }
 
@@ -87,6 +155,7 @@ export function CreateAssemblyDialog({
             id: part.id,
             partNumber: part.partNumber,
             description: part.description || '',
+            type: 'profile',
             profileType: part.profile?.type || '',
             profileDimensions: part.profile?.dimensions || '',
             gradeId: '',
@@ -94,6 +163,12 @@ export function CreateAssemblyDialog({
             length: 0,
             quantity: 0,
             quantityInAssembly: parseInt(qtyInAssembly),
+            isOutsourcedCut: false,
+            cutVendor: '',
+            material: '',
+            thickness: 0,
+            unitWeight: 0,
+            supplier: '',
             isNew: false
         }])
 
@@ -102,12 +177,21 @@ export function CreateAssemblyDialog({
     }
 
     const handleAddNewPart = () => {
-        if (!newPartNumber || !newProfileType || !newProfileDim || !newQuantity) {
-            toast.warning('Please fill required fields for new part')
+        if (!newPartNumber || !newQuantity) {
+            toast.warning('Part number and quantity required')
             return
         }
 
-        // Check for duplicate part number
+        if (newPartType === 'profile' && (!selectedType || !(selectedDim || customDim))) {
+            toast.warning('Profile type and dimensions required')
+            return
+        }
+
+        if (newPartType === 'plate' && (!plateMaterial || !plateThickness)) {
+            toast.warning('Material and thickness required for plate')
+            return
+        }
+
         if (existingParts.some(p => p.partNumber === newPartNumber) ||
             partItems.some(p => p.partNumber === newPartNumber)) {
             toast.warning('Part number already exists')
@@ -119,24 +203,42 @@ export function CreateAssemblyDialog({
         setPartItems([...partItems, {
             partNumber: newPartNumber,
             description: newDescription,
-            profileType: newProfileType,
-            profileDimensions: newProfileDim,
+            type: newPartType,
+            profileType: selectedType,
+            profileDimensions: customDim || selectedDim,
             gradeId: newGradeId,
             gradeName: grade?.name || '',
             length: parseFloat(newLength) || 0,
             quantity: parseInt(newQuantity),
-            quantityInAssembly: parseInt(newQuantity), // Default same as total qty
+            quantityInAssembly: parseInt(newQuantity),
+            isOutsourcedCut: newPartType === 'profile' ? isOutsourcedCut : isPlateOutsourced,
+            cutVendor: newPartType === 'profile' ? cutVendor : plateSupplier,
+            material: plateMaterial,
+            thickness: parseFloat(plateThickness) || 0,
+            unitWeight: parseFloat(plateWeight) || 0,
+            supplier: plateSupplier,
             isNew: true
         }])
 
-        // Reset new part fields
+        resetNewPartFields()
+    }
+
+    const resetNewPartFields = () => {
         setNewPartNumber('')
         setNewDescription('')
-        setNewProfileType('')
-        setNewProfileDim('')
         setNewGradeId('')
-        setNewLength('')
         setNewQuantity('1')
+        setSelectedType('')
+        setSelectedDim('')
+        setCustomDim('')
+        setNewLength('')
+        setIsOutsourcedCut(false)
+        setCutVendor('')
+        setPlateMaterial('')
+        setPlateThickness('')
+        setPlateWeight('')
+        setPlateSupplier('')
+        setIsPlateOutsourced(true)
     }
 
     const removePart = (index: number) => {
@@ -145,60 +247,78 @@ export function CreateAssemblyDialog({
 
     const handleSubmit = async () => {
         if (!assemblyNumber || !name) {
-            toast.warning('Please enter assembly number and name')
+            toast.warning('Assembly number and name required')
             return
         }
 
         setLoading(true)
         try {
-            // 1. Create the assembly
             const assemblyRes = await createAssembly({
                 projectId,
                 assemblyNumber,
                 name,
                 description: description || undefined,
                 parentId: parentId || undefined,
-                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                notes: notes || undefined
+                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined
             })
 
             if (!assemblyRes.success || !assemblyRes.data) {
-                toast.error(`Failed to create assembly: ${assemblyRes.error}`)
+                toast.error(`Failed: ${assemblyRes.error}`)
                 setLoading(false)
                 return
             }
 
             const assemblyId = assemblyRes.data.id
 
-            // 2. Create new parts and add all parts to assembly
             for (const item of partItems) {
                 let partId = item.id
 
                 if (item.isNew) {
-                    // Ensure profile exists
-                    const profile = await ensureProfile({
-                        type: item.profileType,
-                        dimensions: item.profileDimensions,
-                        weight: 0 // Will be calculated or updated later
-                    })
+                    if (item.type === 'profile') {
+                        const profile = await ensureProfile({
+                            type: item.profileType,
+                            dimensions: item.profileDimensions,
+                            weight: 0
+                        })
 
-                    // Create the part
-                    const partRes = await createPart({
-                        projectId,
-                        partNumber: item.partNumber,
-                        description: item.description || undefined,
-                        profileId: profile.id,
-                        gradeId: item.gradeId || undefined,
-                        length: item.length || undefined,
-                        quantity: item.quantity
-                    })
+                        const partRes = await createPart({
+                            projectId,
+                            partNumber: item.partNumber,
+                            description: item.description || undefined,
+                            profileId: profile.id,
+                            gradeId: item.gradeId || undefined,
+                            length: item.length || undefined,
+                            quantity: item.quantity,
+                            isOutsourcedCut: item.isOutsourcedCut,
+                            cutVendor: item.cutVendor || undefined
+                        })
 
-                    if (!partRes.success || !partRes.data) {
-                        toast.error(`Failed to create part ${item.partNumber}: ${partRes.error}`)
+                        if (!partRes.success || !partRes.data) {
+                            toast.error(`Failed to create ${item.partNumber}`)
+                            continue
+                        }
+                        partId = partRes.data.id
+                    } else {
+                        const plateRes = await createPlatePart({
+                            projectId,
+                            partNumber: item.partNumber,
+                            description: item.description || undefined,
+                            gradeId: item.gradeId || undefined,
+                            material: item.material || undefined,
+                            thickness: item.thickness || undefined,
+                            quantity: item.quantity,
+                            unitWeight: item.unitWeight || undefined,
+                            supplier: item.supplier || undefined,
+                            isOutsourced: item.isOutsourcedCut
+                        })
+
+                        if (!plateRes.success) {
+                            toast.error(`Failed to create plate ${item.partNumber}`)
+                            continue
+                        }
+                        // Plate parts don't go to assembly parts junction (tracked separately)
                         continue
                     }
-
-                    partId = partRes.data.id
                 }
 
                 if (partId) {
@@ -206,12 +326,12 @@ export function CreateAssemblyDialog({
                 }
             }
 
-            toast.success('Assembly created successfully')
+            toast.success('Assembly created')
             setOpen(false)
             resetForm()
             router.refresh()
 
-        } catch (e: any) {
+        } catch (e) {
             toast.error('Failed to create assembly')
         } finally {
             setLoading(false)
@@ -224,10 +344,10 @@ export function CreateAssemblyDialog({
         setDescription('')
         setParentId('')
         setScheduledDate('')
-        setNotes('')
         setPartItems([])
         setSelectedPartId('')
         setQtyInAssembly('1')
+        resetNewPartFields()
     }
 
     return (
@@ -237,13 +357,13 @@ export function CreateAssemblyDialog({
                     <Plus className="h-4 w-4" /> Add Assembly
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Layers className="h-5 w-5" /> Create Assembly
                     </DialogTitle>
                     <DialogDescription>
-                        Create an assembly and add parts to it. You can select existing parts or create new ones.
+                        Create assembly with profile and plate parts. Plates default to outsourced.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -301,7 +421,7 @@ export function CreateAssemblyDialog({
                             <Input
                                 value={description}
                                 onChange={e => setDescription(e.target.value)}
-                                placeholder="Main structural frame assembly"
+                                placeholder="Main structural frame"
                             />
                         </div>
                     </div>
@@ -310,7 +430,7 @@ export function CreateAssemblyDialog({
                     <div className="border rounded-lg p-4 space-y-4">
                         <div className="flex justify-between items-center">
                             <h3 className="font-medium flex items-center gap-2">
-                                <Package className="h-4 w-4" /> Parts in Assembly
+                                <Package className="h-4 w-4" /> Parts
                             </h3>
                             <div className="flex gap-2">
                                 <Button
@@ -330,26 +450,26 @@ export function CreateAssemblyDialog({
                             </div>
                         </div>
 
-                        {/* Add Existing Part */}
+                        {/* Select Existing */}
                         {partMode === 'existing' && (
                             <div className="flex gap-3 items-end bg-muted/50 p-3 rounded">
                                 <div className="flex-1 grid gap-2">
                                     <Label className="text-xs uppercase text-muted-foreground">Select Part</Label>
                                     <Select value={selectedPartId} onValueChange={setSelectedPartId}>
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Choose a part..." />
+                                            <SelectValue placeholder="Choose..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {existingParts.map(p => (
                                                 <SelectItem key={p.id} value={p.id}>
-                                                    {p.partNumber} - {p.description || p.profile?.type + ' ' + p.profile?.dimensions}
+                                                    {p.partNumber} - {p.description || `${p.profile?.type} ${p.profile?.dimensions}`}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="w-24 grid gap-2">
-                                    <Label className="text-xs uppercase text-muted-foreground">Qty in Asm</Label>
+                                <div className="w-20 grid gap-2">
+                                    <Label className="text-xs uppercase text-muted-foreground">Qty</Label>
                                     <Input
                                         type="number"
                                         min="1"
@@ -357,85 +477,247 @@ export function CreateAssemblyDialog({
                                         onChange={e => setQtyInAssembly(e.target.value)}
                                     />
                                 </div>
-                                <Button onClick={handleAddExistingPart} disabled={!selectedPartId}>
-                                    Add
-                                </Button>
+                                <Button onClick={handleAddExistingPart} disabled={!selectedPartId}>Add</Button>
                             </div>
                         )}
 
-                        {/* Add New Part */}
+                        {/* Create New */}
                         {partMode === 'new' && (
-                            <div className="space-y-3 bg-muted/50 p-3 rounded">
-                                <div className="grid grid-cols-4 gap-3">
-                                    <div className="grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Part # *</Label>
-                                        <Input
-                                            value={newPartNumber}
-                                            onChange={e => setNewPartNumber(e.target.value)}
-                                            placeholder="B-101"
-                                            className="font-mono uppercase"
-                                        />
+                            <div className="bg-muted/50 p-3 rounded space-y-4">
+                                <Tabs value={newPartType} onValueChange={(v) => setNewPartType(v as 'profile' | 'plate')}>
+                                    <TabsList className="grid w-full grid-cols-2">
+                                        <TabsTrigger value="profile" className="gap-2">
+                                            <Package className="h-4 w-4" /> Profile
+                                        </TabsTrigger>
+                                        <TabsTrigger value="plate" className="gap-2">
+                                            <Scissors className="h-4 w-4" /> Plate
+                                        </TabsTrigger>
+                                    </TabsList>
+
+                                    {/* Common fields */}
+                                    <div className="grid grid-cols-4 gap-3 pt-3">
+                                        <div className="grid gap-2">
+                                            <Label className="text-xs uppercase text-muted-foreground">Part # *</Label>
+                                            <Input
+                                                value={newPartNumber}
+                                                onChange={e => setNewPartNumber(e.target.value)}
+                                                placeholder="B-101"
+                                                className="font-mono uppercase"
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label className="text-xs uppercase text-muted-foreground">Qty *</Label>
+                                            <Input
+                                                type="number"
+                                                min="1"
+                                                value={newQuantity}
+                                                onChange={e => setNewQuantity(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label className="text-xs uppercase text-muted-foreground">Grade</Label>
+                                            <Select value={newGradeId} onValueChange={setNewGradeId}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Grade" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {grades.map(g => (
+                                                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="grid gap-2">
+                                            <Label className="text-xs uppercase text-muted-foreground">Description</Label>
+                                            <Input
+                                                value={newDescription}
+                                                onChange={e => setNewDescription(e.target.value)}
+                                                placeholder="Main beam"
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Type *</Label>
-                                        <Input
-                                            value={newProfileType}
-                                            onChange={e => setNewProfileType(e.target.value)}
-                                            placeholder="HEA, RHS..."
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Dimensions *</Label>
-                                        <Input
-                                            value={newProfileDim}
-                                            onChange={e => setNewProfileDim(e.target.value)}
-                                            placeholder="200, 100x50x4"
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Grade</Label>
-                                        <Select value={newGradeId} onValueChange={setNewGradeId}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Grade" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {grades.map(g => (
-                                                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-4 gap-3">
-                                    <div className="grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
-                                        <Input
-                                            type="number"
-                                            value={newLength}
-                                            onChange={e => setNewLength(e.target.value)}
-                                            placeholder="6000"
-                                        />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Total Qty *</Label>
-                                        <Input
-                                            type="number"
-                                            min="1"
-                                            value={newQuantity}
-                                            onChange={e => setNewQuantity(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="col-span-2 grid gap-2">
-                                        <Label className="text-xs uppercase text-muted-foreground">Description</Label>
-                                        <Input
-                                            value={newDescription}
-                                            onChange={e => setNewDescription(e.target.value)}
-                                            placeholder="Main beam"
-                                        />
-                                    </div>
-                                </div>
+
+                                    {/* Profile Tab */}
+                                    <TabsContent value="profile" className="space-y-3 mt-3">
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Type</Label>
+                                                <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
+                                                    <PopoverTrigger asChild>
+                                                        <Button variant="outline" className="w-full justify-between">
+                                                            {selectedType || <span className="text-muted-foreground">Select...</span>}
+                                                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-[200px] p-0" align="start">
+                                                        <Command>
+                                                            <CommandInput placeholder="Search..." />
+                                                            <CommandList>
+                                                                <CommandEmpty>Not found</CommandEmpty>
+                                                                <CommandGroup heading="Standard">
+                                                                    {uniqueTypes.map(t => (
+                                                                        <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
+                                                                            <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
+                                                                            {t}
+                                                                        </CommandItem>
+                                                                    ))}
+                                                                </CommandGroup>
+                                                                {shapes.length > 0 && (
+                                                                    <CommandGroup heading="Custom">
+                                                                        {shapes.map(s => (
+                                                                            <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
+                                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
+                                                                                {s.id}
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                )}
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Dimensions</Label>
+                                                <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
+                                                    <PopoverTrigger asChild>
+                                                        <Button variant="outline" className="w-full justify-between" disabled={!selectedType}>
+                                                            {customDim || selectedDim || <span className="text-muted-foreground">Select...</span>}
+                                                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-[220px] p-0" align="start">
+                                                        <Command>
+                                                            <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search/custom..." />
+                                                            <CommandList>
+                                                                <CommandEmpty>
+                                                                    <Button onClick={() => {
+                                                                        setSelectedDim(dimSearch)
+                                                                        setCustomDim(dimSearch)
+                                                                        setOpenDimCombo(false)
+                                                                    }} variant="ghost" className="w-full text-xs">
+                                                                        Use "{dimSearch}"
+                                                                    </Button>
+                                                                </CommandEmpty>
+                                                                {activeDims.length > 0 && (
+                                                                    <CommandGroup heading="Active">
+                                                                        {activeDims.map(d => (
+                                                                            <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                                <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                                {d}
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                )}
+                                                                {isStandardType && catalogDims.length > 0 && (
+                                                                    <CommandGroup heading="Catalog">
+                                                                        {catalogDims.map(d => (
+                                                                            <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                                <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                                {d}
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                )}
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={newLength}
+                                                    onChange={e => setNewLength(e.target.value)}
+                                                    placeholder="6000"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4 p-3 border rounded bg-background">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="profileOutsource"
+                                                    checked={isOutsourcedCut}
+                                                    onChange={e => setIsOutsourcedCut(e.target.checked)}
+                                                    className="rounded"
+                                                />
+                                                <Label htmlFor="profileOutsource" className="cursor-pointer text-sm">
+                                                    Outsourced Cutting
+                                                </Label>
+                                            </div>
+                                            {isOutsourcedCut && (
+                                                <Input
+                                                    value={cutVendor}
+                                                    onChange={e => setCutVendor(e.target.value)}
+                                                    placeholder="Vendor"
+                                                    className="flex-1"
+                                                />
+                                            )}
+                                        </div>
+                                    </TabsContent>
+
+                                    {/* Plate Tab */}
+                                    <TabsContent value="plate" className="space-y-3 mt-3">
+                                        <div className="grid grid-cols-4 gap-3">
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Material *</Label>
+                                                <Input
+                                                    value={plateMaterial}
+                                                    onChange={e => setPlateMaterial(e.target.value)}
+                                                    placeholder="S355"
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Thickness *</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={plateThickness}
+                                                    onChange={e => setPlateThickness(e.target.value)}
+                                                    placeholder="10"
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Weight (kg)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={plateWeight}
+                                                    onChange={e => setPlateWeight(e.target.value)}
+                                                    placeholder="12.5"
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Supplier</Label>
+                                                <Input
+                                                    value={plateSupplier}
+                                                    onChange={e => setPlateSupplier(e.target.value)}
+                                                    placeholder="LaserCut Co"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4 p-3 border rounded bg-background">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="plateOutsource"
+                                                    checked={isPlateOutsourced}
+                                                    onChange={e => setIsPlateOutsourced(e.target.checked)}
+                                                    className="rounded"
+                                                />
+                                                <Label htmlFor="plateOutsource" className="cursor-pointer text-sm">
+                                                    Outsourced (Laser/Plasma)
+                                                </Label>
+                                            </div>
+                                            {!isPlateOutsourced && (
+                                                <Badge variant="outline">In-house cutting</Badge>
+                                            )}
+                                        </div>
+                                    </TabsContent>
+                                </Tabs>
+
                                 <Button onClick={handleAddNewPart} className="w-full">
-                                    Add New Part
+                                    Add {newPartType === 'profile' ? 'Profile' : 'Plate'} Part
                                 </Button>
                             </div>
                         )}
@@ -447,9 +729,10 @@ export function CreateAssemblyDialog({
                                     <TableHeader>
                                         <TableRow className="bg-muted/50">
                                             <TableHead>Part #</TableHead>
-                                            <TableHead>Profile</TableHead>
-                                            <TableHead>Description</TableHead>
-                                            <TableHead className="text-center">Qty in Assembly</TableHead>
+                                            <TableHead>Type</TableHead>
+                                            <TableHead>Profile/Material</TableHead>
+                                            <TableHead>Cut</TableHead>
+                                            <TableHead className="text-center">Qty</TableHead>
                                             <TableHead className="w-10"></TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -461,10 +744,22 @@ export function CreateAssemblyDialog({
                                                     {item.isNew && <Badge variant="outline" className="ml-2 text-xs">NEW</Badge>}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {item.profileType} {item.profileDimensions}
+                                                    <Badge variant={item.type === 'plate' ? 'secondary' : 'default'}>
+                                                        {item.type === 'plate' ? 'Plate' : 'Profile'}
+                                                    </Badge>
                                                 </TableCell>
-                                                <TableCell className="text-muted-foreground">{item.description}</TableCell>
-                                                <TableCell className="text-center font-medium">{item.quantityInAssembly}</TableCell>
+                                                <TableCell>
+                                                    {item.type === 'profile'
+                                                        ? `${item.profileType} ${item.profileDimensions}`
+                                                        : `${item.material} ${item.thickness}mm`
+                                                    }
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant={item.isOutsourcedCut ? 'outline' : 'default'} className="text-xs">
+                                                        {item.isOutsourcedCut ? 'Outsource' : 'In-house'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center">{item.quantityInAssembly}</TableCell>
                                                 <TableCell>
                                                     <Button
                                                         size="icon"
@@ -484,7 +779,7 @@ export function CreateAssemblyDialog({
 
                         {partItems.length === 0 && (
                             <p className="text-center text-muted-foreground py-4">
-                                No parts added yet. Add parts above or create without parts.
+                                No parts added. Add parts or create without.
                             </p>
                         )}
                     </div>
@@ -493,7 +788,7 @@ export function CreateAssemblyDialog({
                 <DialogFooter className="mt-4">
                     <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                     <Button onClick={handleSubmit} disabled={loading || !assemblyNumber || !name}>
-                        {loading ? 'Creating...' : `Create Assembly${partItems.length > 0 ? ` (${partItems.length} parts)` : ''}`}
+                        {loading ? 'Creating...' : `Create Assembly${partItems.length > 0 ? ` (${partItems.length})` : ''}`}
                     </Button>
                 </DialogFooter>
             </DialogContent>

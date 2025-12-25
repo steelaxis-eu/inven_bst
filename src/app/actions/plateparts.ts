@@ -16,6 +16,7 @@ export interface CreatePlatePartInput {
     thickness?: number
     quantity: number
     unitWeight?: number
+    isOutsourced?: boolean   // Default true for plates
     dxfFilename?: string
     dxfStoragePath?: string  // projects/{projectId}/Plates/{filename}
     nestingSheet?: string
