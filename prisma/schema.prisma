@@ -487,8 +487,10 @@ model PlatePart {
   material        String?             // e.g., "S355 10mm plate"
   gradeId         String?             // Link to MaterialGrade
   thickness       Float?              // mm
+  width           Float?              // mm - plate width
+  length          Float?              // mm - plate length (cutting length)
   quantity        Int                 // Total pieces needed
-  unitWeight      Float     @default(0)  // kg per piece
+  unitWeight      Float     @default(0)  // kg per piece (auto-calculated from dimensions)
   isOutsourced    Boolean   @default(true)  // Default plates are outsourced
   dxfFilename     String?             // Original DXF filename
   dxfStoragePath  String?             // Blob path: projects/{projectId}/Plates/{filename}

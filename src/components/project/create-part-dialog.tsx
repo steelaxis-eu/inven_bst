@@ -67,8 +67,11 @@ export function CreatePartDialog({
     // Plate part fields
     const [material, setMaterial] = useState('')
     const [thickness, setThickness] = useState('')
+    const [plateWidth, setPlateWidth] = useState('')
+    const [plateLength, setPlateLength] = useState('')
     const [unitWeight, setUnitWeight] = useState('')
     const [supplier, setSupplier] = useState('')
+    const [isPlateOutsourced, setIsPlateOutsourced] = useState(true)
 
     // Derived values
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
@@ -243,8 +246,11 @@ export function CreatePartDialog({
                     gradeId: gradeId || undefined,
                     material: material || undefined,
                     thickness: thickness ? parseFloat(thickness) : undefined,
+                    width: plateWidth ? parseFloat(plateWidth) : undefined,
+                    length: plateLength ? parseFloat(plateLength) : undefined,
                     quantity: parseInt(quantity),
                     unitWeight: unitWeight ? parseFloat(unitWeight) : undefined,
+                    isOutsourced: isPlateOutsourced,
                     supplier: supplier || undefined
                 })
 
@@ -283,8 +289,11 @@ export function CreatePartDialog({
         setCutVendor('')
         setMaterial('')
         setThickness('')
+        setPlateWidth('')
+        setPlateLength('')
         setUnitWeight('')
         setSupplier('')
+        setIsPlateOutsourced(true)
     }
 
     return (
@@ -568,16 +577,16 @@ export function CreatePartDialog({
                     <TabsContent value="plate" className="space-y-4 mt-0">
                         <div className="p-3 bg-blue-50 text-blue-800 rounded-lg text-sm flex items-center gap-2">
                             <Scissors className="h-4 w-4" />
-                            Plate parts are tracked separately for outsourced laser/plasma cutting.
+                            Plate parts are typically outsourced for laser/plasma cutting.
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-4 gap-4">
                             <div className="grid gap-2">
                                 <Label className="text-xs uppercase text-muted-foreground">Material</Label>
                                 <Input
                                     value={material}
                                     onChange={e => setMaterial(e.target.value)}
-                                    placeholder="e.g. S355 Plate"
+                                    placeholder="S355"
                                 />
                             </div>
                             <div className="grid gap-2">
@@ -586,19 +595,48 @@ export function CreatePartDialog({
                                     type="number"
                                     value={thickness}
                                     onChange={e => setThickness(e.target.value)}
-                                    placeholder="e.g. 10"
+                                    placeholder="10"
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Width (mm)</Label>
+                                <Input
+                                    type="number"
+                                    value={plateWidth}
+                                    onChange={e => setPlateWidth(e.target.value)}
+                                    placeholder="200"
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
+                                <Input
+                                    type="number"
+                                    value={plateLength}
+                                    onChange={e => setPlateLength(e.target.value)}
+                                    placeholder="400"
                                 />
                             </div>
                         </div>
 
+                        {/* Auto-calculated weight preview */}
+                        {thickness && plateWidth && plateLength && (
+                            <div className="flex items-center gap-2 p-3 bg-green-50 text-green-800 rounded text-sm">
+                                <span className="font-medium">Calculated Weight:</span>
+                                <span className="font-mono">
+                                    {((parseFloat(thickness) / 1000) * (parseFloat(plateWidth) / 1000) * (parseFloat(plateLength) / 1000) * 7850).toFixed(2)} kg
+                                </span>
+                                <span className="text-xs text-green-600">(per piece @ 7850 kg/m³)</span>
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
-                                <Label className="text-xs uppercase text-muted-foreground">Unit Weight (kg)</Label>
+                                <Label className="text-xs uppercase text-muted-foreground">Weight Override (kg)</Label>
                                 <Input
                                     type="number"
                                     value={unitWeight}
                                     onChange={e => setUnitWeight(e.target.value)}
-                                    placeholder="e.g. 12.5"
+                                    placeholder="Auto-calculated if blank"
                                 />
                             </div>
                             <div className="grid gap-2">
@@ -606,9 +644,30 @@ export function CreatePartDialog({
                                 <Input
                                     value={supplier}
                                     onChange={e => setSupplier(e.target.value)}
-                                    placeholder="e.g. LaserParts Co"
+                                    placeholder="LaserParts Co"
                                 />
                             </div>
+                        </div>
+
+                        {/* Outsourced option */}
+                        <div className="p-4 border rounded-lg bg-muted/30">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="plateOutsourced"
+                                    checked={isPlateOutsourced}
+                                    onChange={e => setIsPlateOutsourced(e.target.checked)}
+                                    className="rounded"
+                                />
+                                <Label htmlFor="plateOutsourced" className="cursor-pointer">
+                                    Outsourced (Laser/Plasma Cutting)
+                                </Label>
+                            </div>
+                            {!isPlateOutsourced && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Cutting will be done in-house.
+                                </p>
+                            )}
                         </div>
                     </TabsContent>
                 </Tabs>

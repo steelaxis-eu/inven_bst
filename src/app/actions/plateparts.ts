@@ -14,11 +14,13 @@ export interface CreatePlatePartInput {
     material?: string
     gradeId?: string
     thickness?: number
+    width?: number       // mm
+    length?: number      // mm
     quantity: number
-    unitWeight?: number
-    isOutsourced?: boolean   // Default true for plates
+    unitWeight?: number  // Auto-calculated if not provided
+    isOutsourced?: boolean
     dxfFilename?: string
-    dxfStoragePath?: string  // projects/{projectId}/Plates/{filename}
+    dxfStoragePath?: string
     nestingSheet?: string
     supplier?: string
     notes?: string
@@ -26,13 +28,27 @@ export interface CreatePlatePartInput {
 
 /**
  * Create a new plate part
+ * Weight is auto-calculated from width × length × thickness × steel density (7850 kg/m³)
  */
 export async function createPlatePart(input: CreatePlatePartInput) {
     try {
-        const { projectId, partNumber, quantity, ...rest } = input
+        const { projectId, partNumber, quantity, unitWeight, thickness, width, length, gradeId, ...rest } = input
 
         if (!projectId || !partNumber || !quantity) {
             return { success: false, error: 'Missing required fields' }
+        }
+
+        // Auto-calculate weight if dimensions provided and unitWeight not set
+        let calculatedWeight = unitWeight || 0
+        if (!unitWeight && thickness && width && length) {
+            // Get density from grade if available, otherwise use steel default 7850 kg/m³
+            let density = 7850
+            if (gradeId) {
+                const grade = await prisma.materialGrade.findUnique({ where: { id: gradeId } })
+                if (grade?.density) density = grade.density
+            }
+            // Convert mm to m: (t/1000) * (w/1000) * (l/1000) * density
+            calculatedWeight = (thickness / 1000) * (width / 1000) * (length / 1000) * density
         }
 
         const part = await prisma.platePart.create({
@@ -40,6 +56,11 @@ export async function createPlatePart(input: CreatePlatePartInput) {
                 projectId,
                 partNumber,
                 quantity,
+                thickness,
+                width,
+                length,
+                gradeId,
+                unitWeight: calculatedWeight,
                 ...rest
             }
         })

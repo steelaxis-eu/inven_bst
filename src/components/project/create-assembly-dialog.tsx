@@ -37,6 +37,8 @@ interface PartItem {
     // Plate specific
     material: string
     thickness: number
+    width: number
+    plateLength: number
     unitWeight: number
     supplier: string
     isNew: boolean
@@ -100,6 +102,8 @@ export function CreateAssemblyDialog({
     // Plate fields
     const [plateMaterial, setPlateMaterial] = useState('')
     const [plateThickness, setPlateThickness] = useState('')
+    const [plateWidth, setPlateWidth] = useState('')
+    const [plateLength, setPlateLength] = useState('')
     const [plateWeight, setPlateWeight] = useState('')
     const [plateSupplier, setPlateSupplier] = useState('')
     const [isPlateOutsourced, setIsPlateOutsourced] = useState(true) // Default outsourced
@@ -167,6 +171,8 @@ export function CreateAssemblyDialog({
             cutVendor: '',
             material: '',
             thickness: 0,
+            width: 0,
+            plateLength: 0,
             unitWeight: 0,
             supplier: '',
             isNew: false
@@ -215,6 +221,8 @@ export function CreateAssemblyDialog({
             cutVendor: newPartType === 'profile' ? cutVendor : plateSupplier,
             material: plateMaterial,
             thickness: parseFloat(plateThickness) || 0,
+            width: parseFloat(plateWidth) || 0,
+            plateLength: parseFloat(plateLength) || 0,
             unitWeight: parseFloat(plateWeight) || 0,
             supplier: plateSupplier,
             isNew: true
@@ -236,6 +244,8 @@ export function CreateAssemblyDialog({
         setCutVendor('')
         setPlateMaterial('')
         setPlateThickness('')
+        setPlateWidth('')
+        setPlateLength('')
         setPlateWeight('')
         setPlateSupplier('')
         setIsPlateOutsourced(true)
@@ -306,6 +316,8 @@ export function CreateAssemblyDialog({
                             gradeId: item.gradeId || undefined,
                             material: item.material || undefined,
                             thickness: item.thickness || undefined,
+                            width: item.width || undefined,
+                            length: item.plateLength || undefined,
                             quantity: item.quantity,
                             unitWeight: item.unitWeight || undefined,
                             supplier: item.supplier || undefined,
@@ -679,12 +691,41 @@ export function CreateAssemblyDialog({
                                                 />
                                             </div>
                                             <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Weight (kg)</Label>
+                                                <Label className="text-xs uppercase text-muted-foreground">Width (mm)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={plateWidth}
+                                                    onChange={e => setPlateWidth(e.target.value)}
+                                                    placeholder="200"
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
+                                                <Input
+                                                    type="number"
+                                                    value={plateLength}
+                                                    onChange={e => setPlateLength(e.target.value)}
+                                                    placeholder="400"
+                                                />
+                                            </div>
+                                        </div>
+                                        {/* Auto-calculated weight preview */}
+                                        {plateThickness && plateWidth && plateLength && (
+                                            <div className="flex items-center gap-2 p-2 bg-green-50 text-green-800 rounded text-xs">
+                                                <span className="font-medium">Calculated:</span>
+                                                <span className="font-mono">
+                                                    {((parseFloat(plateThickness) / 1000) * (parseFloat(plateWidth) / 1000) * (parseFloat(plateLength) / 1000) * 7850).toFixed(2)} kg
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Weight Override</Label>
                                                 <Input
                                                     type="number"
                                                     value={plateWeight}
                                                     onChange={e => setPlateWeight(e.target.value)}
-                                                    placeholder="12.5"
+                                                    placeholder="Auto-calc if blank"
                                                 />
                                             </div>
                                             <div className="grid gap-2">
