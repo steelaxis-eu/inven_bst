@@ -9,14 +9,19 @@ import { Progress } from "@/components/ui/progress"
 import { ClipboardList, Play, CheckCircle, XCircle, ChevronDown, ChevronRight, Check, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { updateWorkOrderStatus, updateWorkOrderItemStatus, activateWorkOrder, completeWorkOrder } from '@/app/actions/workorders'
+import { updateWorkOrderStatus, updateWorkOrderItemStatus, activateWorkOrder, completeWorkOrder, completeCuttingWOWithWorkflow } from '@/app/actions/workorders'
+import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 interface WorkOrderItem {
     id: string
+    pieceId: string | null
     status: string
     completedAt: Date | null
     notes: string | null
     piece?: {
+        id: string
         partId: string
         part: { partNumber: string }
         pieceNumber: number
@@ -78,19 +83,38 @@ const PRIORITY_COLORS: Record<string, string> = {
 function WorkOrderRow({ wo }: { wo: WorkOrder }) {
     const [expanded, setExpanded] = useState(false)
     const [loading, setLoading] = useState<string | null>(null)
+    const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
+    const [machinedPieceIds, setMachinedPieceIds] = useState<string[]>([])
     const router = useRouter()
 
     const completedItems = wo.items.filter(i => i.status === 'COMPLETED').length
     const totalItems = wo.items.length
     const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
 
+    // Get all pieces in this WO (for machining selection)
+    const allPieces = wo.items.filter(i => i.piece).map(i => ({
+        pieceId: i.piece!.partId + '-' + i.piece!.pieceNumber,  // Temporary - need actual piece ID
+        itemId: i.id,
+        partNumber: i.piece!.part.partNumber,
+        pieceNumber: i.piece!.pieceNumber
+    }))
+
     const handleStatusChange = async (status: string) => {
+        // For CUTTING WOs in progress, show machining selection dialog
+        if (status === 'COMPLETED' && wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS') {
+            setCompleteDialogOpen(true)
+            return
+        }
+
         setLoading('wo')
         let res
         if (status === 'IN_PROGRESS') {
             res = await activateWorkOrder(wo.id)
         } else if (status === 'COMPLETED') {
             res = await completeWorkOrder(wo.id)
+            if (res.success && res.followUpWO) {
+                toast.info(`Coating WO created: ${res.followUpWO.workOrderNumber}`)
+            }
         } else {
             res = await updateWorkOrderStatus(wo.id, status as any)
         }
@@ -102,6 +126,42 @@ function WorkOrderRow({ wo }: { wo: WorkOrder }) {
             router.refresh()
         }
         setLoading(null)
+    }
+
+    const handleCompleteCuttingWO = async () => {
+        setLoading('wo')
+        // Get actual piece IDs from WO items that need machining
+        const pieceIdsNeedingMachining = wo.items
+            .filter(i => {
+                if (!i.pieceId) return false
+                // Check if marked for machining (using itemId to track selection)
+                return machinedPieceIds.includes(i.id)
+            })
+            .map(i => i.pieceId!)
+
+        const res = await completeCuttingWOWithWorkflow(wo.id, pieceIdsNeedingMachining)
+
+        if (!res.success) {
+            toast.error(res.error || 'Failed to complete WO')
+        } else {
+            if (res.machiningWO) {
+                toast.info(`Machining WO created: ${res.machiningWO.workOrderNumber} (${res.machinedCount} pieces)`)
+            }
+            if (res.weldingWO) {
+                toast.success(`Welding WO created: ${res.weldingWO.workOrderNumber} (${res.directCount} pieces)`)
+            }
+            setCompleteDialogOpen(false)
+            router.refresh()
+        }
+        setLoading(null)
+    }
+
+    const toggleMachining = (itemId: string) => {
+        setMachinedPieceIds(prev =>
+            prev.includes(itemId)
+                ? prev.filter(id => id !== itemId)
+                : [...prev, itemId]
+        )
     }
 
     const handleItemComplete = async (itemId: string) => {
@@ -297,6 +357,75 @@ function WorkOrderRow({ wo }: { wo: WorkOrder }) {
                     </TableCell>
                 </TableRow>
             )}
+
+            {/* Complete Cutting WO Dialog - Machining Selection */}
+            <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Complete Cutting Work Order</DialogTitle>
+                        <DialogDescription>
+                            Select pieces that need drilling/machining. Other pieces will go directly to welding.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                        <div className="text-sm text-muted-foreground">
+                            {wo.items.filter(i => i.piece).length} pieces in this work order
+                        </div>
+
+                        <div className="space-y-2">
+                            {wo.items.filter(i => i.piece).map(item => (
+                                <div
+                                    key={item.id}
+                                    className={`flex items-center gap-3 p-3 rounded-lg border ${machinedPieceIds.includes(item.id)
+                                        ? 'bg-cyan-50 border-cyan-300'
+                                        : 'bg-background'
+                                        }`}
+                                >
+                                    <Checkbox
+                                        checked={machinedPieceIds.includes(item.id)}
+                                        onCheckedChange={() => toggleMachining(item.id)}
+                                    />
+                                    <div className="flex-1">
+                                        <span className="font-mono font-medium">
+                                            {item.piece!.part.partNumber} #{item.piece!.pieceNumber}
+                                        </span>
+                                    </div>
+                                    <Badge variant="outline" className={
+                                        machinedPieceIds.includes(item.id)
+                                            ? 'bg-cyan-100 text-cyan-800'
+                                            : 'bg-orange-100 text-orange-800'
+                                    }>
+                                        {machinedPieceIds.includes(item.id) ? '→ Machining' : '→ Welding'}
+                                    </Badge>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+                            <div>
+                                <span className="text-muted-foreground">To Machining: </span>
+                                <span className="font-semibold text-cyan-700">{machinedPieceIds.length}</span>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Direct to Welding: </span>
+                                <span className="font-semibold text-orange-700">
+                                    {wo.items.filter(i => i.piece).length - machinedPieceIds.length}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setCompleteDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleCompleteCuttingWO} disabled={loading === 'wo'}>
+                            {loading === 'wo' ? 'Completing...' : 'Complete & Create WOs'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     )
 }

@@ -167,13 +167,14 @@ export async function addItemsToWorkOrder(
         return { success: false, error: e.message }
     }
 }
-
 /**
  * Update work order item status
+ * For CUTTING items, can specify if machining is needed - creates follow-up WO
  */
 export async function updateWorkOrderItemStatus(
     itemId: string,
-    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED',
+    options?: { needsMachining?: boolean }
 ) {
     try {
         const updateData: any = { status }
@@ -182,12 +183,39 @@ export async function updateWorkOrderItemStatus(
             updateData.completedAt = new Date()
         }
 
-        await prisma.workOrderItem.update({
+        const item = await prisma.workOrderItem.update({
             where: { id: itemId },
-            data: updateData
+            data: updateData,
+            include: {
+                workOrder: true,
+                piece: { include: { part: true } }
+            }
         })
 
-        return { success: true }
+        // Track pieces that need machining or go straight to welding
+        if (status === 'COMPLETED' && item.pieceId && item.workOrder.type === 'CUTTING') {
+            // Store the machining flag on the piece (we'll use notes for now)
+            if (options?.needsMachining) {
+                await prisma.partPiece.update({
+                    where: { id: item.pieceId },
+                    data: {
+                        status: 'CUT',
+                        cutAt: new Date(),
+                        // We'll track this in the part notes or create immediate WO
+                    }
+                })
+            } else {
+                await prisma.partPiece.update({
+                    where: { id: item.pieceId },
+                    data: {
+                        status: 'CUT',
+                        cutAt: new Date()
+                    }
+                })
+            }
+        }
+
+        return { success: true, needsMachining: options?.needsMachining }
 
     } catch (e: any) {
         console.error('updateWorkOrderItemStatus error:', e)
@@ -196,7 +224,108 @@ export async function updateWorkOrderItemStatus(
 }
 
 /**
+ * Complete a CUTTING WO and create follow-up WOs based on machining needs
+ * Pieces marked for machining go to MACHINING WO
+ * Pieces not needing machining go directly to WELDING WO
+ */
+export async function completeCuttingWOWithWorkflow(
+    workOrderId: string,
+    machinedPieceIds: string[]  // Piece IDs that need machining
+) {
+    try {
+        const wo = await prisma.workOrder.findUnique({
+            where: { id: workOrderId },
+            include: { items: { include: { piece: true } } }
+        })
+
+        if (!wo) {
+            return { success: false, error: 'Work order not found' }
+        }
+
+        if (wo.type !== 'CUTTING') {
+            return { success: false, error: 'This is only for CUTTING work orders' }
+        }
+
+        const allPieceIds = wo.items.filter(i => i.pieceId).map(i => i.pieceId!)
+        const directToWelding = allPieceIds.filter(id => !machinedPieceIds.includes(id))
+
+        // Complete the cutting WO
+        await prisma.$transaction(async (tx) => {
+            await tx.workOrder.update({
+                where: { id: workOrderId },
+                data: { status: 'COMPLETED', completedAt: new Date() }
+            })
+
+            await tx.workOrderItem.updateMany({
+                where: { workOrderId, status: { not: 'COMPLETED' } },
+                data: { status: 'COMPLETED', completedAt: new Date() }
+            })
+
+            // Update all pieces to CUT status
+            await tx.partPiece.updateMany({
+                where: { id: { in: allPieceIds } },
+                data: { status: 'CUT', cutAt: new Date() }
+            })
+        })
+
+        // Create MACHINING WO if any pieces need it
+        let machiningWO = null
+        if (machinedPieceIds.length > 0) {
+            const woNumber = await generateWorkOrderNumber(wo.projectId)
+            machiningWO = await prisma.workOrder.create({
+                data: {
+                    projectId: wo.projectId,
+                    workOrderNumber: woNumber,
+                    title: `Machining (from ${wo.workOrderNumber})`,
+                    type: 'MACHINING',
+                    priority: wo.priority,
+                    status: 'PENDING',
+                    notes: `Drilling/machining for ${machinedPieceIds.length} pieces from cutting WO`,
+                    items: {
+                        create: machinedPieceIds.map(pieceId => ({ pieceId }))
+                    }
+                }
+            })
+        }
+
+        // Create WELDING WO for pieces going direct (if any)
+        let weldingWO = null
+        if (directToWelding.length > 0) {
+            const woNumber = await generateWorkOrderNumber(wo.projectId)
+            weldingWO = await prisma.workOrder.create({
+                data: {
+                    projectId: wo.projectId,
+                    workOrderNumber: woNumber,
+                    title: `Welding (from ${wo.workOrderNumber})`,
+                    type: 'WELDING',
+                    priority: wo.priority,
+                    status: 'PENDING',
+                    notes: `${directToWelding.length} pieces ready for welding`,
+                    items: {
+                        create: directToWelding.map(pieceId => ({ pieceId }))
+                    }
+                }
+            })
+        }
+
+        revalidatePath(`/projects/${wo.projectId}`)
+        return {
+            success: true,
+            machiningWO,
+            weldingWO,
+            machinedCount: machinedPieceIds.length,
+            directCount: directToWelding.length
+        }
+
+    } catch (e: any) {
+        console.error('completeCuttingWOWithWorkflow error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
  * Complete work order and update all piece statuses
+ * Also handles creating follow-up WOs in the workflow chain
  */
 export async function completeWorkOrder(workOrderId: string) {
     try {
@@ -208,6 +337,8 @@ export async function completeWorkOrder(workOrderId: string) {
         if (!wo) {
             return { success: false, error: 'Work order not found' }
         }
+
+        const pieceIds = wo.items.filter(i => i.pieceId).map(i => i.pieceId!)
 
         await prisma.$transaction(async (tx) => {
             // Mark work order as completed
@@ -223,16 +354,21 @@ export async function completeWorkOrder(workOrderId: string) {
             })
 
             // Update piece statuses based on work order type
-            const pieceIds = wo.items.filter(i => i.pieceId).map(i => i.pieceId!)
-
             if (pieceIds.length > 0) {
                 const now = new Date()
                 const statusField: Record<string, any> = {}
 
                 switch (wo.type) {
+                    case 'MATERIAL_PREP':
+                        // Material is now available - no piece status change
+                        break
                     case 'CUTTING':
                         statusField.status = 'CUT'
                         statusField.cutAt = now
+                        break
+                    case 'MACHINING':
+                        statusField.status = 'FABRICATED'
+                        statusField.fabricatedAt = now
                         break
                     case 'FABRICATION':
                         statusField.status = 'FABRICATED'
@@ -242,7 +378,7 @@ export async function completeWorkOrder(workOrderId: string) {
                         statusField.status = 'WELDED'
                         statusField.weldedAt = now
                         break
-                    case 'PAINTING':
+                    case 'COATING':
                         statusField.status = 'PAINTED'
                         statusField.paintedAt = now
                         break
@@ -255,10 +391,43 @@ export async function completeWorkOrder(workOrderId: string) {
                     })
                 }
             }
+
+            // Unblock dependent WOs (those waiting on this one)
+            // Just clear the blocking reference - notes will stay as-is
+            await tx.workOrder.updateMany({
+                where: { blockedByWOId: workOrderId, status: 'PENDING' },
+                data: {
+                    blockedByWOId: null
+                }
+            })
         })
 
+        // Auto-create follow-up WO based on type
+        // Note: WELDING WO is created at assembly level when all parts are ready
+        // Only WELDING→COATING is auto-created
+        let followUpWO = null
+
+        if (wo.type === 'WELDING' && pieceIds.length > 0) {
+            // Auto-create COATING WO after WELDING completes
+            const woNumber = await generateWorkOrderNumber(wo.projectId)
+            followUpWO = await prisma.workOrder.create({
+                data: {
+                    projectId: wo.projectId,
+                    workOrderNumber: woNumber,
+                    title: `Coating (from ${wo.workOrderNumber})`,
+                    type: 'COATING',
+                    priority: wo.priority,
+                    status: 'PENDING',
+                    notes: `Auto-created after welding ${wo.workOrderNumber} completed`,
+                    items: {
+                        create: pieceIds.map((pieceId: string) => ({ pieceId }))
+                    }
+                }
+            })
+        }
+
         revalidatePath(`/projects/${wo.projectId}`)
-        return { success: true }
+        return { success: true, followUpWO }
 
     } catch (e: any) {
         console.error('completeWorkOrder error:', e)
