@@ -5,13 +5,26 @@ import prisma from '@/lib/prisma'
 export async function getActiveProjects() {
     return await prisma.project.findMany({
         where: { status: 'ACTIVE' },
-        orderBy: { projectNumber: 'asc' }
+        orderBy: { projectNumber: 'asc' },
+        include: { customer: true }
     })
 }
 
 
 
-export async function createProject(data: { number: string, name: string }) {
+export interface CreateProjectInput {
+    number: string
+    name: string
+    customerId?: string
+    coatingType?: string
+    corrosionCategory?: string
+    corrosionComments?: string
+    contractDate?: Date
+    estimatedHours?: number
+    deliveryDate?: Date
+}
+
+export async function createProject(data: CreateProjectInput) {
     if (!data.number || !data.name) return { success: false, error: 'Missing fields' }
 
     try {
@@ -19,8 +32,15 @@ export async function createProject(data: { number: string, name: string }) {
             data: {
                 projectNumber: data.number,
                 name: data.name,
+                customerId: data.customerId || null,
+                coatingType: data.coatingType,
+                corrosionCategory: data.corrosionCategory,
+                corrosionComments: data.corrosionComments,
+                contractDate: data.contractDate,
+                estimatedHours: data.estimatedHours ? parseFloat(data.estimatedHours.toString()) : null,
+                deliveryDate: data.deliveryDate,
                 status: 'ACTIVE',
-                createdBy: 'System', // Replace with session user if auth enabled
+                createdBy: 'System',
                 modifiedBy: 'System'
             }
         })
@@ -46,10 +66,16 @@ export async function archiveProject(id: string) {
 export interface UpdateProjectInput {
     name?: string
     client?: string
+    customerId?: string
     description?: string
     priority?: string
     coatingType?: string
     coatingSpec?: string
+    corrosionCategory?: string
+    corrosionComments?: string
+    contractDate?: Date | null
+    estimatedHours?: number | null
+    deliveryDate?: Date | null
     scheduledStart?: Date | null
     scheduledEnd?: Date | null
 }

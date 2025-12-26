@@ -8,11 +8,26 @@ datasource db {
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
+model Customer {
+  id            String   @id @default(uuid())
+  companyName   String
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  address       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  projects      Project[]
+}
+
 model Project {
   id              String      @id @default(uuid())
   projectNumber   String      @unique
   name            String
-  client          String?              // Customer name
+  client          String?              // Legacy field, migrate to customerId
+  customerId      String?
+  customer        Customer?   @relation(fields: [customerId], references: [id])
   description     String?
   priority        String      @default("MEDIUM")  // LOW, MEDIUM, HIGH, CRITICAL
   scheduledStart  DateTime?
@@ -24,6 +39,12 @@ model Project {
   updatedAt       DateTime    @updatedAt
   createdBy       String?
   modifiedBy      String?
+
+  corrosionCategory String?            // e.g. C3, C4H
+  corrosionComments String?
+  contractDate      DateTime?
+  estimatedHours    Float?
+  deliveryDate      DateTime?
 
   usages            Usage[]
   usageLines        UsageLine[]

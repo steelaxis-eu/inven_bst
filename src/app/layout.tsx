@@ -64,6 +64,7 @@ export default async function RootLayout({
                   <Link href="/inventory" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Inventory</Link>
                   <Link href="/usage/history" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">History</Link>
                   <Link href="/projects" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Projects</Link>
+                  <Link href="/customers" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Customers</Link>
                   <Link href="/settings" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">Settings</Link>
                 </nav>
                 <div className="flex items-center gap-2">
