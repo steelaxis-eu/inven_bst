@@ -3,7 +3,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ChevronDown, ChevronRight, Layers, Package } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ChevronDown, ChevronRight, Layers, Package, Calendar, Weight, Edit, Check } from 'lucide-react'
 import { useState } from 'react'
 
 interface Assembly {
@@ -15,10 +17,16 @@ interface Assembly {
     sequence: number
     scheduledDate: Date | null
     parentId: string | null
+    notes: string | null
     children: Assembly[]
     assemblyParts: {
         part: {
+            id: string
             partNumber: string
+            description: string | null
+            length: number | null
+            unitWeight: number | null
+            profile: { type: string; dimensions: string } | null
             pieces: { status: string }[]
         }
         quantityInAssembly: number
@@ -37,7 +45,7 @@ const STATUS_COLORS: Record<string, string> = {
     'SHIPPED': 'bg-purple-100 text-purple-800',
 }
 
-function getAssemblyProgress(assembly: Assembly): number {
+function getAssemblyProgress(assembly: Assembly): { percent: number; ready: number; total: number } {
     let totalPieces = 0
     let readyPieces = 0
 
@@ -48,24 +56,49 @@ function getAssemblyProgress(assembly: Assembly): number {
         readyPieces += Math.min(ready, needed)
     })
 
-    return totalPieces > 0 ? Math.round((readyPieces / totalPieces) * 100) : 0
+    return {
+        percent: totalPieces > 0 ? Math.round((readyPieces / totalPieces) * 100) : 0,
+        ready: readyPieces,
+        total: totalPieces
+    }
+}
+
+function getTotalWeight(assembly: Assembly): number {
+    return assembly.assemblyParts.reduce((sum, ap) => {
+        return sum + (ap.part.unitWeight || 0) * ap.quantityInAssembly
+    }, 0)
 }
 
 function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: number }) {
-    const [expanded, setExpanded] = useState(true)
+    const [expanded, setExpanded] = useState(false)
+    const [detailsOpen, setDetailsOpen] = useState(false)
     const hasChildren = assembly.children && assembly.children.length > 0
     const progress = getAssemblyProgress(assembly)
+    const totalWeight = getTotalWeight(assembly)
+
+    const handleRowClick = () => {
+        setDetailsOpen(!detailsOpen)
+    }
+
+    const handleChevronClick = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        setExpanded(!expanded)
+    }
 
     return (
         <div className="w-full">
+            {/* Main Row */}
             <div
-                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer border-l-4 ${progress === 100 ? 'border-l-green-500' : progress > 0 ? 'border-l-blue-500' : 'border-l-gray-300'
-                    }`}
+                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer border-l-4 transition-colors ${progress.percent === 100 ? 'border-l-green-500' : progress.percent > 0 ? 'border-l-blue-500' : 'border-l-gray-300'
+                    } ${detailsOpen ? 'bg-muted/50' : ''}`}
                 style={{ marginLeft: level * 24 }}
-                onClick={() => hasChildren && setExpanded(!expanded)}
+                onClick={handleRowClick}
             >
                 {hasChildren ? (
-                    <span className="text-muted-foreground">
+                    <span
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={handleChevronClick}
+                    >
                         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </span>
                 ) : (
@@ -86,15 +119,125 @@ function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: num
                     {assembly.status.replace('_', ' ')}
                 </Badge>
                 <div className="flex items-center gap-2 w-32">
-                    <Progress value={progress} className="h-2" />
-                    <span className="text-xs font-medium w-8">{progress}%</span>
+                    <Progress value={progress.percent} className="h-2" />
+                    <span className="text-xs font-medium w-8">{progress.percent}%</span>
+                </div>
+                <div className="text-xs text-muted-foreground w-16 text-right">
+                    {assembly.assemblyParts.length} parts
                 </div>
                 {assembly.scheduledDate && (
-                    <div className="text-xs text-muted-foreground">
-                        Due: {new Date(assembly.scheduledDate).toLocaleDateString()}
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(assembly.scheduledDate).toLocaleDateString()}
                     </div>
                 )}
             </div>
+
+            {/* Details Sub-Row */}
+            {detailsOpen && (
+                <div
+                    className="ml-8 mr-2 mb-4 mt-1 p-4 bg-muted/30 rounded-lg border"
+                    style={{ marginLeft: level * 24 + 32 }}
+                >
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-4 gap-4 mb-4">
+                        <div className="bg-background p-3 rounded border">
+                            <div className="text-xs text-muted-foreground uppercase mb-1">Parts</div>
+                            <div className="text-lg font-semibold flex items-center gap-2">
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                                {assembly.assemblyParts.length}
+                            </div>
+                        </div>
+                        <div className="bg-background p-3 rounded border">
+                            <div className="text-xs text-muted-foreground uppercase mb-1">Pieces</div>
+                            <div className="text-lg font-semibold">
+                                <span className="text-green-600">{progress.ready}</span>
+                                <span className="text-muted-foreground"> / {progress.total}</span>
+                            </div>
+                        </div>
+                        <div className="bg-background p-3 rounded border">
+                            <div className="text-xs text-muted-foreground uppercase mb-1">Weight</div>
+                            <div className="text-lg font-semibold flex items-center gap-2">
+                                <Weight className="h-4 w-4 text-muted-foreground" />
+                                {totalWeight.toFixed(1)} kg
+                            </div>
+                        </div>
+                        <div className="bg-background p-3 rounded border">
+                            <div className="text-xs text-muted-foreground uppercase mb-1">Status</div>
+                            <Badge variant="outline" className={`${STATUS_COLORS[assembly.status] || ''} text-sm`}>
+                                {assembly.status.replace('_', ' ')}
+                            </Badge>
+                        </div>
+                    </div>
+
+                    {/* Parts Table */}
+                    {assembly.assemblyParts.length > 0 ? (
+                        <div className="border rounded overflow-hidden bg-background">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead>Part #</TableHead>
+                                        <TableHead>Profile</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead className="text-center">Qty</TableHead>
+                                        <TableHead className="text-center">Ready</TableHead>
+                                        <TableHead className="text-right">Weight</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {assembly.assemblyParts.map((ap, idx) => {
+                                        const ready = ap.part.pieces.filter(p => p.status === 'READY').length
+                                        const needed = ap.quantityInAssembly
+                                        const isComplete = ready >= needed
+                                        return (
+                                            <TableRow key={idx}>
+                                                <TableCell className="font-mono">{ap.part.partNumber}</TableCell>
+                                                <TableCell>
+                                                    {ap.part.profile
+                                                        ? `${ap.part.profile.type} ${ap.part.profile.dimensions}`
+                                                        : '-'
+                                                    }
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground">
+                                                    {ap.part.description || '-'}
+                                                </TableCell>
+                                                <TableCell className="text-center">{needed}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <span className={isComplete ? 'text-green-600 font-medium' : ready > 0 ? 'text-orange-600' : 'text-muted-foreground'}>
+                                                        {ready}
+                                                        {isComplete && <Check className="h-3 w-3 inline ml-1" />}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {ap.part.unitWeight
+                                                        ? `${(ap.part.unitWeight * needed).toFixed(1)} kg`
+                                                        : '-'
+                                                    }
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    ) : (
+                        <div className="text-center py-6 text-muted-foreground bg-background rounded border">
+                            <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p>No parts in this assembly</p>
+                        </div>
+                    )}
+
+                    {/* Notes */}
+                    {assembly.notes && (
+                        <div className="mt-4 p-3 bg-background border rounded">
+                            <div className="text-xs text-muted-foreground uppercase mb-1">Notes</div>
+                            <p className="text-sm">{assembly.notes}</p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Child Assemblies */}
             {hasChildren && expanded && (
                 <div className="mt-1">
                     {assembly.children.map(child => (
@@ -107,7 +250,6 @@ function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: num
 }
 
 export function AssembliesTree({ assemblies }: AssembliesTreeProps) {
-    // Build tree structure (show only root-level assemblies)
     const rootAssemblies = assemblies.filter(a => !a.parentId)
 
     if (rootAssemblies.length === 0) {
