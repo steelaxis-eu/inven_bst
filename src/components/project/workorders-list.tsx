@@ -339,49 +339,197 @@ export function WorkOrdersList({ workOrders }: WorkOrdersListProps) {
     )
 }
 
-// Summary cards for work orders
-export function WorkOrderSummary({ workOrders }: { workOrders: WorkOrder[] }) {
-    const pending = workOrders.filter(wo => wo.status === 'PENDING').length
-    const inProgress = workOrders.filter(wo => wo.status === 'IN_PROGRESS').length
-    const completed = workOrders.filter(wo => wo.status === 'COMPLETED').length
-    const urgent = workOrders.filter(wo => wo.priority === 'URGENT' && wo.status !== 'COMPLETED').length
+// Process type labels and colors
+const PROCESS_TYPES = [
+    { type: 'MATERIAL_PREP', label: 'Material Prep', color: 'amber', bgColor: 'bg-amber-100', textColor: 'text-amber-800', borderColor: 'border-amber-500' },
+    { type: 'CUTTING', label: 'Cutting', color: 'blue', bgColor: 'bg-blue-100', textColor: 'text-blue-800', borderColor: 'border-blue-500' },
+    { type: 'MACHINING', label: 'Machining', color: 'cyan', bgColor: 'bg-cyan-100', textColor: 'text-cyan-800', borderColor: 'border-cyan-500' },
+    { type: 'FABRICATION', label: 'Fabrication', color: 'yellow', bgColor: 'bg-yellow-100', textColor: 'text-yellow-800', borderColor: 'border-yellow-500' },
+    { type: 'WELDING', label: 'Welding', color: 'orange', bgColor: 'bg-orange-100', textColor: 'text-orange-800', borderColor: 'border-orange-500' },
+    { type: 'COATING', label: 'Coating', color: 'purple', bgColor: 'bg-purple-100', textColor: 'text-purple-800', borderColor: 'border-purple-500' },
+    { type: 'ASSEMBLY', label: 'Assembly', color: 'green', bgColor: 'bg-green-100', textColor: 'text-green-800', borderColor: 'border-green-500' },
+]
+
+// Process card with expandable WO table
+function ProcessCard({
+    processType,
+    workOrders,
+    expanded,
+    onToggle
+}: {
+    processType: typeof PROCESS_TYPES[0]
+    workOrders: WorkOrder[]
+    expanded: boolean
+    onToggle: () => void
+}) {
+    const pending = workOrders.filter(wo => wo.status === 'PENDING')
+    const inProgress = workOrders.filter(wo => wo.status === 'IN_PROGRESS')
+    const completed = workOrders.filter(wo => wo.status === 'COMPLETED')
+
+    if (workOrders.length === 0) return null
 
     return (
-        <div className="grid grid-cols-4 gap-4 mb-6">
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
+        <div className="space-y-2">
+            <Card
+                className={`cursor-pointer hover:shadow-md transition-shadow border-t-4 ${processType.borderColor} ${expanded ? 'ring-2 ring-primary' : ''}`}
+                onClick={onToggle}
+            >
+                <CardHeader className="pb-2 pt-3">
+                    <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-medium">{processType.label}</CardTitle>
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </div>
                 </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-gray-600">{pending}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-blue-600">{inProgress}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{completed}</div>
-                </CardContent>
-            </Card>
-            <Card className={urgent > 0 ? 'border-red-300 bg-red-50/50' : ''}>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Urgent</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className={`text-2xl font-bold ${urgent > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                        {urgent}
+                <CardContent className="pt-0">
+                    <div className="flex items-center gap-3 text-xs">
+                        <div className="flex flex-col items-center">
+                            <span className="text-lg font-bold text-gray-500">{pending.length}</span>
+                            <span className="text-muted-foreground">Pending</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="text-lg font-bold text-blue-600">{inProgress.length}</span>
+                            <span className="text-muted-foreground">Active</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="text-lg font-bold text-green-600">{completed.length}</span>
+                            <span className="text-muted-foreground">Done</span>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
+
+            {expanded && (
+                <div className={`p-4 rounded-lg border-2 ${processType.borderColor} ${processType.bgColor} space-y-4`}>
+                    {/* Pending WOs */}
+                    {pending.length > 0 && (
+                        <div>
+                            <h4 className="text-xs uppercase font-semibold text-muted-foreground mb-2">Pending ({pending.length})</h4>
+                            <div className="bg-background rounded border overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/30">
+                                            <TableHead className="text-xs">WO #</TableHead>
+                                            <TableHead className="text-xs">Title</TableHead>
+                                            <TableHead className="text-xs text-center">Items</TableHead>
+                                            <TableHead className="text-xs">Priority</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {pending.map(wo => (
+                                            <TableRow key={wo.id}>
+                                                <TableCell className="font-mono text-xs">{wo.workOrderNumber}</TableCell>
+                                                <TableCell className="text-xs">{wo.title}</TableCell>
+                                                <TableCell className="text-center text-xs">{wo.items.length}</TableCell>
+                                                <TableCell>
+                                                    <span className={`text-xs ${PRIORITY_COLORS[wo.priority]}`}>{wo.priority}</span>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* In Progress WOs */}
+                    {inProgress.length > 0 && (
+                        <div>
+                            <h4 className="text-xs uppercase font-semibold text-muted-foreground mb-2">In Progress ({inProgress.length})</h4>
+                            <div className="bg-background rounded border overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/30">
+                                            <TableHead className="text-xs">WO #</TableHead>
+                                            <TableHead className="text-xs">Title</TableHead>
+                                            <TableHead className="text-xs text-center">Progress</TableHead>
+                                            <TableHead className="text-xs">Priority</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {inProgress.map(wo => {
+                                            const done = wo.items.filter(i => i.status === 'COMPLETED').length
+                                            return (
+                                                <TableRow key={wo.id}>
+                                                    <TableCell className="font-mono text-xs">{wo.workOrderNumber}</TableCell>
+                                                    <TableCell className="text-xs">{wo.title}</TableCell>
+                                                    <TableCell className="text-center text-xs font-mono">{done}/{wo.items.length}</TableCell>
+                                                    <TableCell>
+                                                        <span className={`text-xs ${PRIORITY_COLORS[wo.priority]}`}>{wo.priority}</span>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    )}
+
+                    {pending.length === 0 && inProgress.length === 0 && (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                            All {processType.label} work orders completed
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     )
 }
+
+// Summary cards grouped by process type with expandable detail
+export function WorkOrderSummary({ workOrders }: { workOrders: WorkOrder[] }) {
+    const [expandedType, setExpandedType] = useState<string | null>(null)
+
+    // Get types that have WOs
+    const activeTypes = PROCESS_TYPES.filter(pt =>
+        workOrders.some(wo => wo.type === pt.type)
+    )
+
+    if (activeTypes.length === 0) {
+        return null
+    }
+
+    return (
+        <div className="space-y-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                {PROCESS_TYPES.map(pt => (
+                    <ProcessCard
+                        key={pt.type}
+                        processType={pt}
+                        workOrders={workOrders.filter(wo => wo.type === pt.type)}
+                        expanded={expandedType === pt.type}
+                        onToggle={() => setExpandedType(expandedType === pt.type ? null : pt.type)}
+                    />
+                ))}
+            </div>
+
+            {/* Overall Summary */}
+            <div className="flex gap-4 p-3 bg-muted/30 rounded-lg text-sm">
+                <div>
+                    <span className="text-muted-foreground">Total: </span>
+                    <span className="font-semibold">{workOrders.length}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground">Pending: </span>
+                    <span className="font-semibold text-gray-600">{workOrders.filter(wo => wo.status === 'PENDING').length}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground">In Progress: </span>
+                    <span className="font-semibold text-blue-600">{workOrders.filter(wo => wo.status === 'IN_PROGRESS').length}</span>
+                </div>
+                <div>
+                    <span className="text-muted-foreground">Completed: </span>
+                    <span className="font-semibold text-green-600">{workOrders.filter(wo => wo.status === 'COMPLETED').length}</span>
+                </div>
+                {workOrders.filter(wo => wo.priority === 'URGENT' && wo.status !== 'COMPLETED').length > 0 && (
+                    <div className="ml-auto">
+                        <span className="text-red-600 font-semibold">
+                            ⚠ {workOrders.filter(wo => wo.priority === 'URGENT' && wo.status !== 'COMPLETED').length} Urgent
+                        </span>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+

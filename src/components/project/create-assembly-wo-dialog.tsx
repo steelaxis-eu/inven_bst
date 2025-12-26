@@ -84,7 +84,7 @@ export function CreateAssemblyWODialog({
                 if (!prepRes.success) {
                     toast.error(`Part Prep WO Error: ${prepRes.error}`)
                 } else {
-                    toast.success(`Part Prep WO created: ${prepRes.data?.workOrderNumber}`)
+                    toast.success(`Part Prep WO created: ${prepRes.data?.mainWO?.workOrderNumber}`)
                 }
             }
 
@@ -104,7 +104,7 @@ export function CreateAssemblyWODialog({
                 return
             }
 
-            toast.success(`Assembly WO created: ${res.data?.workOrderNumber}`)
+            toast.success(`Assembly WO created: ${res.data?.id}`)
             if (!res.allReady) {
                 toast.info('Work Order is PENDING - waiting for parts')
             }

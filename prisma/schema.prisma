@@ -393,7 +393,7 @@ model WorkOrder {
   workOrderNumber String             // e.g., "WO-2024-001"
   title         String
   description   String?
-  type          String              // CUTTING, FABRICATION, WELDING, PAINTING, ASSEMBLY
+  type          String              // MATERIAL_PREP, CUTTING, MACHINING, FABRICATION, WELDING, PAINTING, ASSEMBLY
   priority      String    @default("MEDIUM")  // LOW, MEDIUM, HIGH, URGENT
   status        String    @default("PENDING")  // PENDING → IN_PROGRESS → COMPLETED → CANCELLED
   assignedTo    String?             // Worker/team
@@ -401,18 +401,22 @@ model WorkOrder {
   startedAt     DateTime?
   completedAt   DateTime?
   notes         String?
+  blockedByWOId String?             // WO that must complete before this can start
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Relations
   project       Project         @relation(fields: [projectId], references: [id])
   items         WorkOrderItem[]
+  blockedBy     WorkOrder?      @relation("WOBlocking", fields: [blockedByWOId], references: [id])
+  blocking      WorkOrder[]     @relation("WOBlocking")
 
   @@unique([projectId, workOrderNumber])
   @@index([projectId])
   @@index([status])
   @@index([type])
   @@index([scheduledDate])
+  @@index([blockedByWOId])
 }
 
 // WorkOrderItem: Links pieces or assemblies to a work order

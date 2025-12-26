@@ -385,33 +385,170 @@ export async function checkAssemblyReadiness(assemblyIds: string[]): Promise<{
         return { success: false, error: e.message }
     }
 }
+/**
+ * Check if inventory has sufficient stock for cutting pieces
+ * Returns pieces grouped by profile type and whether stock is available
+ */
+export async function checkMaterialStock(pieceIds: string[]): Promise<{
+    success: boolean
+    data?: {
+        inStock: { pieceId: string; profileType: string; dimensions: string }[]
+        needsMaterial: { pieceId: string; profileType: string; dimensions: string }[]
+    }
+    error?: string
+}> {
+    try {
+        // Get pieces with their part profiles
+        const pieces = await prisma.partPiece.findMany({
+            where: { id: { in: pieceIds } },
+            include: {
+                part: {
+                    include: { profile: true }
+                }
+            }
+        })
+
+        // Get inventory for matching profiles
+        const profileTypes = [...new Set(pieces.map(p => p.part.profile?.type).filter(Boolean))]
+        const profileDims = [...new Set(pieces.map(p => p.part.profile?.dimensions).filter(Boolean))]
+
+        const inventoryItems = await prisma.inventory.findMany({
+            where: {
+                NOT: { profileId: undefined },
+                status: 'AVAILABLE'
+            },
+            include: { profile: true }
+        })
+
+        // Filter to matching profiles
+        const inventory = inventoryItems.filter(inv =>
+            profileTypes.includes(inv.profile?.type) &&
+            profileDims.includes(inv.profile?.dimensions)
+        )
+
+        const inStock: { pieceId: string; profileType: string; dimensions: string }[] = []
+        const needsMaterial: { pieceId: string; profileType: string; dimensions: string }[] = []
+
+        pieces.forEach(piece => {
+            const profile = piece.part.profile
+            if (!profile) {
+                inStock.push({ pieceId: piece.id, profileType: 'Unknown', dimensions: '' })
+                return
+            }
+
+            const hasStock = inventory.some(inv =>
+                inv.profile?.type === profile.type &&
+                inv.profile?.dimensions === profile.dimensions
+            )
+
+            if (hasStock) {
+                inStock.push({ pieceId: piece.id, profileType: profile.type, dimensions: profile.dimensions })
+            } else {
+                needsMaterial.push({ pieceId: piece.id, profileType: profile.type, dimensions: profile.dimensions })
+            }
+        })
+
+        return { success: true, data: { inStock, needsMaterial } }
+
+    } catch (e: any) {
+        console.error('checkMaterialStock error:', e)
+        return { success: false, error: e.message }
+    }
+}
 
 /**
- * Create Part Prep work order (CUTTING type) for pieces that need fabrication
+ * Create Work Order with smart stock checking
+ * - If CUTTING and no stock: Creates MATERIAL_PREP first, then CUTTING blocked by it
+ * - Otherwise creates the requested WO type
  */
-export async function createPartPrepWorkOrder(input: {
+export async function createSmartWorkOrder(input: {
     projectId: string
     pieceIds: string[]
+    type: 'MATERIAL_PREP' | 'CUTTING' | 'MACHINING' | 'FABRICATION' | 'WELDING' | 'PAINTING'
     title?: string
     priority?: string
     scheduledDate?: Date
     notes?: string
-}) {
+}): Promise<{
+    success: boolean
+    data?: { mainWO: any; prepWO?: any }
+    needsMaterialPrep?: boolean
+    error?: string
+}> {
     try {
-        const { projectId, pieceIds, title, priority, scheduledDate, notes } = input
+        const { projectId, pieceIds, type, title, priority, scheduledDate, notes } = input
 
         if (!projectId || pieceIds.length === 0) {
             return { success: false, error: 'Project ID and pieces required' }
         }
 
-        const workOrderNumber = await generateWorkOrderNumber(projectId)
+        // For CUTTING, check stock first
+        if (type === 'CUTTING') {
+            const stockCheck = await checkMaterialStock(pieceIds)
+            if (!stockCheck.success) {
+                return { success: false, error: stockCheck.error }
+            }
 
+            const { inStock, needsMaterial } = stockCheck.data!
+
+            // If some pieces need material, create MATERIAL_PREP WO first
+            if (needsMaterial.length > 0) {
+                const prepWONumber = await generateWorkOrderNumber(projectId)
+                const mainWONumber = await generateWorkOrderNumber(projectId)
+
+                // Create MATERIAL_PREP WO
+                const prepWO = await prisma.workOrder.create({
+                    data: {
+                        projectId,
+                        workOrderNumber: prepWONumber,
+                        title: `Material Prep: ${[...new Set(needsMaterial.map(m => m.profileType))].join(', ')}`,
+                        type: 'MATERIAL_PREP',
+                        priority: priority || 'MEDIUM',
+                        status: 'PENDING',
+                        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                        notes: `Profiles needed:\n${[...new Set(needsMaterial.map(m => `${m.profileType} ${m.dimensions}`))].join('\n')}`,
+                        items: {
+                            create: needsMaterial.map(m => ({ pieceId: m.pieceId }))
+                        }
+                    }
+                })
+
+                // Create CUTTING WO blocked by MATERIAL_PREP
+                const mainWO = await prisma.workOrder.create({
+                    data: {
+                        projectId,
+                        workOrderNumber: mainWONumber,
+                        title: title || 'Cutting',
+                        type: 'CUTTING',
+                        priority: priority || 'MEDIUM',
+                        status: 'PENDING',
+                        blockedByWOId: prepWO.id,
+                        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                        notes: `[Waiting for material - ${prepWO.workOrderNumber}]\n${notes || ''}`.trim(),
+                        items: {
+                            create: pieceIds.map(pieceId => ({ pieceId }))
+                        }
+                    },
+                    include: { items: true }
+                })
+
+                revalidatePath(`/projects/${projectId}`)
+                return {
+                    success: true,
+                    data: { mainWO, prepWO },
+                    needsMaterialPrep: true
+                }
+            }
+        }
+
+        // Create single WO (stock available or non-CUTTING type)
+        const workOrderNumber = await generateWorkOrderNumber(projectId)
         const wo = await prisma.workOrder.create({
             data: {
                 projectId,
                 workOrderNumber,
-                title: title || 'Part Preparation',
-                type: 'CUTTING',
+                title: title || type,
+                type,
                 priority: priority || 'MEDIUM',
                 status: 'PENDING',
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
@@ -424,12 +561,30 @@ export async function createPartPrepWorkOrder(input: {
         })
 
         revalidatePath(`/projects/${projectId}`)
-        return { success: true, data: wo }
+        return { success: true, data: { mainWO: wo } }
 
     } catch (e: any) {
-        console.error('createPartPrepWorkOrder error:', e)
+        console.error('createSmartWorkOrder error:', e)
         return { success: false, error: e.message }
     }
+}
+
+/**
+ * Legacy: Create Part Prep work order
+ */
+export async function createPartPrepWorkOrder(input: {
+    projectId: string
+    pieceIds: string[]
+    title?: string
+    priority?: string
+    scheduledDate?: Date
+    notes?: string
+}) {
+    // Delegate to smart WO creator
+    return createSmartWorkOrder({
+        ...input,
+        type: 'CUTTING'
+    })
 }
 
 /**

@@ -59,7 +59,7 @@ export function CreatePartWODialog({
                 return
             }
 
-            toast.success(`Work order created: ${res.data?.workOrderNumber}`)
+            toast.success(`Work order created: ${res.data?.mainWO?.workOrderNumber}`)
             onOpenChange(false)
             router.refresh()
 
@@ -115,7 +115,7 @@ export function CreatePartWODialog({
                                     <SelectItem value="MACHINING">Drilling/Machining</SelectItem>
                                     <SelectItem value="FABRICATION">Fabrication</SelectItem>
                                     <SelectItem value="WELDING">Welding</SelectItem>
-                                    <SelectItem value="PAINTING">Painting</SelectItem>
+                                    <SelectItem value="COATING">Coating</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
