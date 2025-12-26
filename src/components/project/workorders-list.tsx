@@ -13,6 +13,7 @@ import { updateWorkOrderStatus, updateWorkOrderItemStatus, activateWorkOrder, co
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { BatchCutDialog } from "./batch-cut-dialog"
 
 interface WorkOrderItem {
     id: string
@@ -38,6 +39,7 @@ interface WorkOrderItem {
 
 interface WorkOrder {
     id: string
+    projectId: string
     workOrderNumber: string
     title: string
     description: string | null
@@ -85,6 +87,8 @@ function WorkOrderRow({ wo }: { wo: WorkOrder }) {
     const [loading, setLoading] = useState<string | null>(null)
     const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
     const [machinedPieceIds, setMachinedPieceIds] = useState<string[]>([])
+    const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<string[]>([])
+    const [batchCutDialogOpen, setBatchCutDialogOpen] = useState(false)
     const router = useRouter()
 
     const completedItems = wo.items.filter(i => i.status === 'COMPLETED').length
@@ -289,11 +293,39 @@ function WorkOrderRow({ wo }: { wo: WorkOrder }) {
                 <TableRow className="bg-muted/20 hover:bg-muted/20">
                     <TableCell colSpan={10} className="p-0">
                         <div className="px-8 py-4 space-y-2">
-                            <div className="text-xs uppercase text-muted-foreground mb-2">Work Order Items</div>
+                            <div className="flex justify-between items-center mb-2">
+                                <div className="text-xs uppercase text-muted-foreground">Work Order Items</div>
+                                {wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS' && (
+                                    <div className="flex gap-2">
+                                        {selectedBatchItemIds.length > 0 && (
+                                            <Button
+                                                size="sm"
+                                                onClick={() => setBatchCutDialogOpen(true)}
+                                            >
+                                                Record Usage / Cut ({selectedBatchItemIds.length})
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                             <div className="border rounded-lg overflow-hidden bg-background">
                                 <Table>
                                     <TableHeader>
                                         <TableRow className="bg-muted/30">
+                                            {wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS' && (
+                                                <TableHead className="w-10">
+                                                    <Checkbox
+                                                        checked={selectedBatchItemIds.length > 0 && selectedBatchItemIds.length === wo.items.filter(i => i.status !== 'COMPLETED').length}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setSelectedBatchItemIds(wo.items.filter(i => i.status !== 'COMPLETED').map(i => i.id))
+                                                            } else {
+                                                                setSelectedBatchItemIds([])
+                                                            }
+                                                        }}
+                                                    />
+                                                </TableHead>
+                                            )}
                                             <TableHead className="w-12">#</TableHead>
                                             <TableHead>Item</TableHead>
                                             <TableHead>Type</TableHead>
@@ -308,6 +340,24 @@ function WorkOrderRow({ wo }: { wo: WorkOrder }) {
                                                 key={item.id}
                                                 className={item.status === 'COMPLETED' ? 'bg-green-50/50' : ''}
                                             >
+                                                {wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS' && (
+                                                    <TableCell>
+                                                        {item.status !== 'COMPLETED' ? (
+                                                            <Checkbox
+                                                                checked={selectedBatchItemIds.includes(item.id)}
+                                                                onCheckedChange={(checked) => {
+                                                                    if (checked) {
+                                                                        setSelectedBatchItemIds([...selectedBatchItemIds, item.id])
+                                                                    } else {
+                                                                        setSelectedBatchItemIds(selectedBatchItemIds.filter(id => id !== item.id))
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <Check className="h-4 w-4 text-green-500 opacity-50" />
+                                                        )}
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="font-mono text-muted-foreground">{idx + 1}</TableCell>
                                                 <TableCell className="font-medium">{getItemLabel(item)}</TableCell>
                                                 <TableCell>
@@ -426,6 +476,17 @@ function WorkOrderRow({ wo }: { wo: WorkOrder }) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <BatchCutDialog
+                open={batchCutDialogOpen}
+                onOpenChange={setBatchCutDialogOpen}
+                projectId={wo.projectId}
+                items={wo.items.filter(i => selectedBatchItemIds.includes(i.id))}
+                onSuccess={() => {
+                    setSelectedBatchItemIds([])
+                    router.refresh()
+                }}
+            />
         </>
     )
 }

@@ -3,298 +3,306 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
-export async function getUsageItem(query: string) {
-    if (!query) return null
-    const q = query.trim().toUpperCase()
+// ============================================================================
+// NEW BATCH LOGIC
+// ============================================================================
 
-    // 1. Try Inventory
-    const inv = await prisma.inventory.findUnique({
-        where: { lotId: q },
-        include: { profile: true, grade: true }
-    })
-
-    if (inv) {
-        return {
-            type: 'INVENTORY',
-            id: inv.id,
-            lotId: inv.lotId,
-            profile: inv.profile,
-            grade: inv.grade,
-            length: inv.length,
-            quantity: inv.quantityAtHand,
-            costPerMeter: inv.costPerMeter
-        }
-    }
-
-    // 2. Try Remnants
-    const rem = await prisma.remnant.findUnique({
-        where: { id: q },
-        include: { profile: true, grade: true }
-    })
-
-    if (rem && rem.status === 'AVAILABLE') {
-        return {
-            type: 'REMNANT',
-            id: rem.id,
-            lotId: rem.id, // Remnant ID serves as Lot ID
-            profile: rem.profile,
-            grade: rem.grade,
-            length: rem.length,
-            quantity: 1, // Remnants are individual
-            costPerMeter: rem.costPerMeter
-        }
-    }
-
-    return null
+export type CutItem = {
+    workOrderItemId: string
+    pieceId: string // Used to update piece status
+    quantity: number // usually 1
+    length: number // length used per piece (including kerf if needed? usually part length)
 }
 
-export async function updateUsageLine(
-    usageLineId: string,
-    newLengthUsed: number,
-    newStatus: 'SCRAP' | 'AVAILABLE' // Remnant or Scrap
-) {
+export type OffcutDetails = {
+    actualLength: number
+    valRemnantLength?: number
+    isScrap: boolean
+    reason?: string
+}
+
+/**
+ * Record usage for a batch of items cut from a single inventory source (Inventory or Remnant)
+ */
+export async function recordBatchUsage({
+    projectId,
+    sourceId,
+    sourceType,
+    cuts,
+    offcut,
+    userId = 'system' // TODO: Get from auth
+}: {
+    projectId: string
+    sourceId: string
+    sourceType: 'INVENTORY' | 'REMNANT'
+    cuts: CutItem[]
+    offcut?: OffcutDetails
+    userId?: string
+}) {
     try {
         return await prisma.$transaction(async (tx) => {
-            // 1. Fetch Usage Line with Relations
-            const usageLine = await tx.usageLine.findUnique({
-                where: { id: usageLineId },
-                include: {
-                    inventory: true,
-                    remnant: true,
-                }
-            })
+            // 1. Fetch Source
+            let sourceItem: any = null
+            let costPerMeter = 0
 
-            if (!usageLine) throw new Error('Usage line not found')
-
-            // Identify Source and Logic
-            const source = usageLine.inventory || usageLine.remnant
-            if (!source) throw new Error('Source material not found')
-
-            const isRemnantSource = !!usageLine.remnant
-            const rootLotId = isRemnantSource ? usageLine.remnant!.rootLotId : usageLine.inventory!.lotId
-            const originalLength = isRemnantSource ? usageLine.remnant!.length : usageLine.inventory!.length
-            const costPerMeter = source.costPerMeter || 0
-
-            // 2. Reverse Calculate Old State
-            const oldCost = usageLine.cost
-            // Avoid division by zero
-            const oldLengthUsed = costPerMeter > 0 ? (oldCost / costPerMeter) * 1000 : 0
-            const oldRemainingLength = originalLength - oldLengthUsed
-
-            // 3. Find Old Remnant (Heuristic: ID = RootLotId-Length)
-            const oldRemnantId = `${rootLotId}-${Math.floor(oldRemainingLength)}`
-            const oldRemnant = await tx.remnant.findUnique({
-                where: { id: oldRemnantId }
-            })
-
-            // Safety Check: If old remnant exists and is USED, allow no edits that affect geometry?
-            // Actually per requirement: BLOCK if used.
-            if (oldRemnant) {
-                if (oldRemnant.status === 'USED') {
-                    throw new Error('Cannot edit usage: The resulting remnant has already been used in another project.')
-                }
+            if (sourceType === 'INVENTORY') {
+                sourceItem = await tx.inventory.findUnique({
+                    where: { id: sourceId },
+                    include: { profile: true, grade: true }
+                })
+                if (!sourceItem) throw new Error('Inventory item not found')
+                costPerMeter = sourceItem.costPerMeter
             } else {
-                // If Old Remnant not found, it might have been fully consumed (if remaining was 0) or manually deleted?
-                // If remaining was > 0 and it's gone, data is inconsistent.
-                // We will proceed but warn? For now strict.
-                if (oldRemainingLength > 1) { // Tolerance
-                    // It's possible the ID formula changed or something. 
-                    // We can search strictly by rootLotId + approx length?
-                    // For now, let's try to proceed only if we don't need to delete it (e.g. if we are creating one now?)
-                    // But we need to cleanup old one.
-                    console.warn(`Old remnant ${oldRemnantId} not found during edit.`)
-                }
-            }
-
-            // 4. Update Usage Line
-            const newCost = (newLengthUsed / 1000) * costPerMeter
-            await tx.usageLine.update({
-                where: { id: usageLineId },
-                data: {
-                    cost: newCost,
-                    // We don't store lengthUsed explicitly on UsageLine, so rely on cost.
-                }
-            })
-
-            // 5. Handle Old Remnant Cleanup
-            if (oldRemnant) {
-                await tx.remnant.delete({
-                    where: { id: oldRemnantId }
+                sourceItem = await tx.remnant.findUnique({
+                    where: { id: sourceId },
+                    include: { profile: true, grade: true }
                 })
+                if (!sourceItem) throw new Error('Remnant not found')
+                costPerMeter = sourceItem.costPerMeter || 0
             }
 
-            // 6. Create New Remnant (if applicable)
-            const newRemainingLength = originalLength - newLengthUsed
-
-            if (newRemainingLength > 0) {
-                const newRemnantId = `${rootLotId}-${Math.floor(newRemainingLength)}`
-
-                // Check collision (unlikely if logic is correct, but possible if switching back to an existing remnant state?)
-                const collision = await tx.remnant.findUnique({ where: { id: newRemnantId } })
-                if (collision) {
-                    throw new Error(`Cannot update: A remnant with properties of the new result already exists (${newRemnantId}).`)
-                }
-
-                await tx.remnant.create({
-                    data: {
-                        id: newRemnantId,
-                        rootLotId,
-                        profileId: source.profileId,
-                        length: newRemainingLength,
-                        costPerMeter: costPerMeter,
-                        status: newStatus, // SCRAP or AVAILABLE
-                        gradeId: source.gradeId,
-                        projectId: usageLine.projectId || undefined, // inherit project linkage? or null? 
-                        // Original logic in route.ts used usage.projectId for scrap tracking.
-                        // usageLine has optional projectId. 
-                        // If we want to track scrap, we needs the project. 
-                        // let's fetch usage to be sure if needed, but usageLine.projectId might be enough if set.
-                    }
-                })
-            }
-
-            revalidatePath('/usage/history')
-            return { success: true }
-        })
-    } catch (error: any) {
-        console.error('Update Usage Error:', error)
-        return { success: false, error: error.message }
-    }
-}
-// ... existing imports ...
-
-// ... existing updateUsageLine ...
-
-import { getCurrentUser } from '@/lib/auth'
-
-export async function createUsage(projectId: string, _ignoredUserId: string, lines: any[]) {
-    try {
-        const user = await getCurrentUser()
-        if (!user || !user.id) {
-            throw new Error('Unauthorized: You must be logged in to register usage.')
-        }
-
-        if (!projectId || !lines || lines.length === 0) {
-            throw new Error('Missing required fields')
-        }
-
-        const result = await prisma.$transaction(async (tx) => {
-            // Create Usage Record
+            // 2. Create Usage Header
             const usage = await tx.usage.create({
                 data: {
                     projectId,
-                    userId: user.id,
-                    userName: user.name, // Save snapshot of name
-                    createdBy: user.id,
-                    modifiedBy: user.id
+                    userId, // NextAuth ID
+                    createdBy: userId,
+                    date: new Date()
                 }
             })
 
-            const results = []
-
-            for (const line of lines) {
-                const { type, id, lengthUsed, createRemnant } = line
-                let rootLotId = ''
-                let originalLength = 0
-                let profileId = ''
-                let gradeId = ''
-                let costPerMeter = 0
-                let item = null
-
-                if (type === 'INVENTORY') {
-                    const inventory = await tx.inventory.findUnique({ where: { id } })
-                    if (!inventory) throw new Error(`Inventory item ${id} not found`)
-                    if (inventory.quantityAtHand <= 0) throw new Error(`Inventory item ${id} is out of stock`)
-
-                    item = inventory
-                    rootLotId = inventory.lotId
-                    originalLength = inventory.length
-                    profileId = inventory.profileId
-                    gradeId = inventory.gradeId
-                    costPerMeter = inventory.costPerMeter || 0
-
-                    // Decrement quantity
-                    await tx.inventory.update({
-                        where: { id },
-                        data: { quantityAtHand: { decrement: 1 } }
-                    })
-
-                } else if (type === 'REMNANT') {
-                    const remnant = await tx.remnant.findUnique({ where: { id } })
-                    if (!remnant) throw new Error(`Remnant item ${id} not found`)
-                    if (remnant.status !== 'AVAILABLE') throw new Error(`Remnant item ${id} is not available`)
-
-                    item = remnant
-                    rootLotId = remnant.rootLotId
-                    originalLength = remnant.length
-                    profileId = remnant.profileId
-                    gradeId = remnant.gradeId
-                    costPerMeter = remnant.costPerMeter || 0
-
-                    // Mark as USED
-                    await tx.remnant.update({
-                        where: { id },
-                        data: { status: 'USED' }
-                    })
-                }
-
-                if (!item) throw new Error(`Item ${line.id} has invalid type`)
-
-                // Calculate Cost
-                const lineCost = (lengthUsed / 1000) * costPerMeter
+            // 3. Process Cuts
+            let totalLengthUsed = 0
+            for (const cut of cuts) {
+                totalLengthUsed += cut.length * cut.quantity
 
                 // Create Usage Line
                 await tx.usageLine.create({
                     data: {
                         usageId: usage.id,
-                        inventoryId: type === 'INVENTORY' ? id : undefined,
-                        remnantId: type === 'REMNANT' ? id : undefined,
-                        quantityUsed: 1, // Logic assumes 1 item used partially or fully
-                        projectId, // Optional override
-                        cost: lineCost
+                        [sourceType === 'INVENTORY' ? 'inventoryId' : 'remnantId']: sourceId,
+                        quantityUsed: cut.quantity,
+                        cost: (cut.length / 1000) * costPerMeter * cut.quantity,
+                        usageType: 'PROJECT_WO',
+                        workOrderItemId: cut.workOrderItemId,
+                        projectId
                     }
                 })
 
-                // Handle Remnant Creation (or Scrap)
-                const remainingLength = originalLength - lengthUsed
-
-                // Ensure remaining length is positive and reasonable
-                if (remainingLength > 0) {
-                    const newRemnantId = `${rootLotId}-${Math.floor(remainingLength)}`
-
-                    // Check if exists (idempotency safety)
-                    const existing = await tx.remnant.findUnique({ where: { id: newRemnantId } })
-
-                    if (!existing) {
-                        await tx.remnant.create({
-                            data: {
-                                id: newRemnantId,
-                                rootLotId,
-                                profileId,
-                                gradeId,
-                                length: remainingLength,
-                                costPerMeter: costPerMeter, // Propagate cost
-                                status: createRemnant ? 'AVAILABLE' : 'SCRAP', // TRUE = Remnant, FALSE = Scrap
-                                projectId, // Link to Origin Project for Scrap tracking
-                                createdBy: user.id || 'system',
-                                modifiedBy: user.id || 'system'
-                            }
-                        })
+                // Update Work Order Item Status
+                await tx.workOrderItem.update({
+                    where: { id: cut.workOrderItemId },
+                    data: {
+                        status: 'COMPLETED',
+                        completedAt: new Date()
                     }
-                }
+                })
 
-                results.push({ id, status: 'processed' })
+                // Update Piece Status
+                if (cut.pieceId) {
+                    await tx.partPiece.update({
+                        where: { id: cut.pieceId },
+                        data: {
+                            status: 'CUT',
+                            cutAt: new Date()
+                        }
+                    })
+                }
             }
 
-            return usage
+            // 4. Handle Source Update & Offcut/Remnant
+
+            const theoreticalRemnant = sourceItem.length - totalLengthUsed
+
+            if (theoreticalRemnant < 0) {
+                // Warning only? Or block? Block for safety.
+                throw new Error(`Usage (${totalLengthUsed}mm) exceeds source length (${sourceItem.length}mm)`)
+            }
+
+            if (sourceType === 'INVENTORY') {
+                if (sourceItem.quantityAtHand < 1) throw new Error('Insufficient inventory quantity')
+                await tx.inventory.update({
+                    where: { id: sourceId },
+                    data: { quantityAtHand: { decrement: 1 } }
+                })
+            } else {
+                // Remove used remnant
+                await tx.remnant.delete({ where: { id: sourceId } })
+            }
+
+            // 5. Create NEW Remnant for the offcut (if valid)
+            if (offcut) {
+                const scrapLength = theoreticalRemnant - offcut.actualLength
+
+                if (Math.abs(scrapLength) > 1) { // 1mm tolerance
+                    // Record Scrap Line (Process Loss)
+                    await tx.usageLine.create({
+                        data: {
+                            usageId: usage.id,
+                            [sourceType === 'INVENTORY' ? 'inventoryId' : 'remnantId']: sourceId,
+                            quantityUsed: 1, // It's part of the same bar
+                            cost: (scrapLength / 1000) * costPerMeter,
+                            usageType: 'PROCESS_LOSS',
+                            projectId,
+                            isScrap: true,
+                            valRemnantLength: offcut.actualLength,
+                            overrideReason: offcut.reason || 'Process Loss / Kerf'
+                        }
+                    })
+                }
+
+                if (!offcut.isScrap && offcut.actualLength > 100) {
+                    // Create New Remnant
+                    await tx.remnant.create({
+                        data: {
+                            id: `${sourceItem.lotId || sourceItem.rootLotId}-R${Math.floor(Math.random() * 1000)}`, // Generate ID
+                            rootLotId: sourceItem.lotId || sourceItem.rootLotId, // Correctly link to root
+                            length: offcut.actualLength,
+                            profileId: sourceItem.profileId,
+                            gradeId: sourceItem.gradeId,
+                            costPerMeter: costPerMeter,
+                            projectId: projectId // Link to project
+                        }
+                    })
+                } else if (offcut.isScrap && offcut.actualLength > 0) {
+                    // Record the main offcut as SCRAP usage
+                    await tx.usageLine.create({
+                        data: {
+                            usageId: usage.id,
+                            [sourceType === 'INVENTORY' ? 'inventoryId' : 'remnantId']: sourceId,
+                            quantityUsed: 1,
+                            cost: (offcut.actualLength / 1000) * costPerMeter,
+                            usageType: 'SCRAP',
+                            projectId,
+                            isScrap: true,
+                            overrideReason: 'Marked as Scrap by User'
+                        }
+                    })
+                }
+            }
+
+            return { success: true }
         })
+    } catch (e: any) {
+        console.error('recordBatchUsage error:', e)
+        return { success: false, error: e.message }
+    }
+}
 
+// ============================================================================
+// LEGACY / MANUAL USAGE SUPPORT
+// ============================================================================
+
+export async function getUsageItem(query: string) {
+    // Search Inventory by lotId (exact)
+    const inv = await prisma.inventory.findUnique({
+        where: { lotId: query },
+        include: { profile: true, grade: true }
+    })
+
+    if (inv) return { ...inv, type: 'INVENTORY' }
+
+    // Search Remnant by ID
+    const rem = await prisma.remnant.findUnique({
+        where: { id: query },
+        include: { profile: true, grade: true }
+    })
+    if (rem) return { ...rem, type: 'REMNANT' }
+
+    return null
+}
+
+export async function createUsage(projectId: string, userIdArg: string, lines: any[]) {
+    const userId = userIdArg || 'system'
+    try {
+        return await prisma.$transaction(async (tx) => {
+            const usage = await tx.usage.create({
+                data: {
+                    projectId,
+                    userId,
+                    createdBy: userId,
+                    date: new Date()
+                }
+            })
+
+            for (const line of lines) {
+                const sourceType = line.type === 'REMNANT' ? 'REMNANT' : 'INVENTORY'
+                let sourceItem: any
+                let costPerMeter = 0
+
+                if (sourceType === 'INVENTORY') {
+                    sourceItem = await tx.inventory.findUnique({ where: { id: line.id } })
+                    costPerMeter = sourceItem?.costPerMeter || 0
+                    if (sourceItem) await tx.inventory.update({
+                        where: { id: line.id },
+                        data: { quantityAtHand: { decrement: 1 } }
+                    })
+                } else {
+                    sourceItem = await tx.remnant.findUnique({ where: { id: line.id } })
+                    costPerMeter = sourceItem?.costPerMeter || 0
+                    if (sourceItem) await tx.remnant.delete({ where: { id: line.id } })
+                }
+
+                if (!sourceItem) continue
+
+                // Create Usage Line
+                await tx.usageLine.create({
+                    data: {
+                        usageId: usage.id,
+                        [sourceType === 'INVENTORY' ? 'inventoryId' : 'remnantId']: line.id,
+                        quantityUsed: 1,
+                        cost: (line.lengthUsed / 1000) * costPerMeter,
+                        projectId: line.projectId || projectId,
+                        usageType: 'STANDALONE'
+                    }
+                })
+
+                // Create Remnant if requested
+                const remainder = sourceItem.length - line.lengthUsed
+                if (line.createRemnant && remainder > 0) {
+                    await tx.remnant.create({
+                        data: {
+                            id: `${sourceItem.lotId || sourceItem.rootLotId}-R${Math.floor(Math.random() * 1000)}`,
+                            rootLotId: sourceItem.lotId || sourceItem.rootLotId,
+                            length: remainder,
+                            profileId: sourceItem.profileId,
+                            gradeId: sourceItem.gradeId,
+                            costPerMeter: costPerMeter,
+                            projectId: line.projectId || projectId
+                        }
+                    })
+                }
+            }
+            return { success: true }
+        })
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
+
+// Stub for now if edit dialog needs it, or implement empty if unused?
+// edit-usage-dialog seemed to import updateUsageLine
+export async function updateUsageLine(id: string, length: number, status: string) {
+    // Placeholder implementation as specific requirements weren't in view
+    return { success: false, error: "Not implemented" }
+}
+
+export async function deleteUsageLine(id: string) {
+    try {
+        await prisma.usageLine.delete({ where: { id } })
         revalidatePath('/usage')
-        revalidatePath('/usage/history')
-        return { success: true, usageId: result.id }
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}
 
-    } catch (error: any) {
-        console.error('Usage Error:', error)
-        return { success: false, error: error.message }
+export async function deleteUsage(id: string) {
+    try {
+        await prisma.usage.delete({ where: { id } })
+        revalidatePath('/usage')
+        return { success: true }
+    } catch (e: any) {
+        return { success: false, error: e.message }
     }
 }

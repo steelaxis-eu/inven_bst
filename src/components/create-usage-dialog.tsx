@@ -165,7 +165,7 @@ export function CreateUsageDialog({ projects, trigger }: CreateUsageDialogProps)
                 setLines([])
                 setGlobalProject('')
             } else {
-                toast.error(res.error)
+                toast.error((res as any).error)
             }
 
         } catch (e) {

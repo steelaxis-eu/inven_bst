@@ -182,14 +182,23 @@ model UsageLine {
   cost         Float   @default(0)
   projectId    String? // Optional override
 
-  usage        Usage      @relation(fields: [usageId], references: [id], onDelete: Cascade)
-  inventory    Inventory? @relation(fields: [inventoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  remnant      Remnant?   @relation(fields: [remnantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  project      Project?   @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Enhanced Fields
+  workOrderItemId  String?
+  usageType        String  @default("STANDALONE") // PROJECT_WO, PROJECT_CONDUCTOR, INTERNAL, STANDALONE
+  valRemnantLength Float?  // Adjusted offcut length (if different from calc)
+  isScrap          Boolean @default(false)
+  overrideReason   String?
+
+  usage            Usage          @relation(fields: [usageId], references: [id], onDelete: Cascade)
+  inventory        Inventory?     @relation(fields: [inventoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  remnant          Remnant?       @relation(fields: [remnantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  project          Project?       @relation(fields: [projectId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workOrderItem    WorkOrderItem? @relation(fields: [workOrderItemId], references: [id])
 
   @@index([usageId])
   @@index([inventoryId])
   @@index([remnantId])
+  @@index([workOrderItemId])
 }
 
 // ============================================================================
@@ -435,6 +444,7 @@ model WorkOrderItem {
   piece         PartPiece? @relation(fields: [pieceId], references: [id])
   assembly      Assembly?  @relation(fields: [assemblyId], references: [id])
   platePart     PlatePart? @relation(fields: [platePartId], references: [id])
+  usageLines    UsageLine[]
 
   @@index([workOrderId])
   @@index([pieceId])
