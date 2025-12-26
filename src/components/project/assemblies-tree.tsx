@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ChevronDown, ChevronRight, Layers, Package, Calendar, Weight, Edit, Check } from 'lucide-react'
+import { Checkbox } from "@/components/ui/checkbox"
+import { ChevronDown, ChevronRight, Layers, Package, Calendar, Weight, Check, Wrench } from 'lucide-react'
 import { useState } from 'react'
+import { CreateAssemblyWODialog } from './create-assembly-wo-dialog'
 
 interface Assembly {
     id: string
@@ -35,6 +37,7 @@ interface Assembly {
 
 interface AssembliesTreeProps {
     assemblies: Assembly[]
+    projectId: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -69,7 +72,17 @@ function getTotalWeight(assembly: Assembly): number {
     }, 0)
 }
 
-function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: number }) {
+function AssemblyItem({
+    assembly,
+    level = 0,
+    selected,
+    onSelect
+}: {
+    assembly: Assembly
+    level?: number
+    selected: boolean
+    onSelect: (id: string, checked: boolean) => void
+}) {
     const [expanded, setExpanded] = useState(false)
     const [detailsOpen, setDetailsOpen] = useState(false)
     const hasChildren = assembly.children && assembly.children.length > 0
@@ -85,15 +98,27 @@ function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: num
         setExpanded(!expanded)
     }
 
+    const handleCheckboxClick = (e: React.MouseEvent) => {
+        e.stopPropagation()
+    }
+
     return (
         <div className="w-full">
             {/* Main Row */}
             <div
                 className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer border-l-4 transition-colors ${progress.percent === 100 ? 'border-l-green-500' : progress.percent > 0 ? 'border-l-blue-500' : 'border-l-gray-300'
-                    } ${detailsOpen ? 'bg-muted/50' : ''}`}
+                    } ${detailsOpen ? 'bg-muted/50' : ''} ${selected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
                 style={{ marginLeft: level * 24 }}
                 onClick={handleRowClick}
             >
+                {/* Selection Checkbox */}
+                <div onClick={handleCheckboxClick}>
+                    <Checkbox
+                        checked={selected}
+                        onCheckedChange={(checked) => onSelect(assembly.id, checked === true)}
+                    />
+                </div>
+
                 {hasChildren ? (
                     <span
                         className="text-muted-foreground hover:text-foreground"
@@ -241,7 +266,13 @@ function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: num
             {hasChildren && expanded && (
                 <div className="mt-1">
                     {assembly.children.map(child => (
-                        <AssemblyItem key={child.id} assembly={child} level={level + 1} />
+                        <AssemblyItem
+                            key={child.id}
+                            assembly={child}
+                            level={level + 1}
+                            selected={selected}
+                            onSelect={onSelect}
+                        />
                     ))}
                 </div>
             )}
@@ -249,8 +280,27 @@ function AssemblyItem({ assembly, level = 0 }: { assembly: Assembly; level?: num
     )
 }
 
-export function AssembliesTree({ assemblies }: AssembliesTreeProps) {
+export function AssembliesTree({ assemblies, projectId }: AssembliesTreeProps) {
+    const [selectedIds, setSelectedIds] = useState<string[]>([])
+    const [woDialogOpen, setWoDialogOpen] = useState(false)
+
     const rootAssemblies = assemblies.filter(a => !a.parentId)
+
+    const handleSelect = (id: string, checked: boolean) => {
+        if (checked) {
+            setSelectedIds([...selectedIds, id])
+        } else {
+            setSelectedIds(selectedIds.filter(i => i !== id))
+        }
+    }
+
+    const handleSelectAll = () => {
+        if (selectedIds.length === assemblies.length) {
+            setSelectedIds([])
+        } else {
+            setSelectedIds(assemblies.map(a => a.id))
+        }
+    }
 
     if (rootAssemblies.length === 0) {
         return (
@@ -263,10 +313,55 @@ export function AssembliesTree({ assemblies }: AssembliesTreeProps) {
     }
 
     return (
-        <div className="space-y-2">
-            {rootAssemblies.map(assembly => (
-                <AssemblyItem key={assembly.id} assembly={assembly} />
-            ))}
+        <div className="space-y-4">
+            {/* Selection Toolbar */}
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-3">
+                    <Checkbox
+                        checked={selectedIds.length === assemblies.length}
+                        onCheckedChange={handleSelectAll}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                        {selectedIds.length > 0
+                            ? `${selectedIds.length} selected`
+                            : 'Select assemblies'
+                        }
+                    </span>
+                </div>
+                {selectedIds.length > 0 && (
+                    <Button
+                        size="sm"
+                        onClick={() => setWoDialogOpen(true)}
+                        className="gap-2"
+                    >
+                        <Wrench className="h-4 w-4" />
+                        Create Work Order ({selectedIds.length})
+                    </Button>
+                )}
+            </div>
+
+            {/* Assembly List */}
+            <div className="space-y-2">
+                {rootAssemblies.map(assembly => (
+                    <AssemblyItem
+                        key={assembly.id}
+                        assembly={assembly}
+                        selected={selectedIds.includes(assembly.id)}
+                        onSelect={handleSelect}
+                    />
+                ))}
+            </div>
+
+            {/* Create WO Dialog */}
+            <CreateAssemblyWODialog
+                projectId={projectId}
+                selectedAssemblyIds={selectedIds}
+                open={woDialogOpen}
+                onOpenChange={(open) => {
+                    setWoDialogOpen(open)
+                    if (!open) setSelectedIds([])  // Clear selection when dialog closes
+                }}
+            />
         </div>
     )
 }

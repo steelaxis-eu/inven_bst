@@ -291,3 +291,279 @@ export async function deleteWorkOrder(workOrderId: string) {
         return { success: false, error: e.message }
     }
 }
+
+// ============================================================================
+// ASSEMBLY WORK ORDER WORKFLOW
+// ============================================================================
+
+export interface PartReadiness {
+    partId: string
+    partNumber: string
+    profileType: string
+    profileDimensions: string
+    needed: number
+    ready: number
+    inProgress: number
+    notStarted: number
+    isReady: boolean
+    pieces: { id: string; pieceNumber: number; status: string }[]
+}
+
+export interface AssemblyReadiness {
+    assemblyId: string
+    assemblyNumber: string
+    name: string
+    isReady: boolean
+    parts: PartReadiness[]
+}
+
+/**
+ * Check readiness of assemblies for creating work order
+ * Returns which parts/pieces are ready vs need preparation
+ */
+export async function checkAssemblyReadiness(assemblyIds: string[]): Promise<{
+    success: boolean
+    data?: AssemblyReadiness[]
+    error?: string
+}> {
+    try {
+        const assemblies = await prisma.assembly.findMany({
+            where: { id: { in: assemblyIds } },
+            include: {
+                assemblyParts: {
+                    include: {
+                        part: {
+                            include: {
+                                profile: true,
+                                pieces: {
+                                    select: { id: true, pieceNumber: true, status: true }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        })
+
+        const result: AssemblyReadiness[] = assemblies.map(asm => {
+            const parts: PartReadiness[] = asm.assemblyParts.map(ap => {
+                const needed = ap.quantityInAssembly
+                const pieces = ap.part.pieces
+                const ready = pieces.filter(p => p.status === 'READY').length
+                const inProgress = pieces.filter(p =>
+                    ['CUT', 'FABRICATED', 'WELDED', 'PAINTED'].includes(p.status)
+                ).length
+                const notStarted = pieces.filter(p => p.status === 'NOT_STARTED').length
+
+                return {
+                    partId: ap.part.id,
+                    partNumber: ap.part.partNumber,
+                    profileType: ap.part.profile?.type || '',
+                    profileDimensions: ap.part.profile?.dimensions || '',
+                    needed,
+                    ready: Math.min(ready, needed),
+                    inProgress: Math.min(inProgress, Math.max(0, needed - ready)),
+                    notStarted: Math.max(0, needed - ready - inProgress),
+                    isReady: ready >= needed,
+                    pieces: pieces.slice(0, needed) // Only show needed pieces
+                }
+            })
+
+            return {
+                assemblyId: asm.id,
+                assemblyNumber: asm.assemblyNumber,
+                name: asm.name,
+                isReady: parts.every(p => p.isReady),
+                parts
+            }
+        })
+
+        return { success: true, data: result }
+
+    } catch (e: any) {
+        console.error('checkAssemblyReadiness error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Create Part Prep work order (CUTTING type) for pieces that need fabrication
+ */
+export async function createPartPrepWorkOrder(input: {
+    projectId: string
+    pieceIds: string[]
+    title?: string
+    priority?: string
+    scheduledDate?: Date
+    notes?: string
+}) {
+    try {
+        const { projectId, pieceIds, title, priority, scheduledDate, notes } = input
+
+        if (!projectId || pieceIds.length === 0) {
+            return { success: false, error: 'Project ID and pieces required' }
+        }
+
+        const workOrderNumber = await generateWorkOrderNumber(projectId)
+
+        const wo = await prisma.workOrder.create({
+            data: {
+                projectId,
+                workOrderNumber,
+                title: title || 'Part Preparation',
+                type: 'CUTTING',
+                priority: priority || 'MEDIUM',
+                status: 'PENDING',
+                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                notes,
+                items: {
+                    create: pieceIds.map(pieceId => ({ pieceId }))
+                }
+            },
+            include: { items: true }
+        })
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true, data: wo }
+
+    } catch (e: any) {
+        console.error('createPartPrepWorkOrder error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Create Assembly work order for selected assemblies
+ */
+export async function createAssemblyWorkOrder(input: {
+    projectId: string
+    assemblyIds: string[]
+    title?: string
+    priority?: string
+    scheduledDate?: Date
+    notes?: string
+    forceCreate?: boolean  // Create even if parts not ready (as PENDING)
+}) {
+    try {
+        const { projectId, assemblyIds, title, priority, scheduledDate, notes, forceCreate } = input
+
+        if (!projectId || assemblyIds.length === 0) {
+            return { success: false, error: 'Project ID and assemblies required' }
+        }
+
+        // Check readiness
+        const readiness = await checkAssemblyReadiness(assemblyIds)
+        if (!readiness.success || !readiness.data) {
+            return { success: false, error: 'Failed to check readiness' }
+        }
+
+        const allReady = readiness.data.every(a => a.isReady)
+
+        if (!allReady && !forceCreate) {
+            return {
+                success: false,
+                error: 'Not all parts are ready',
+                readiness: readiness.data
+            }
+        }
+
+        const workOrderNumber = await generateWorkOrderNumber(projectId)
+
+        // Get assembly names for title
+        const assemblies = await prisma.assembly.findMany({
+            where: { id: { in: assemblyIds } },
+            select: { assemblyNumber: true, name: true }
+        })
+        const defaultTitle = `Assembly: ${assemblies.map(a => a.assemblyNumber).join(', ')}`
+
+        const wo = await prisma.workOrder.create({
+            data: {
+                projectId,
+                workOrderNumber,
+                title: title || defaultTitle,
+                type: 'ASSEMBLY',
+                priority: priority || 'MEDIUM',
+                status: allReady ? 'PENDING' : 'PENDING',  // stays PENDING until manually activated
+                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                notes: allReady ? notes : `${notes || ''}\n[Waiting for parts]`.trim(),
+                items: {
+                    create: assemblyIds.map(assemblyId => ({ assemblyId }))
+                }
+            },
+            include: { items: true }
+        })
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true, data: wo, allReady }
+
+    } catch (e: any) {
+        console.error('createAssemblyWorkOrder error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Activate a PENDING work order (move to IN_PROGRESS)
+ * For assembly WOs, validates all parts are ready
+ */
+export async function activateWorkOrder(workOrderId: string) {
+    try {
+        const wo = await prisma.workOrder.findUnique({
+            where: { id: workOrderId },
+            include: { items: true }
+        })
+
+        if (!wo) {
+            return { success: false, error: 'Work order not found' }
+        }
+
+        if (wo.status !== 'PENDING') {
+            return { success: false, error: 'Work order is not PENDING' }
+        }
+
+        // For assembly work orders, check part readiness
+        if (wo.type === 'ASSEMBLY') {
+            const assemblyIds = wo.items
+                .filter(i => i.assemblyId)
+                .map(i => i.assemblyId!)
+
+            if (assemblyIds.length > 0) {
+                const readiness = await checkAssemblyReadiness(assemblyIds)
+                if (!readiness.success || !readiness.data) {
+                    return { success: false, error: 'Failed to check readiness' }
+                }
+
+                const allReady = readiness.data.every(a => a.isReady)
+                if (!allReady) {
+                    const notReadyParts = readiness.data
+                        .flatMap(a => a.parts)
+                        .filter(p => !p.isReady)
+                        .map(p => p.partNumber)
+
+                    return {
+                        success: false,
+                        error: `Parts not ready: ${notReadyParts.join(', ')}`,
+                        readiness: readiness.data
+                    }
+                }
+            }
+        }
+
+        // Activate the work order
+        await prisma.workOrder.update({
+            where: { id: workOrderId },
+            data: {
+                status: 'IN_PROGRESS',
+                startedAt: new Date(),
+                notes: wo.notes?.replace('[Waiting for parts]', '[Parts ready]') || undefined
+            }
+        })
+
+        revalidatePath(`/projects/${wo.projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('activateWorkOrder error:', e)
+        return { success: false, error: e.message }
+    }
+}

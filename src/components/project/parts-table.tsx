@@ -4,8 +4,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { ChevronDown, ChevronRight, Package } from 'lucide-react'
+import { Checkbox } from "@/components/ui/checkbox"
+import { ChevronDown, ChevronRight, Package, Wrench } from 'lucide-react'
 import { useState } from 'react'
+import { CreatePartWODialog } from './create-part-wo-dialog'
 
 interface Part {
     id: string
@@ -22,11 +24,12 @@ interface Part {
 
 interface PartsTableProps {
     parts: Part[]
+    projectId: string
     onPieceStatusChange?: (pieceId: string, status: string) => void
 }
 
 const STATUS_COLORS: Record<string, string> = {
-    'PENDING': 'bg-gray-100 text-gray-800 border-gray-300',
+    'NOT_STARTED': 'bg-gray-100 text-gray-800 border-gray-300',
     'CUT': 'bg-blue-100 text-blue-800 border-blue-300',
     'FABRICATED': 'bg-yellow-100 text-yellow-800 border-yellow-300',
     'WELDED': 'bg-orange-100 text-orange-800 border-orange-300',
@@ -34,8 +37,17 @@ const STATUS_COLORS: Record<string, string> = {
     'READY': 'bg-green-100 text-green-800 border-green-300',
 }
 
-export function PartsTable({ parts, onPieceStatusChange }: PartsTableProps) {
+interface SelectedPiece {
+    pieceId: string
+    partNumber: string
+    pieceNumber: number
+    status: string
+}
+
+export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTableProps) {
     const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set())
+    const [selectedPieces, setSelectedPieces] = useState<SelectedPiece[]>([])
+    const [woDialogOpen, setWoDialogOpen] = useState(false)
 
     const toggleExpand = (partId: string) => {
         const newExpanded = new Set(expandedParts)
@@ -61,6 +73,50 @@ export function PartsTable({ parts, onPieceStatusChange }: PartsTableProps) {
         return counts
     }
 
+    const togglePieceSelection = (piece: { id: string; pieceNumber: number; status: string }, partNumber: string) => {
+        const existing = selectedPieces.find(p => p.pieceId === piece.id)
+        if (existing) {
+            setSelectedPieces(selectedPieces.filter(p => p.pieceId !== piece.id))
+        } else {
+            setSelectedPieces([...selectedPieces, {
+                pieceId: piece.id,
+                partNumber,
+                pieceNumber: piece.pieceNumber,
+                status: piece.status
+            }])
+        }
+    }
+
+    const toggleAllPiecesForPart = (part: Part) => {
+        const partPieceIds = part.pieces.map(p => p.id)
+        const allSelected = partPieceIds.every(id => selectedPieces.some(sp => sp.pieceId === id))
+
+        if (allSelected) {
+            // Deselect all pieces for this part
+            setSelectedPieces(selectedPieces.filter(sp => !partPieceIds.includes(sp.pieceId)))
+        } else {
+            // Select all pieces for this part
+            const newSelections = part.pieces
+                .filter(p => !selectedPieces.some(sp => sp.pieceId === p.id))
+                .map(p => ({
+                    pieceId: p.id,
+                    partNumber: part.partNumber,
+                    pieceNumber: p.pieceNumber,
+                    status: p.status
+                }))
+            setSelectedPieces([...selectedPieces, ...newSelections])
+        }
+    }
+
+    const isPartFullySelected = (part: Part) => {
+        return part.pieces.every(p => selectedPieces.some(sp => sp.pieceId === p.id))
+    }
+
+    const isPartPartiallySelected = (part: Part) => {
+        const someSelected = part.pieces.some(p => selectedPieces.some(sp => sp.pieceId === p.id))
+        return someSelected && !isPartFullySelected(part)
+    }
+
     if (parts.length === 0) {
         return (
             <div className="text-center py-12 text-muted-foreground">
@@ -72,90 +128,159 @@ export function PartsTable({ parts, onPieceStatusChange }: PartsTableProps) {
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden">
-            <Table>
-                <TableHeader>
-                    <TableRow className="bg-muted/50">
-                        <TableHead className="w-10"></TableHead>
-                        <TableHead>Part #</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Profile</TableHead>
-                        <TableHead>Grade</TableHead>
-                        <TableHead className="text-right">Length</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right">Weight</TableHead>
-                        <TableHead className="w-48">Progress</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {parts.map(part => {
-                        const isExpanded = expandedParts.has(part.id)
-                        const progress = getProgress(part.pieces)
-                        const statusCounts = getStatusCounts(part.pieces)
+        <div className="space-y-4">
+            {/* Selection Toolbar */}
+            {selectedPieces.length > 0 && (
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <span className="text-sm text-blue-800">
+                        {selectedPieces.length} piece{selectedPieces.length !== 1 ? 's' : ''} selected
+                    </span>
+                    <div className="flex gap-2">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedPieces([])}
+                        >
+                            Clear
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={() => setWoDialogOpen(true)}
+                            className="gap-2"
+                        >
+                            <Wrench className="h-4 w-4" />
+                            Create Work Order
+                        </Button>
+                    </div>
+                </div>
+            )}
 
-                        return (
-                            <>
-                                <TableRow
-                                    key={part.id}
-                                    className="cursor-pointer hover:bg-muted/30"
-                                    onClick={() => toggleExpand(part.id)}
-                                >
-                                    <TableCell>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                        </Button>
-                                    </TableCell>
-                                    <TableCell className="font-mono font-medium">{part.partNumber}</TableCell>
-                                    <TableCell className="text-muted-foreground">{part.description || '-'}</TableCell>
-                                    <TableCell>
-                                        {part.profile ? `${part.profile.type} ${part.profile.dimensions}` : '-'}
-                                    </TableCell>
-                                    <TableCell>{part.grade?.name || '-'}</TableCell>
-                                    <TableCell className="text-right font-mono">
-                                        {part.length ? `${part.length.toLocaleString()} mm` : '-'}
-                                    </TableCell>
-                                    <TableCell className="text-right font-medium">{part.quantity}</TableCell>
-                                    <TableCell className="text-right font-mono">
-                                        {part.unitWeight > 0 ? `${(part.unitWeight * part.quantity).toFixed(1)} kg` : '-'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Progress value={progress} className="flex-1 h-2" />
-                                            <span className="text-xs font-medium w-8">{progress}%</span>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                                {isExpanded && (
-                                    <TableRow key={`${part.id}-pieces`}>
-                                        <TableCell colSpan={9} className="bg-muted/20 p-4">
-                                            <div className="space-y-3">
-                                                <div className="flex gap-2 flex-wrap">
-                                                    {Object.entries(statusCounts).map(([status, count]) => (
-                                                        <Badge key={status} variant="outline" className={STATUS_COLORS[status]}>
-                                                            {status}: {count}
-                                                        </Badge>
-                                                    ))}
-                                                </div>
-                                                <div className="grid grid-cols-10 gap-1">
-                                                    {part.pieces.map(piece => (
-                                                        <div
-                                                            key={piece.id}
-                                                            className={`text-center text-xs py-1 px-2 rounded border ${STATUS_COLORS[piece.status]}`}
-                                                            title={`Piece ${piece.pieceNumber}: ${piece.status}`}
-                                                        >
-                                                            {piece.pieceNumber}
-                                                        </div>
-                                                    ))}
-                                                </div>
+            <div className="border rounded-lg overflow-hidden">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-muted/50">
+                            <TableHead className="w-10"></TableHead>
+                            <TableHead>Part #</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Profile</TableHead>
+                            <TableHead>Grade</TableHead>
+                            <TableHead className="text-right">Length</TableHead>
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead className="text-right">Weight</TableHead>
+                            <TableHead className="w-48">Progress</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {parts.map(part => {
+                            const isExpanded = expandedParts.has(part.id)
+                            const progress = getProgress(part.pieces)
+                            const statusCounts = getStatusCounts(part.pieces)
+
+                            return (
+                                <>
+                                    <TableRow
+                                        key={part.id}
+                                        className="cursor-pointer hover:bg-muted/30"
+                                        onClick={() => toggleExpand(part.id)}
+                                    >
+                                        <TableCell>
+                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                            </Button>
+                                        </TableCell>
+                                        <TableCell className="font-mono font-medium">{part.partNumber}</TableCell>
+                                        <TableCell className="text-muted-foreground">{part.description || '-'}</TableCell>
+                                        <TableCell>
+                                            {part.profile ? `${part.profile.type} ${part.profile.dimensions}` : '-'}
+                                        </TableCell>
+                                        <TableCell>{part.grade?.name || '-'}</TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            {part.length ? `${part.length.toLocaleString()} mm` : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right font-medium">{part.quantity}</TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            {part.unitWeight > 0 ? `${(part.unitWeight * part.quantity).toFixed(1)} kg` : '-'}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Progress value={progress} className="flex-1 h-2" />
+                                                <span className="text-xs font-medium w-8">{progress}%</span>
                                             </div>
                                         </TableCell>
                                     </TableRow>
-                                )}
-                            </>
-                        )
-                    })}
-                </TableBody>
-            </Table>
+                                    {isExpanded && (
+                                        <TableRow key={`${part.id}-pieces`}>
+                                            <TableCell colSpan={9} className="bg-muted/20 p-4">
+                                                <div className="space-y-3">
+                                                    {/* Status summary and select all */}
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex gap-2 flex-wrap">
+                                                            {Object.entries(statusCounts).map(([status, count]) => (
+                                                                <Badge key={status} variant="outline" className={STATUS_COLORS[status]}>
+                                                                    {status}: {count}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                toggleAllPiecesForPart(part)
+                                                            }}
+                                                            className="h-7"
+                                                        >
+                                                            {isPartFullySelected(part) ? 'Deselect All' : 'Select All'}
+                                                        </Button>
+                                                    </div>
+
+                                                    {/* Pieces grid with checkboxes */}
+                                                    <div className="grid grid-cols-10 gap-1">
+                                                        {part.pieces.map(piece => {
+                                                            const isSelected = selectedPieces.some(sp => sp.pieceId === piece.id)
+                                                            return (
+                                                                <div
+                                                                    key={piece.id}
+                                                                    className={`
+                                                                        relative text-center text-xs py-1 px-2 rounded border cursor-pointer 
+                                                                        ${STATUS_COLORS[piece.status]}
+                                                                        ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}
+                                                                    `}
+                                                                    title={`Piece ${piece.pieceNumber}: ${piece.status}`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        togglePieceSelection(piece, part.partNumber)
+                                                                    }}
+                                                                >
+                                                                    {isSelected && (
+                                                                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full" />
+                                                                    )}
+                                                                    {piece.pieceNumber}
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
+
+            {/* Create WO Dialog */}
+            <CreatePartWODialog
+                projectId={projectId}
+                selectedPieces={selectedPieces}
+                open={woDialogOpen}
+                onOpenChange={(open) => {
+                    setWoDialogOpen(open)
+                    if (!open) setSelectedPieces([])
+                }}
+            />
         </div>
     )
 }

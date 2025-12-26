@@ -245,7 +245,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                             inventory={inventoryMap}
                         />
                     </div>
-                    <PartsTable parts={parts as any} />
+                    <PartsTable parts={parts as any} projectId={cleanId} />
                 </TabsContent>
 
                 {/* Assemblies Tab */}
@@ -263,7 +263,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         />
                     </div>
                     <AssemblySummary assemblies={assemblies as any} />
-                    <AssembliesTree assemblies={assemblies as any} />
+                    <AssembliesTree assemblies={assemblies as any} projectId={cleanId} />
                 </TabsContent>
 
                 {/* Work Orders Tab */}
