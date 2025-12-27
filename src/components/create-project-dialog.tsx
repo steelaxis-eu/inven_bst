@@ -147,7 +147,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                                         {contractDate ? format(contractDate, "PPP") : <span>Pick a date</span>}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
+                                <PopoverContent className="!w-auto p-0" align="start">
                                     <Calendar
                                         mode="single"
                                         selected={contractDate}
@@ -239,7 +239,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                                         {deliveryDate ? format(deliveryDate, "PPP") : <span>Pick a date</span>}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
+                                <PopoverContent className="!w-auto p-0" align="start">
                                     <Calendar
                                         mode="single"
                                         selected={deliveryDate}
