@@ -90,12 +90,12 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
             <DialogTrigger asChild>
                 <Button>+ New Project</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Create New Project</DialogTitle>
                     <DialogDescription>Enter project details, technical specifications, and milestones.</DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-6 py-4">
+                <div className="grid gap-8 py-6">
                     {/* Basic Info */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
@@ -160,9 +160,12 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                     </div>
 
                     {/* Technical Specs */}
-                    <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
-                        <h4 className="font-medium text-sm text-muted-foreground mb-2">Technical Specifications</h4>
-                        <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-6 border rounded-xl p-6 bg-slate-50/50">
+                        <h4 className="font-semibold text-base text-gray-800 mb-4 flex items-center gap-2">
+                            Technical Specifications
+                            <span className="text-xs font-normal text-muted-foreground bg-white border px-2 py-0.5 rounded-full">Required for Production</span>
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="grid gap-2">
                                 <Label>Coating Type</Label>
                                 <Select value={coatingType} onValueChange={setCoatingType}>
@@ -180,32 +183,33 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                             </div>
                             <div className="grid gap-2">
                                 <Label>Corrosion Category</Label>
-                                <div className="flex gap-2">
-                                    <Select value={corrosionCategory} onValueChange={setCorrosionCategory}>
-                                        <SelectTrigger className="w-[140px]">
-                                            <SelectValue placeholder="Category" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="C1">C1</SelectItem>
-                                            <SelectItem value="C2">C2</SelectItem>
-                                            <SelectItem value="C3">C3</SelectItem>
-                                            <SelectItem value="C4">C4</SelectItem>
-                                            <SelectItem value="C5">C5</SelectItem>
-                                            <SelectItem value="CX">CX</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <Select value={corrosionDurability} onValueChange={setCorrosionDurability}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Durability" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="L">Low (L)</SelectItem>
-                                            <SelectItem value="M">Medium (M)</SelectItem>
-                                            <SelectItem value="H">High (H)</SelectItem>
-                                            <SelectItem value="VH">Very High (VH)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                <Select value={corrosionCategory} onValueChange={setCorrosionCategory}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="C1">C1</SelectItem>
+                                        <SelectItem value="C2">C2</SelectItem>
+                                        <SelectItem value="C3">C3</SelectItem>
+                                        <SelectItem value="C4">C4</SelectItem>
+                                        <SelectItem value="C5">C5</SelectItem>
+                                        <SelectItem value="CX">CX</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Durability</Label>
+                                <Select value={corrosionDurability} onValueChange={setCorrosionDurability}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Durability" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="L">Low (L)</SelectItem>
+                                        <SelectItem value="M">Medium (M)</SelectItem>
+                                        <SelectItem value="H">High (H)</SelectItem>
+                                        <SelectItem value="VH">Very High (VH)</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                         <div className="grid gap-2">
