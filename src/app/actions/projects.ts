@@ -18,6 +18,7 @@ export interface CreateProjectInput {
     customerId?: string
     coatingType?: string
     corrosionCategory?: string
+    corrosionDurability?: string
     corrosionComments?: string
     contractDate?: Date
     estimatedHours?: number
@@ -35,6 +36,7 @@ export async function createProject(data: CreateProjectInput) {
                 customerId: data.customerId || null,
                 coatingType: data.coatingType,
                 corrosionCategory: data.corrosionCategory,
+                corrosionDurability: data.corrosionDurability,
                 corrosionComments: data.corrosionComments,
                 contractDate: data.contractDate,
                 estimatedHours: data.estimatedHours ? parseFloat(data.estimatedHours.toString()) : null,
@@ -72,6 +74,7 @@ export interface UpdateProjectInput {
     coatingType?: string
     coatingSpec?: string
     corrosionCategory?: string
+    corrosionDurability?: string
     corrosionComments?: string
     contractDate?: Date | null
     estimatedHours?: number | null

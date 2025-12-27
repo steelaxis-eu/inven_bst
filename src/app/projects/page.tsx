@@ -68,7 +68,9 @@ export default async function ProjectsPage() {
                                             <div className="flex flex-col gap-1">
                                                 <span className="text-sm font-medium">{p.coatingType || '-'}</span>
                                                 {p.corrosionCategory && (
-                                                    <span className="text-xs text-muted-foreground">Cat: {p.corrosionCategory}</span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Cat: {p.corrosionCategory} {p.corrosionDurability ? `(${p.corrosionDurability})` : ''}
+                                                    </span>
                                                 )}
                                             </div>
                                         </TableCell>

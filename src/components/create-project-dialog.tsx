@@ -30,6 +30,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
     const [customerId, setCustomerId] = useState<string>('')
     const [coatingType, setCoatingType] = useState<string>('')
     const [corrosionCategory, setCorrosionCategory] = useState<string>('')
+    const [corrosionDurability, setCorrosionDurability] = useState<string>('')
     const [corrosionComments, setCorrosionComments] = useState('')
     const [estimatedHours, setEstimatedHours] = useState('')
     const [contractDate, setContractDate] = useState<Date | undefined>()
@@ -51,6 +52,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                 customerId: customerId || undefined,
                 coatingType: coatingType || undefined,
                 corrosionCategory: corrosionCategory || undefined,
+                corrosionDurability: corrosionDurability || undefined,
                 corrosionComments: corrosionComments || undefined,
                 contractDate: contractDate,
                 estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
@@ -66,6 +68,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                 setCustomerId('')
                 setCoatingType('')
                 setCorrosionCategory('')
+                setCorrosionDurability('')
                 setCorrosionComments('')
                 setEstimatedHours('')
                 setContractDate(undefined)
@@ -177,20 +180,32 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                             </div>
                             <div className="grid gap-2">
                                 <Label>Corrosion Category</Label>
-                                <Select value={corrosionCategory} onValueChange={setCorrosionCategory}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="C1">C1</SelectItem>
-                                        <SelectItem value="C2">C2</SelectItem>
-                                        <SelectItem value="C3">C3</SelectItem>
-                                        <SelectItem value="C4M">C4 Medium</SelectItem>
-                                        <SelectItem value="C4H">C4 High</SelectItem>
-                                        <SelectItem value="C5">C5</SelectItem>
-                                        <SelectItem value="CX">CX</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                <div className="flex gap-2">
+                                    <Select value={corrosionCategory} onValueChange={setCorrosionCategory}>
+                                        <SelectTrigger className="w-[140px]">
+                                            <SelectValue placeholder="Category" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="C1">C1</SelectItem>
+                                            <SelectItem value="C2">C2</SelectItem>
+                                            <SelectItem value="C3">C3</SelectItem>
+                                            <SelectItem value="C4">C4</SelectItem>
+                                            <SelectItem value="C5">C5</SelectItem>
+                                            <SelectItem value="CX">CX</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Select value={corrosionDurability} onValueChange={setCorrosionDurability}>
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="Durability" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="L">Low (L)</SelectItem>
+                                            <SelectItem value="M">Medium (M)</SelectItem>
+                                            <SelectItem value="H">High (H)</SelectItem>
+                                            <SelectItem value="VH">Very High (VH)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
                         <div className="grid gap-2">

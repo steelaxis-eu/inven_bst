@@ -40,7 +40,8 @@ model Project {
   createdBy       String?
   modifiedBy      String?
 
-  corrosionCategory String?            // e.g. C3, C4H
+  corrosionCategory String?            // e.g. C3, C4, C5
+  corrosionDurability String?          // e.g. L, M, H, VH (Low, Medium, High, Very High)
   corrosionComments String?
   contractDate      DateTime?
   estimatedHours    Float?
