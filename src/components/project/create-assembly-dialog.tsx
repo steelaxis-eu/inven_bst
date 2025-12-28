@@ -100,7 +100,6 @@ export function CreateAssemblyDialog({
     const [cutVendor, setCutVendor] = useState('')
 
     // Plate fields
-    const [plateMaterial, setPlateMaterial] = useState('')
     const [plateThickness, setPlateThickness] = useState('')
     const [plateWidth, setPlateWidth] = useState('')
     const [plateLength, setPlateLength] = useState('')
@@ -193,8 +192,8 @@ export function CreateAssemblyDialog({
             return
         }
 
-        if (newPartType === 'plate' && (!plateMaterial || !plateThickness)) {
-            toast.warning('Material and thickness required for plate')
+        if (newPartType === 'plate' && (!newGradeId || !plateThickness)) {
+            toast.warning('Grade and thickness required for plate')
             return
         }
 
@@ -218,8 +217,8 @@ export function CreateAssemblyDialog({
             quantity: parseInt(newQuantity),
             quantityInAssembly: parseInt(newQuantity),
             isOutsourcedCut: newPartType === 'profile' ? isOutsourcedCut : isPlateOutsourced,
-            cutVendor: newPartType === 'profile' ? cutVendor : plateSupplier,
-            material: plateMaterial,
+            cutVendor: newPartType === 'profile' ? cutVendor : (isPlateOutsourced ? plateSupplier : ''),
+            material: grade?.name || '',
             thickness: parseFloat(plateThickness) || 0,
             width: parseFloat(plateWidth) || 0,
             plateLength: parseFloat(plateLength) || 0,
@@ -242,7 +241,6 @@ export function CreateAssemblyDialog({
         setNewLength('')
         setIsOutsourcedCut(false)
         setCutVendor('')
-        setPlateMaterial('')
         setPlateThickness('')
         setPlateWidth('')
         setPlateLength('')
@@ -672,15 +670,7 @@ export function CreateAssemblyDialog({
 
                                     {/* Plate Tab */}
                                     <TabsContent value="plate" className="space-y-3 mt-3">
-                                        <div className="grid grid-cols-4 gap-3">
-                                            <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Material *</Label>
-                                                <Input
-                                                    value={plateMaterial}
-                                                    onChange={e => setPlateMaterial(e.target.value)}
-                                                    placeholder="S355"
-                                                />
-                                            </div>
+                                        <div className="grid grid-cols-3 gap-3">
                                             <div className="grid gap-2">
                                                 <Label className="text-xs uppercase text-muted-foreground">Thickness *</Label>
                                                 <Input
@@ -718,16 +708,16 @@ export function CreateAssemblyDialog({
                                                 </span>
                                             </div>
                                         )}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Weight Override</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={plateWeight}
-                                                    onChange={e => setPlateWeight(e.target.value)}
-                                                    placeholder="Auto-calc if blank"
-                                                />
-                                            </div>
+                                        <div className="grid gap-2">
+                                            <Label className="text-xs uppercase text-muted-foreground">Weight Override</Label>
+                                            <Input
+                                                type="number"
+                                                value={plateWeight}
+                                                onChange={e => setPlateWeight(e.target.value)}
+                                                placeholder="Auto-calc if blank"
+                                            />
+                                        </div>
+                                        {isPlateOutsourced && (
                                             <div className="grid gap-2">
                                                 <Label className="text-xs uppercase text-muted-foreground">Supplier</Label>
                                                 <Input
@@ -736,7 +726,7 @@ export function CreateAssemblyDialog({
                                                     placeholder="LaserCut Co"
                                                 />
                                             </div>
-                                        </div>
+                                        )}
                                         <div className="flex items-center gap-4 p-3 border rounded bg-background">
                                             <div className="flex items-center gap-2">
                                                 <input
