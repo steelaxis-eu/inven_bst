@@ -90,7 +90,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
             <DialogTrigger asChild>
                 <Button>+ New Project</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Create New Project</DialogTitle>
                     <DialogDescription>Enter project details, technical specifications, and milestones.</DialogDescription>

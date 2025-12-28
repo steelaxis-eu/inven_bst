@@ -75,7 +75,7 @@ export function EditProjectDialog({ project }: EditProjectDialogProps) {
                     <Settings className="h-4 w-4" /> Settings
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-xl">
                 <DialogHeader>
                     <DialogTitle>Project Settings</DialogTitle>
                     <DialogDescription>Edit project details including coating specification.</DialogDescription>
