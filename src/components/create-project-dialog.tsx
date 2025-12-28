@@ -90,7 +90,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
             <DialogTrigger asChild>
                 <Button>+ New Project</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Create New Project</DialogTitle>
                     <DialogDescription>Enter project details, technical specifications, and milestones.</DialogDescription>
@@ -165,7 +165,7 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                             Technical Specifications
                             <span className="text-xs font-normal text-muted-foreground bg-white border px-2 py-0.5 rounded-full">Required for Production</span>
                         </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             <div className="grid gap-2">
                                 <Label>Coating Type</Label>
                                 <Select value={coatingType} onValueChange={setCoatingType}>
