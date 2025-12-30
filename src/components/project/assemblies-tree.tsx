@@ -6,9 +6,14 @@ import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ChevronDown, ChevronRight, Layers, Package, Calendar, Weight, Check, Wrench } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ChevronDown, ChevronRight, Layers, Package, Calendar, Weight, Check, Wrench, MoreHorizontal, Pencil, CheckCircle, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { CreateAssemblyWODialog } from './create-assembly-wo-dialog'
+import { finishPart } from '@/app/actions/parts'
+import { updatePlatePartStatus } from '@/app/actions/plateparts'
+import { removePartFromAssembly, removePlatePartFromAssembly } from '@/app/actions/assemblies'
 
 interface Assembly {
     id: string
@@ -33,6 +38,20 @@ interface Assembly {
         }
         quantityInAssembly: number
     }[]
+    plateAssemblyParts: {
+        platePart: {
+            id: string
+            partNumber: string
+            description: string | null
+            material: string | null
+            width: number | null
+            length: number | null
+            unitWeight: number | null
+            status: string
+            receivedQty: number
+        }
+        quantityInAssembly: number
+    }[]
 }
 
 interface AssembliesTreeProps {
@@ -52,9 +71,20 @@ function getAssemblyProgress(assembly: Assembly): { percent: number; ready: numb
     let totalPieces = 0
     let readyPieces = 0
 
+    // Profiles
     assembly.assemblyParts.forEach(ap => {
         const needed = ap.quantityInAssembly
         const ready = ap.part.pieces.filter(p => p.status === 'READY').length
+        totalPieces += needed
+        readyPieces += Math.min(ready, needed)
+    })
+
+    // Plates
+    assembly.plateAssemblyParts?.forEach(pap => {
+        const needed = pap.quantityInAssembly
+        // Plate is ready if RECEIVED or QC_PASSED or based on receivedQty if available?
+        // Using receivedQty is safer given the schema has it
+        const ready = pap.platePart.receivedQty || 0
         totalPieces += needed
         readyPieces += Math.min(ready, needed)
     })
@@ -67,9 +97,15 @@ function getAssemblyProgress(assembly: Assembly): { percent: number; ready: numb
 }
 
 function getTotalWeight(assembly: Assembly): number {
-    return assembly.assemblyParts.reduce((sum, ap) => {
+    const profileWeight = assembly.assemblyParts.reduce((sum, ap) => {
         return sum + (ap.part.unitWeight || 0) * ap.quantityInAssembly
     }, 0)
+
+    const plateWeight = (assembly.plateAssemblyParts || []).reduce((sum, pap) => {
+        return sum + (pap.platePart.unitWeight || 0) * pap.quantityInAssembly
+    }, 0)
+
+    return profileWeight + plateWeight
 }
 
 function AssemblyItem({
@@ -85,9 +121,34 @@ function AssemblyItem({
 }) {
     const [expanded, setExpanded] = useState(false)
     const [detailsOpen, setDetailsOpen] = useState(false)
+    const [loadingId, setLoadingId] = useState<string | null>(null)
     const hasChildren = assembly.children && assembly.children.length > 0
     const progress = getAssemblyProgress(assembly)
     const totalWeight = getTotalWeight(assembly)
+
+    // Combine parts for display
+    const allParts = [
+        ...assembly.assemblyParts.map(ap => ({
+            id: ap.part.id,
+            kind: 'PROFILE',
+            partNumber: ap.part.partNumber,
+            description: ap.part.description,
+            detail: ap.part.profile ? `${ap.part.profile.type} ${ap.part.profile.dimensions}` : '-',
+            quantity: ap.quantityInAssembly,
+            ready: ap.part.pieces.filter(p => p.status === 'READY').length,
+            unitWeight: ap.part.unitWeight || 0
+        })),
+        ...(assembly.plateAssemblyParts || []).map(pap => ({
+            id: pap.platePart.id,
+            kind: 'PLATE',
+            partNumber: pap.platePart.partNumber,
+            description: pap.platePart.description,
+            detail: `${pap.platePart.material || ''} ${pap.platePart.width}x${pap.platePart.length}`,
+            quantity: pap.quantityInAssembly,
+            ready: pap.platePart.receivedQty || 0,
+            unitWeight: pap.platePart.unitWeight || 0
+        }))
+    ]
 
     const handleRowClick = () => {
         setDetailsOpen(!detailsOpen)
@@ -100,6 +161,56 @@ function AssemblyItem({
 
     const handleCheckboxClick = (e: React.MouseEvent) => {
         e.stopPropagation()
+    }
+
+    const handleRemove = async (partId: string, kind: string) => {
+        if (!window.confirm("Are you sure you want to remove this part from the assembly?")) return
+
+        setLoadingId(partId)
+        try {
+            let res
+            if (kind === 'PROFILE') {
+                res = await removePartFromAssembly(assembly.id, partId)
+            } else {
+                res = await removePlatePartFromAssembly(assembly.id, partId)
+            }
+
+            if (res.success) {
+                toast.success('Part removed from assembly')
+            } else {
+                toast.error(res.error || 'Failed to remove part')
+            }
+        } catch (e) {
+            toast.error('Failed to remove')
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
+    const handleFinish = async (partId: string, kind: string) => {
+        setLoadingId(partId)
+        try {
+            let res
+            if (kind === 'PROFILE') {
+                res = await finishPart(partId)
+            } else {
+                res = await updatePlatePartStatus(partId, 'RECEIVED')
+            }
+
+            if (res.success) {
+                toast.success('Part marked as finished/received')
+            } else {
+                toast.error(res.error || 'Failed to finish part')
+            }
+        } catch (e) {
+            toast.error('Failed to finish')
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
+    const handleEdit = (partId: string) => {
+        toast.info("Edit feature coming soon")
     }
 
     return (
@@ -148,7 +259,7 @@ function AssemblyItem({
                     <span className="text-xs font-medium w-8">{progress.percent}%</span>
                 </div>
                 <div className="text-xs text-muted-foreground w-16 text-right">
-                    {assembly.assemblyParts.length} parts
+                    {allParts.length} parts
                 </div>
                 {assembly.scheduledDate && (
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
@@ -170,7 +281,7 @@ function AssemblyItem({
                             <div className="text-xs text-muted-foreground uppercase mb-1">Parts</div>
                             <div className="text-lg font-semibold flex items-center gap-2">
                                 <Package className="h-4 w-4 text-muted-foreground" />
-                                {assembly.assemblyParts.length}
+                                {allParts.length}
                             </div>
                         </div>
                         <div className="bg-background p-3 rounded border">
@@ -196,48 +307,70 @@ function AssemblyItem({
                     </div>
 
                     {/* Parts Table */}
-                    {assembly.assemblyParts.length > 0 ? (
+                    {allParts.length > 0 ? (
                         <div className="border rounded overflow-hidden bg-background">
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-muted/50">
                                         <TableHead>Part #</TableHead>
-                                        <TableHead>Profile</TableHead>
+                                        <TableHead>Type/Profile</TableHead>
                                         <TableHead>Description</TableHead>
                                         <TableHead className="text-center">Qty</TableHead>
                                         <TableHead className="text-center">Ready</TableHead>
                                         <TableHead className="text-right">Weight</TableHead>
+                                        <TableHead className="w-10"></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {assembly.assemblyParts.map((ap, idx) => {
-                                        const ready = ap.part.pieces.filter(p => p.status === 'READY').length
-                                        const needed = ap.quantityInAssembly
-                                        const isComplete = ready >= needed
+                                    {allParts.map((item, idx) => {
+                                        const isComplete = item.ready >= item.quantity
                                         return (
                                             <TableRow key={idx}>
-                                                <TableCell className="font-mono">{ap.part.partNumber}</TableCell>
+                                                <TableCell className="font-mono flex items-center gap-2">
+                                                    {item.partNumber}
+                                                    {item.kind === 'PLATE' && <Badge variant="secondary" className="text-[10px] h-4 px-1">PL</Badge>}
+                                                </TableCell>
                                                 <TableCell>
-                                                    {ap.part.profile
-                                                        ? `${ap.part.profile.type} ${ap.part.profile.dimensions}`
-                                                        : '-'
-                                                    }
+                                                    {item.detail}
                                                 </TableCell>
                                                 <TableCell className="text-muted-foreground">
-                                                    {ap.part.description || '-'}
+                                                    {item.description || '-'}
                                                 </TableCell>
-                                                <TableCell className="text-center">{needed}</TableCell>
+                                                <TableCell className="text-center">{item.quantity}</TableCell>
                                                 <TableCell className="text-center">
-                                                    <span className={isComplete ? 'text-green-600 font-medium' : ready > 0 ? 'text-orange-600' : 'text-muted-foreground'}>
-                                                        {ready}
+                                                    <span className={isComplete ? 'text-green-600 font-medium' : item.ready > 0 ? 'text-orange-600' : 'text-muted-foreground'}>
+                                                        {item.ready}
                                                         {isComplete && <Check className="h-3 w-3 inline ml-1" />}
                                                     </span>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    {ap.part.unitWeight
-                                                        ? `${(ap.part.unitWeight * needed).toFixed(1)} kg`
+                                                    {item.unitWeight
+                                                        ? `${(item.unitWeight * item.quantity).toFixed(1)} kg`
                                                         : '-'
                                                     }
+                                                </TableCell>
+                                                <TableCell>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={loadingId === item.id}>
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                            <DropdownMenuItem onClick={() => handleEdit(item.id)}>
+                                                                <Pencil className="mr-2 h-4 w-4" /> Edit
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem onClick={() => handleFinish(item.id, item.kind)}>
+                                                                <CheckCircle className="mr-2 h-4 w-4 text-green-600" /> Mark Finished
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem onClick={() => handleRemove(item.id, item.kind)} className="text-red-600">
+                                                                <Trash2 className="mr-2 h-4 w-4" /> Remove
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
                                                 </TableCell>
                                             </TableRow>
                                         )

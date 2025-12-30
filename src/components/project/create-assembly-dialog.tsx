@@ -12,7 +12,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { useRouter } from 'next/navigation'
-import { createAssembly, addPartToAssembly } from '@/app/actions/assemblies'
+import { createAssembly, addPartToAssembly, addPlatePartToAssembly } from '@/app/actions/assemblies'
+
+
 import { createPart } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
 import { ensureProfile } from '@/app/actions/inventory'
@@ -326,7 +328,9 @@ export function CreateAssemblyDialog({
                             toast.error(`Failed to create plate ${item.partNumber}`)
                             continue
                         }
-                        // Plate parts don't go to assembly parts junction (tracked separately)
+                        if (plateRes.data) {
+                            await addPlatePartToAssembly(assemblyId, plateRes.data.id, item.quantityInAssembly)
+                        }
                         continue
                     }
                 }

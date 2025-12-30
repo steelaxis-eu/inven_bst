@@ -69,6 +69,11 @@ export async function getProjectAssemblies(projectId: string) {
                     }
                 }
             },
+            plateAssemblyParts: {
+                include: {
+                    platePart: true
+                }
+            },
             deliveryItems: {
                 include: {
                     deliverySchedule: true
@@ -98,6 +103,11 @@ export async function getAssembly(assemblyId: string) {
                         include: {
                             part: { include: { pieces: true } }
                         }
+                    },
+                    plateAssemblyParts: {
+                        include: {
+                            platePart: true
+                        }
                     }
                 }
             },
@@ -110,6 +120,11 @@ export async function getAssembly(assemblyId: string) {
                             pieces: true
                         }
                     }
+                }
+            },
+            plateAssemblyParts: {
+                include: {
+                    platePart: true
                 }
             }
         }
@@ -175,7 +190,8 @@ export async function deleteAssembly(assemblyId: string) {
             where: { id: assemblyId },
             include: {
                 children: true,
-                assemblyParts: true
+                assemblyParts: true,
+                plateAssemblyParts: true
             }
         })
 
@@ -187,7 +203,7 @@ export async function deleteAssembly(assemblyId: string) {
             return { success: false, error: 'Cannot delete assembly with sub-assemblies' }
         }
 
-        if (assembly.assemblyParts.length > 0) {
+        if (assembly.assemblyParts.length > 0 || assembly.plateAssemblyParts.length > 0) {
             return { success: false, error: 'Cannot delete assembly with parts assigned' }
         }
 
@@ -252,6 +268,50 @@ export async function addPartToAssembly(
 }
 
 /**
+ * Add a PLATE part to an assembly
+ */
+export async function addPlatePartToAssembly(
+    assemblyId: string,
+    platePartId: string,
+    quantityInAssembly: number = 1,
+    notes?: string
+) {
+    try {
+        const [assembly, platePart] = await Promise.all([
+            prisma.assembly.findUnique({ where: { id: assemblyId } }),
+            prisma.platePart.findUnique({ where: { id: platePartId } })
+        ])
+
+        if (!assembly || !platePart) {
+            return { success: false, error: 'Assembly or plate part not found' }
+        }
+
+        if (assembly.projectId !== platePart.projectId) {
+            return { success: false, error: 'Part and assembly must belong to the same project' }
+        }
+
+        await prisma.plateAssemblyPart.create({
+            data: {
+                assemblyId,
+                platePartId,
+                quantityInAssembly,
+                notes
+            }
+        })
+
+        revalidatePath(`/projects/${assembly.projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        if (e.code === 'P2002') {
+            return { success: false, error: 'Part is already in this assembly' }
+        }
+        console.error('addPlatePartToAssembly error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
  * Remove a part from an assembly
  */
 export async function removePartFromAssembly(assemblyId: string, partId: string) {
@@ -271,6 +331,30 @@ export async function removePartFromAssembly(assemblyId: string, partId: string)
 
     } catch (e: any) {
         console.error('removePartFromAssembly error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Remove a PLATE part from an assembly
+ */
+export async function removePlatePartFromAssembly(assemblyId: string, platePartId: string) {
+    try {
+        const assembly = await prisma.assembly.findUnique({ where: { id: assemblyId } })
+
+        await prisma.plateAssemblyPart.delete({
+            where: {
+                assemblyId_platePartId: { assemblyId, platePartId }
+            }
+        })
+
+        if (assembly) {
+            revalidatePath(`/projects/${assembly.projectId}`)
+        }
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('removePlatePartFromAssembly error:', e)
         return { success: false, error: e.message }
     }
 }
@@ -318,6 +402,11 @@ export async function getAssemblyProgress(assemblyId: string) {
                         }
                     }
                 }
+            },
+            plateAssemblyParts: {
+                include: {
+                    platePart: true
+                }
             }
         }
     })
@@ -331,6 +420,7 @@ export async function getAssemblyProgress(assemblyId: string) {
     let totalWeightNeeded = 0
     let totalWeightReady = 0
 
+    // PROFILES
     for (const ap of assembly.assemblyParts) {
         const part = ap.part
         const piecesNeeded = ap.quantityInAssembly
@@ -344,6 +434,26 @@ export async function getAssemblyProgress(assemblyId: string) {
         totalPiecesReady += availableForAssembly
         totalWeightNeeded += piecesNeeded * unitWeight
         totalWeightReady += availableForAssembly * unitWeight
+    }
+
+    // PLATES
+    for (const pap of assembly.plateAssemblyParts) {
+        const part = pap.platePart
+        const piecesNeeded = pap.quantityInAssembly
+        const unitWeight = part.unitWeight || 0
+
+        // Plate is ready if RECEIVED or QC_PASSED
+        const isReady = part.status === 'RECEIVED' || part.status === 'QC_PASSED'
+        const availableForAssembly = isReady ? piecesNeeded : 0 // Plates are batch managed usually, but simplifed here for now. 
+        // Actually PlatePart has receivedQty. Let's use that if available, or just boolean status for now as singular items?
+        // PlatePart is quantity based. 'receivedQty'
+        const readyCount = part.receivedQty || 0
+        const actuallyReady = Math.min(readyCount, piecesNeeded)
+
+        totalPiecesNeeded += piecesNeeded
+        totalPiecesReady += actuallyReady
+        totalWeightNeeded += piecesNeeded * unitWeight
+        totalWeightReady += actuallyReady * unitWeight
     }
 
     return {
@@ -377,6 +487,11 @@ export async function getProjectAssemblyProgress(projectId: string) {
                         }
                     }
                 }
+            },
+            plateAssemblyParts: {
+                include: {
+                    platePart: true
+                }
             }
         }
     })
@@ -386,11 +501,25 @@ export async function getProjectAssemblyProgress(projectId: string) {
         let totalPiecesReady = 0
         let totalWeight = 0
 
+        // Profiles
         for (const ap of assembly.assemblyParts) {
             const part = ap.part
             const piecesNeeded = ap.quantityInAssembly
             const readyPieces = part.pieces.filter(p => p.status === 'READY').length
             const availableForAssembly = Math.min(readyPieces, piecesNeeded)
+
+            totalPiecesNeeded += piecesNeeded
+            totalPiecesReady += availableForAssembly
+            totalWeight += piecesNeeded * (part.unitWeight || 0)
+        }
+
+        // Plates
+        for (const pap of assembly.plateAssemblyParts) {
+            const part = pap.platePart
+            const piecesNeeded = pap.quantityInAssembly
+            // Use receivedQty for readiness
+            const readyCount = part.receivedQty || 0
+            const availableForAssembly = Math.min(readyCount, piecesNeeded)
 
             totalPiecesNeeded += piecesNeeded
             totalPiecesReady += availableForAssembly
@@ -414,3 +543,4 @@ export async function getProjectAssemblyProgress(projectId: string) {
 
     return progressList
 }
+

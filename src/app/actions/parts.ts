@@ -572,3 +572,40 @@ export async function togglePartSource(partId: string) {
         return { success: false, error: e.message }
     }
 }
+
+/**
+ * Finish a part (mark all pieces as READY)
+ * Useful for outsourced parts or manual override
+ */
+export async function finishPart(partId: string) {
+    try {
+        const part = await prisma.part.findUnique({
+            where: { id: partId },
+            include: { pieces: true }
+        })
+
+        if (!part) {
+            return { success: false, error: 'Part not found' }
+        }
+
+        const now = new Date()
+        const user = await getCurrentUser()
+
+        // Update all pieces to READY
+        await prisma.partPiece.updateMany({
+            where: { partId },
+            data: {
+                status: 'READY',
+                completedAt: now,
+                completedBy: user?.id || 'system'
+            }
+        })
+
+        revalidatePath(`/projects/${part.projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('finishPart error:', e)
+        return { success: false, error: e.message }
+    }
+}

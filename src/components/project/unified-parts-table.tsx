@@ -8,9 +8,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { ChevronDown, ChevronRight, Package, MoreHorizontal, RefreshCw, Scissors, Factory } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { togglePartSource } from '@/app/actions/parts'
-import { togglePlatePartSource } from '@/app/actions/plateparts'
+import { togglePartSource, deletePart, finishPart } from '@/app/actions/parts'
+import { togglePlatePartSource, deletePlatePart, updatePlatePartStatus } from '@/app/actions/plateparts'
 import { cn } from '@/lib/utils'
+import { Trash2, CheckCircle, Pencil } from 'lucide-react'
 
 // Union type for the table
 export type UnifiedPartItem =
@@ -58,6 +59,61 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
         } finally {
             setLoadingId(null)
         }
+    }
+
+    const handleDelete = async (item: UnifiedPartItem) => {
+        if (!window.confirm("Are you sure you want to delete this part?")) return
+
+        const id = item.data.id
+        setLoadingId(id)
+
+        try {
+            let res
+            if (item.kind === 'part') {
+                res = await deletePart(id)
+            } else {
+                res = await deletePlatePart(id)
+            }
+
+            if (res.success) {
+                toast.success('Part deleted')
+            } else {
+                toast.error(res.error || 'Failed to delete part')
+            }
+        } catch (e) {
+            toast.error('Failed to delete')
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
+    const handleFinish = async (item: UnifiedPartItem) => {
+        const id = item.data.id
+        setLoadingId(id)
+
+        try {
+            let res
+            if (item.kind === 'part') {
+                res = await finishPart(id)
+            } else {
+                // For plates, mark as RECEIVED
+                res = await updatePlatePartStatus(id, 'RECEIVED')
+            }
+
+            if (res.success) {
+                toast.success('Part marked as finished/received')
+            } else {
+                toast.error(res.error || 'Failed to finish part')
+            }
+        } catch (e) {
+            toast.error('Failed to finish')
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
+    const handleEdit = (item: UnifiedPartItem) => {
+        toast.info("Edit feature coming soon")
     }
 
     const getProgress = (pieces: any[]) => {
@@ -172,18 +228,29 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                     <TableCell>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={loadingId === id}>
                                                     <MoreHorizontal className="h-4 w-4" />
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <DropdownMenuItem onClick={() => handleToggleSource(item)} disabled={loadingId === id}>
+                                                <DropdownMenuItem onClick={() => handleEdit(item)}>
+                                                    <Pencil className="mr-2 h-4 w-4" /> Edit
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onClick={() => handleFinish(item)}>
+                                                    <CheckCircle className="mr-2 h-4 w-4 text-green-600" /> Mark Finished
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleToggleSource(item)}>
                                                     <Factory className="mr-2 h-4 w-4" />
                                                     {isPart
                                                         ? (data.isOutsourcedCut ? "Make In-House" : "Outsource Cutting")
                                                         : (data.isOutsourced ? "Make In-House" : "Outsource")
                                                     }
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onClick={() => handleDelete(item)} className="text-red-600">
+                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
