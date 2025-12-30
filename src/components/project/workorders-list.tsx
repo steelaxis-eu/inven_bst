@@ -454,7 +454,7 @@ function ProcessCard({ type, workOrders, projectId }: { type: string, workOrders
     const colorClass = TYPE_COLORS[type] || 'bg-gray-100 text-gray-800'
 
     return (
-        <Card className={`border-l-4 overflow-hidden transition-all duration-200 ${expanded ? 'ring-2 ring-primary ring-offset-2' : 'hover:shadow-md'}`}>
+        <Card className={`bg-muted/5 border-l-4 overflow-hidden transition-all duration-200 ${expanded ? 'ring-2 ring-primary ring-offset-2' : 'hover:shadow-md'}`}>
             <div
                 className="cursor-pointer"
                 onClick={() => setExpanded(!expanded)}
@@ -506,7 +506,7 @@ function ProcessCard({ type, workOrders, projectId }: { type: string, workOrders
 
             {/* Expanded Content */}
             {expanded && (
-                <div className="bg-slate-50 border-t p-4">
+                <div className="bg-muted/50 border-t p-4">
                     <WorkOrderTable workOrders={workOrders} type={type} projectId={projectId} />
                 </div>
             )}

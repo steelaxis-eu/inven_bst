@@ -83,15 +83,16 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
 
 
     // GROUPING PARTS BY SOURCE
+    // GROUPING PARTS BY SOURCE
     const inHouseItems: UnifiedPartItem[] = [
         ...parts.filter((p: any) => !p.isOutsourcedCut).map((p: any) => ({ kind: 'part' as const, data: p })),
         ...plateParts.filter((p: any) => !p.isOutsourced).map((p: any) => ({ kind: 'plate' as const, data: p }))
-    ]
+    ].sort((a, b) => a.data.partNumber.localeCompare(b.data.partNumber, undefined, { numeric: true }))
 
     const outsourcedItems: UnifiedPartItem[] = [
         ...parts.filter((p: any) => p.isOutsourcedCut).map((p: any) => ({ kind: 'part' as const, data: p })),
         ...plateParts.filter((p: any) => p.isOutsourced).map((p: any) => ({ kind: 'plate' as const, data: p }))
-    ]
+    ].sort((a, b) => a.data.partNumber.localeCompare(b.data.partNumber, undefined, { numeric: true }))
 
     return (
         <div className="container mx-auto py-6 space-y-6">
