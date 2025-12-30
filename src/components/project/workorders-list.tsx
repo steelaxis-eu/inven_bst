@@ -4,15 +4,17 @@ import { useState } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ClipboardList, Play, CheckCircle, XCircle, ChevronDown, ChevronRight, Check, Clock, Ruler, Layers } from 'lucide-react'
+import { Play, CheckCircle, Clock, RotateCw, AlertTriangle, AlertCircle, Trash2, XCircle, Ruler, Wrench, Printer, ChevronDown, ChevronRight, Layers, ClipboardList, Check } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { updateWorkOrderStatus, updateWorkOrderItemStatus, activateWorkOrder, completeWorkOrder, completeCuttingWOWithWorkflow } from '@/app/actions/workorders'
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { BatchCutDialog } from "./batch-cut-dialog"
+import { MaterialPrepDialog } from "./material-prep-dialog"
 
 // --- Interfaces ---
 
@@ -99,6 +101,7 @@ function WorkOrderTable({
     const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<string[]>([])
     const [batchCutDialogOpen, setBatchCutDialogOpen] = useState(false)
     const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
+    const [materialPrepDialogOpen, setMaterialPrepDialogOpen] = useState(false)
     const [activeWoForComplete, setActiveWoForComplete] = useState<WorkOrder | null>(null)
     const [machinedPieceIds, setMachinedPieceIds] = useState<string[]>([])
 
@@ -107,6 +110,12 @@ function WorkOrderTable({
         if (status === 'COMPLETED' && wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS') {
             setActiveWoForComplete(wo)
             setCompleteDialogOpen(true)
+            return
+        }
+
+        if (status === 'COMPLETED' && wo.type === 'MATERIAL_PREP' && wo.status === 'IN_PROGRESS') {
+            setActiveWoForComplete(wo)
+            setMaterialPrepDialogOpen(true)
             return
         }
 
@@ -233,7 +242,7 @@ function WorkOrderTable({
                                                 <TableCell>
                                                     {/* Status Indicator */}
                                                     <div className={`w-2 h-2 rounded-full ${wo.status === 'IN_PROGRESS' ? 'bg-blue-500 animate-pulse' :
-                                                            wo.status === 'COMPLETED' ? 'bg-green-500' : 'bg-gray-300'
+                                                        wo.status === 'COMPLETED' ? 'bg-green-500' : 'bg-gray-300'
                                                         }`} />
                                                 </TableCell>
                                                 <TableCell className="font-mono font-medium">{wo.workOrderNumber}</TableCell>
@@ -276,6 +285,11 @@ function WorkOrderTable({
                                                                 </Button>
                                                             </>
                                                         )}
+                                                        <Link href={`/projects/${projectId}/work-orders/${wo.id}/print`} target="_blank">
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-600" title="Print Work Order">
+                                                                <Printer className="h-4 w-4" />
+                                                            </Button>
+                                                        </Link>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -405,6 +419,19 @@ function WorkOrderTable({
                     router.refresh()
                 }}
             />
+
+            {/* Material Prep Dialog */}
+            {activeWoForComplete && (
+                <MaterialPrepDialog
+                    open={materialPrepDialogOpen}
+                    onOpenChange={setMaterialPrepDialogOpen}
+                    workOrder={activeWoForComplete}
+                    onSuccess={() => {
+                        setMaterialPrepDialogOpen(false)
+                        router.refresh()
+                    }}
+                />
+            )}
         </div>
     )
 }

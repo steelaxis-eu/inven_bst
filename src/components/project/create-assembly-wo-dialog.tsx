@@ -35,7 +35,15 @@ export function CreateAssemblyWODialog({
 }: CreateAssemblyWODialogProps) {
     const [loading, setLoading] = useState(false)
     const [checking, setChecking] = useState(false)
+    const [calculating, setCalculating] = useState(false)
     const [readiness, setReadiness] = useState<AssemblyReadiness[]>([])
+
+    // Workflow State
+    const [step, setStep] = useState<'READINESS' | 'PLANNING'>('READINESS')
+    const [planningResults, setPlanningResults] = useState<any[]>([])
+    const [stockLength, setStockLength] = useState(12000)
+
+    // Form inputs
     const [createPartPrepWO, setCreatePartPrepWO] = useState(true)
     const [title, setTitle] = useState('')
     const [priority, setPriority] = useState('MEDIUM')
@@ -46,6 +54,7 @@ export function CreateAssemblyWODialog({
     useEffect(() => {
         if (open && selectedAssemblyIds.length > 0) {
             checkReadiness()
+            setStep('READINESS')
         }
     }, [open, selectedAssemblyIds])
 
@@ -66,29 +75,86 @@ export function CreateAssemblyWODialog({
         p.pieces.filter(pc => pc.status !== 'READY').map(pc => pc.id)
     )
 
+    // Planning Function
+    const calculatePlan = async (length: number) => {
+        setCalculating(true)
+        // Dynamically import to avoid server-client issues if strictly typed? 
+        // No, standard import should work if action is 'use server'
+        const { calculateCuttingPlan } = await import('@/app/actions/planning')
+
+        const res = await calculateCuttingPlan(notReadyPieceIds, length)
+        if (res.success && res.data) {
+            setPlanningResults(res.data)
+        } else {
+            toast.error("Optimization failed")
+        }
+        setCalculating(false)
+    }
+
+    // Effect to recalculate when length changes
+    useEffect(() => {
+        if (step === 'PLANNING' && notReadyPieceIds.length > 0) {
+            calculatePlan(stockLength)
+        }
+    }, [step, stockLength])
+
+    const handleNext = async () => {
+        if (allReady) {
+            // Direct to submit (Only Welding WO)
+            await handleSubmit()
+        } else {
+            // Go to planning
+            setStep('PLANNING')
+        }
+    }
+
     const handleSubmit = async () => {
-        if (selectedAssemblyIds.length === 0) return
         setLoading(true)
 
         try {
-            // If parts not ready and user wants Part Prep WO
+            // 1. Handle Prep/Cutting WOs if needed
             if (!allReady && createPartPrepWO && notReadyPieceIds.length > 0) {
+                // Use the existing logic but improved:
+                // We typically use 'createSmartWorkOrder' or 'createPartPrepWorkOrder' 
+                // but the optimized flow is handled inside createSmartWorkOrder.
+
+                // TODO: Pass the PREFERRED STOCK info? 
+                // Currently backend smart WO does checking again. 
+                // For now, we trust the backend to do the same split.
+                // The optimization visualization was just for USER CONFIRMATION.
+
+                // However, the user wants "give user question if stock will be 6 or 12m long and outputs pieces needed"
+                // This output has been shown in the PLANNING step.
+                // The backend currently auto-calculates. 
+                // If we want to SAVE the order list (e.g. "Buy 5x 12m"), we might need to pass notes.
+
+                const purchaseNote = planningResults.flatMap(r =>
+                    r.newStockNeeded.map((n: any) => `${n.quantity}x ${n.length / 1000}m ${r.profileType} ${r.dimensions} (${r.grade})`)
+                ).join('\n')
+
                 const prepRes = await createPartPrepWorkOrder({
                     projectId,
                     pieceIds: notReadyPieceIds,
                     title: `Part Prep for Assembly`,
                     priority,
-                    scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined
+                    scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                    notes: purchaseNote ? `Recommended Purchase:\n${purchaseNote}` : undefined
                 })
 
                 if (!prepRes.success) {
                     toast.error(`Part Prep WO Error: ${prepRes.error}`)
                 } else {
-                    toast.success(`Part Prep WO created: ${prepRes.data?.mainWO?.workOrderNumber}`)
+                    toast.success(`Part Prep & Cutting WOs created`)
                 }
             }
 
-            // Create Assembly WO
+            // 2. Create Assembly WO (Welding)
+            // If parts were missing, this WO will likely be waiting or we might want to delay its creation?
+            // "from aseemblies ... if all parts available -> Welding WO. if not -> Cutting WO"
+            // The requirement says "if NOT ... auto creates cutting wo". 
+            // It implies we DON'T create the Welding WO yet? Or check readiness again later?
+            // Usually we create the Assembly WO (Welding) but set it to PENDING (Waiting).
+
             const res = await createAssemblyWorkOrder({
                 projectId,
                 assemblyIds: selectedAssemblyIds,
@@ -100,13 +166,8 @@ export function CreateAssemblyWODialog({
 
             if (!res.success) {
                 toast.error(`Assembly WO Error: ${res.error}`)
-                setLoading(false)
-                return
-            }
-
-            toast.success(`Assembly WO created: ${res.data?.id}`)
-            if (!res.allReady) {
-                toast.info('Work Order is PENDING - waiting for parts')
+            } else {
+                toast.success(`Assembly WO created`)
             }
 
             onOpenChange(false)
@@ -121,14 +182,17 @@ export function CreateAssemblyWODialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <Wrench className="h-5 w-5" />
                         Create Work Order for Assemblies
                     </DialogTitle>
                     <DialogDescription>
-                        Create assembly work order for {selectedAssemblyIds.length} selected assemblies
+                        {step === 'READINESS'
+                            ? `Checking readiness for ${selectedAssemblyIds.length} assemblies`
+                            : `Plan Material & Cutting`
+                        }
                     </DialogDescription>
                 </DialogHeader>
 
@@ -137,7 +201,7 @@ export function CreateAssemblyWODialog({
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         <span className="ml-2">Checking part readiness...</span>
                     </div>
-                ) : (
+                ) : step === 'READINESS' ? (
                     <div className="space-y-6">
                         {/* Readiness Summary */}
                         <div className={`p-4 rounded-lg ${allReady ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
@@ -145,157 +209,150 @@ export function CreateAssemblyWODialog({
                                 {allReady ? (
                                     <>
                                         <CheckCircle className="h-5 w-5 text-green-600" />
-                                        <span className="font-medium text-green-800">All parts ready!</span>
+                                        <span className="font-medium text-green-800">All parts ready! Welding WO will be created.</span>
                                     </>
                                 ) : (
                                     <>
                                         <AlertTriangle className="h-5 w-5 text-yellow-600" />
                                         <span className="font-medium text-yellow-800">
-                                            {notReadyParts.length} part(s) not ready
+                                            {notReadyParts.length} part(s) missing. Material Prep & Cutting WOs needed.
                                         </span>
                                     </>
                                 )}
                             </div>
                         </div>
 
-                        {/* Selected Assemblies */}
-                        <div className="border rounded-lg overflow-hidden">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-muted/50">
-                                        <TableHead>Assembly</TableHead>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead className="text-center">Parts</TableHead>
-                                        <TableHead className="text-center">Status</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {readiness.map(asm => (
-                                        <TableRow key={asm.assemblyId}>
-                                            <TableCell className="font-mono">{asm.assemblyNumber}</TableCell>
-                                            <TableCell>{asm.name}</TableCell>
-                                            <TableCell className="text-center">{asm.parts.length}</TableCell>
-                                            <TableCell className="text-center">
-                                                {asm.isReady ? (
-                                                    <Badge className="bg-green-100 text-green-800">Ready</Badge>
-                                                ) : (
-                                                    <Badge className="bg-yellow-100 text-yellow-800">Waiting</Badge>
-                                                )}
-                                            </TableCell>
+                        {/* Parts Not Ready Table */}
+                        {!allReady && notReadyParts.length > 0 && (
+                            <div className="border rounded-lg overflow-hidden">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50">
+                                            <TableHead>Missing Part</TableHead>
+                                            <TableHead>Profile</TableHead>
+                                            <TableHead className="text-center">Count</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-
-                        {/* Parts Not Ready */}
-                        {notReadyParts.length > 0 && (
-                            <div className="space-y-3">
-                                <h4 className="text-sm font-medium text-muted-foreground uppercase">Parts Needing Preparation</h4>
-                                <div className="border rounded-lg overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow className="bg-muted/50">
-                                                <TableHead>Part #</TableHead>
-                                                <TableHead>Profile</TableHead>
-                                                <TableHead className="text-center">Needed</TableHead>
-                                                <TableHead className="text-center">Ready</TableHead>
-                                                <TableHead className="text-center">In Progress</TableHead>
-                                                <TableHead className="text-center">Not Started</TableHead>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {notReadyParts.map(part => (
+                                            <TableRow key={part.partId}>
+                                                <TableCell className="font-mono">{part.partNumber}</TableCell>
+                                                <TableCell>{part.profileType} {part.profileDimensions}</TableCell>
+                                                <TableCell className="text-center text-red-600 font-bold">{part.notStarted}</TableCell>
                                             </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {notReadyParts.map(part => (
-                                                <TableRow key={part.partId}>
-                                                    <TableCell className="font-mono">{part.partNumber}</TableCell>
-                                                    <TableCell>{part.profileType} {part.profileDimensions}</TableCell>
-                                                    <TableCell className="text-center">{part.needed}</TableCell>
-                                                    <TableCell className="text-center text-green-600">{part.ready}</TableCell>
-                                                    <TableCell className="text-center text-yellow-600">{part.inProgress}</TableCell>
-                                                    <TableCell className="text-center text-red-600">{part.notStarted}</TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-
-                                {/* Create Part Prep WO Option */}
-                                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <Checkbox
-                                        id="createPartPrep"
-                                        checked={createPartPrepWO}
-                                        onCheckedChange={(c) => setCreatePartPrepWO(c === true)}
-                                    />
-                                    <Label htmlFor="createPartPrep" className="cursor-pointer flex-1">
-                                        <span className="font-medium text-blue-800">Create Part Prep Work Order</span>
-                                        <p className="text-xs text-blue-600 mt-1">
-                                            Creates a CUTTING work order for {notReadyPieceIds.length} pieces that need preparation
-                                        </p>
-                                    </Label>
-                                </div>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
                         )}
 
-                        {/* WO Details */}
+                        {/* Common Fields */}
                         <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                             <div className="grid gap-2">
-                                <Label className="text-xs uppercase text-muted-foreground">Title (optional)</Label>
-                                <Input
-                                    value={title}
-                                    onChange={e => setTitle(e.target.value)}
-                                    placeholder="Auto-generated"
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label className="text-xs uppercase text-muted-foreground">Priority</Label>
+                                <Label>Priority</Label>
                                 <Select value={priority} onValueChange={setPriority}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="LOW">Low</SelectItem>
                                         <SelectItem value="MEDIUM">Medium</SelectItem>
                                         <SelectItem value="HIGH">High</SelectItem>
                                         <SelectItem value="URGENT">Urgent</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="grid gap-2">
-                                <Label className="text-xs uppercase text-muted-foreground">Scheduled Date</Label>
-                                <Input
-                                    type="date"
-                                    value={scheduledDate}
-                                    onChange={e => setScheduledDate(e.target.value)}
-                                />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        {/* PLANNING STEP */}
+                        <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                            <div className="space-y-1">
+                                <h4 className="font-medium">Material Optimization</h4>
+                                <p className="text-sm text-muted-foreground">Select preferred stock length for new orders</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <Label>Stock Length:</Label>
+                                <Select
+                                    value={stockLength.toString()}
+                                    onValueChange={(v) => setStockLength(Number(v))}
+                                >
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="6000">6 meters</SelectItem>
+                                        <SelectItem value="12000">12 meters</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
 
-                        {/* Status Preview */}
-                        <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                            <span className="text-muted-foreground">Work Order Status: </span>
-                            {allReady ? (
-                                <Badge variant="outline" className="bg-blue-50 text-blue-700">PENDING</Badge>
-                            ) : (
-                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
-                                    PENDING (waiting for parts)
-                                </Badge>
-                            )}
-                        </div>
+                        {calculating ? (
+                            <div className="py-12 flex justify-center text-muted-foreground">
+                                <Loader2 className="animate-spin mr-2" /> Optimizing plan...
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {planningResults.map((res: any, idx: number) => (
+                                    <div key={idx} className="border rounded-lg p-4 space-y-3">
+                                        <h5 className="font-bold flex items-center gap-2">
+                                            <Package className="h-4 w-4" />
+                                            {res.profileType} {res.dimensions} <Badge variant="outline">{res.grade}</Badge>
+                                        </h5>
+
+                                        <div className="grid grid-cols-2 gap-8">
+                                            {/* Stock Used */}
+                                            <div>
+                                                <h6 className="text-xs font-bold uppercase text-muted-foreground mb-2">From Stock</h6>
+                                                {res.stockUsed.length === 0 ? <span className="text-sm text-muted-foreground italic">None used</span> : (
+                                                    <ul className="text-sm space-y-1">
+                                                        {res.stockUsed.map((s: any, i: number) => (
+                                                            <li key={i} className="flex justify-between">
+                                                                <span>Lot {s.lotId.substring(0, 8)}...</span>
+                                                                <span className="text-green-600 font-mono">{s.length / 1000}m</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
+
+                                            {/* To Buy */}
+                                            <div>
+                                                <h6 className="text-xs font-bold uppercase text-muted-foreground mb-2">To Order / Buy</h6>
+                                                {res.newStockNeeded.length === 0 ? <span className="text-sm text-muted-foreground italic">No purchase needed</span> : (
+                                                    <ul className="text-sm space-y-1">
+                                                        {res.newStockNeeded.map((n: any, i: number) => (
+                                                            <li key={i} className="font-bold text-blue-700 bg-blue-50 p-1 rounded flex justify-between">
+                                                                <span>{n.quantity}x bars</span>
+                                                                <span>{n.length / 1000}m</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
                 <DialogFooter>
+                    {step === 'PLANNING' && (
+                        <Button variant="ghost" onClick={() => setStep('READINESS')}>Back</Button>
+                    )}
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading || checking || selectedAssemblyIds.length === 0}>
-                        {loading ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                Creating...
-                            </>
-                        ) : (
-                            <>Create Work Order{!allReady && createPartPrepWO ? 's' : ''}</>
-                        )}
-                    </Button>
+
+                    {step === 'READINESS' ? (
+                        <Button onClick={handleNext}>
+                            {allReady ? 'Create Welding WO' : 'Plan Material & Cutting'}
+                        </Button>
+                    ) : (
+                        <Button onClick={handleSubmit} disabled={loading || calculating}>
+                            {loading ? <Loader2 className="animate-spin mr-2" /> : null}
+                            Confirm Plan & Create WOs
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

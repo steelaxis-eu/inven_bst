@@ -626,6 +626,93 @@ export async function checkMaterialStock(pieceIds: string[]): Promise<{
 }
 
 /**
+ * NEW: Complete Material Prep WO and Record Stock
+ */
+export async function completeMaterialPrepWorkOrder(
+    workOrderId: string,
+    stockItems: {
+        profileId: string
+        gradeId: string
+        length: number
+        quantity: number
+        lotId: string
+        certificate: string
+        supplierId?: string
+        totalCost: number
+    }[]
+) {
+    try {
+        const wo = await prisma.workOrder.findUnique({
+            where: { id: workOrderId },
+            include: { items: true }
+        })
+
+        if (!wo || wo.type !== 'MATERIAL_PREP') {
+            return { success: false, error: 'Invalid Work Order' }
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // 1. Create Inventory Records
+            for (const item of stockItems) {
+                const totalLengthMeters = (item.length * item.quantity) / 1000
+                const costPerMeter = totalLengthMeters > 0 ? item.totalCost / totalLengthMeters : 0
+
+                await tx.inventory.create({
+                    data: {
+                        lotId: item.lotId,
+                        profileId: item.profileId,
+                        gradeId: item.gradeId,
+                        supplierId: item.supplierId,
+                        length: item.length,
+                        quantityReceived: item.quantity,
+                        quantityAtHand: item.quantity,
+                        costPerMeter,
+                        certificateFilename: item.certificate,
+                        status: 'ACTIVE',
+                        createdBy: 'Material Prep WO',
+                        modifiedBy: 'Material Prep WO'
+                    }
+                })
+            }
+
+            // 2. Complete the WO
+            await tx.workOrder.update({
+                where: { id: workOrderId },
+                data: { status: 'COMPLETED', completedAt: new Date() }
+            })
+
+            await tx.workOrderItem.updateMany({
+                where: { workOrderId },
+                data: { status: 'COMPLETED', completedAt: new Date() }
+            })
+
+            // 3. Unblock dependent WOs (Cutting WOs waiting for this material)
+            const blockedWOs = await tx.workOrder.findMany({
+                where: { blockedByWOId: workOrderId }
+            })
+
+            for (const blockedWO of blockedWOs) {
+                await tx.workOrder.update({
+                    where: { id: blockedWO.id },
+                    data: {
+                        blockedByWOId: null,
+                        // Append note about material arrival
+                        notes: (blockedWO.notes || '') + `\n[Material Arrived: ${new Date().toLocaleDateString()}]`
+                    }
+                })
+            }
+        })
+
+        revalidatePath(`/projects/${wo.projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('completeMaterialPrepWorkOrder error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
  * Create Work Order with smart stock checking
  * - If CUTTING and no stock: Creates MATERIAL_PREP first, then CUTTING blocked by it
  * - Otherwise creates the requested WO type
@@ -651,7 +738,7 @@ export async function createSmartWorkOrder(input: {
             return { success: false, error: 'Project ID and pieces required' }
         }
 
-        // For CUTTING, check stock first
+        // For CUTTING, check stock first and OPTIMIZE
         if (type === 'CUTTING') {
             const stockCheck = await checkMaterialStock(pieceIds)
             if (!stockCheck.success) {
@@ -659,14 +746,41 @@ export async function createSmartWorkOrder(input: {
             }
 
             const { inStock, needsMaterial } = stockCheck.data!
+            let createdMainWO = null
+            let createdPrepWO = null
 
-            // If some pieces need material, create MATERIAL_PREP WO first
+            // 1. Create Active Cutting WO for "In Stock" pieces (Optimization: Cut straight away)
+            if (inStock.length > 0) {
+                const workOrderNumber = await generateWorkOrderNumber(projectId)
+
+                // Add suffix if we are splitting
+                const titleSuffix = needsMaterial.length > 0 ? ' (Batch 1 - In Stock)' : ''
+
+                createdMainWO = await prisma.workOrder.create({
+                    data: {
+                        projectId,
+                        workOrderNumber,
+                        title: (title || 'Cutting') + titleSuffix,
+                        type: 'CUTTING',
+                        priority: priority || 'MEDIUM',
+                        status: 'PENDING', // Active immediately!
+                        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                        notes: notes,
+                        items: {
+                            create: inStock.map(m => ({ pieceId: m.pieceId }))
+                        }
+                    },
+                    include: { items: true }
+                })
+            }
+
+            // 2. Create Material Prep + Blocked Cutting WO for "Needs Material" pieces
             if (needsMaterial.length > 0) {
                 const prepWONumber = await generateWorkOrderNumber(projectId)
-                const mainWONumber = await generateWorkOrderNumber(projectId)
+                const blockedWONumber = await generateWorkOrderNumber(projectId)
 
                 // Create MATERIAL_PREP WO
-                const prepWO = await prisma.workOrder.create({
+                createdPrepWO = await prisma.workOrder.create({
                     data: {
                         projectId,
                         workOrderNumber: prepWONumber,
@@ -682,35 +796,34 @@ export async function createSmartWorkOrder(input: {
                     }
                 })
 
-                // Create CUTTING WO blocked by MATERIAL_PREP
-                const mainWO = await prisma.workOrder.create({
+                // Create Cutting WO blocked by Prep WO
+                await prisma.workOrder.create({
                     data: {
                         projectId,
-                        workOrderNumber: mainWONumber,
-                        title: title || 'Cutting',
+                        workOrderNumber: blockedWONumber,
+                        title: (title || 'Cutting') + ' (Batch 2 - Pending Material)',
                         type: 'CUTTING',
                         priority: priority || 'MEDIUM',
                         status: 'PENDING',
-                        blockedByWOId: prepWO.id,
+                        blockedByWOId: createdPrepWO.id,
                         scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                        notes: `[Waiting for material - ${prepWO.workOrderNumber}]\n${notes || ''}`.trim(),
+                        notes: `[Waiting for material - ${createdPrepWO.workOrderNumber}]\n${notes || ''}`.trim(),
                         items: {
-                            create: pieceIds.map(pieceId => ({ pieceId }))
+                            create: needsMaterial.map(m => ({ pieceId: m.pieceId }))
                         }
-                    },
-                    include: { items: true }
+                    }
                 })
+            }
 
-                revalidatePath(`/projects/${projectId}`)
-                return {
-                    success: true,
-                    data: { mainWO, prepWO },
-                    needsMaterialPrep: true
-                }
+            revalidatePath(`/projects/${projectId}`)
+            return {
+                success: true,
+                data: { mainWO: createdMainWO, prepWO: createdPrepWO },
+                needsMaterialPrep: needsMaterial.length > 0
             }
         }
 
-        // Create single WO (stock available or non-CUTTING type)
+        // Default behavior for other types (or if no stock check logic needed)
         const workOrderNumber = await generateWorkOrderNumber(projectId)
         const wo = await prisma.workOrder.create({
             data: {
