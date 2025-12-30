@@ -13,26 +13,27 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { DownloadCertificatesButton } from "@/components/download-certificates-button"
 
-import { PartsTable } from "@/components/project/parts-table"
+import { UnifiedPartsTable, UnifiedPartItem } from "@/components/project/unified-parts-table"
 import { CreatePartDialog } from "@/components/project/create-part-dialog"
 import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialog"
 import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
 import { WorkOrdersList, WorkOrderSummary } from "@/components/project/workorders-list"
 import { QualityChecksList, QualitySummary } from "@/components/project/quality-checks-list"
-import { PlatePartsTable, PlatePartsSummary } from "@/components/project/plate-parts-table"
+import { PlatePartsSummary } from "@/components/project/plate-parts-table"
 import { DeliveriesList, DeliveriesSummary } from "@/components/project/deliveries-list"
 
 import {
     Package, Layers, ClipboardList, Shield,
-    Truck, FileWarning, BarChart3, Scissors
+    Truck, FileWarning, BarChart3, Scissors,
+    Factory, ShoppingCart
 } from "lucide-react"
 
 export default async function ProjectDashboard({ params }: { params: Promise<{ id: string }> }) {
+    // ... data fetching remains ...
     const { id } = await params
     const cleanId = decodeURIComponent(id).trim()
 
-    // Fetch all project data in parallel
     const [project, parts, assemblies, workOrders, qualityChecks, plateParts, deliveries, profiles, grades, inventoryStock, standardProfiles, shapes] =
         await Promise.all([
             getProject(cleanId),
@@ -52,6 +53,8 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
             prisma.profileShape.findMany()
         ])
 
+    // ... (keep existing check for project) ...
+
     if (!project) {
         return (
             <div className="p-8 text-center text-red-500">
@@ -60,19 +63,17 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
         )
     }
 
-    // Calculate overall progress
+    // ... (keep progress calcs) ...
     type PartData = { pieces: { status: string }[] }
     const totalPieces = parts.reduce((sum: number, p: PartData) => sum + p.pieces.length, 0)
     const readyPieces = parts.reduce((sum: number, p: PartData) => sum + p.pieces.filter((pc: { status: string }) => pc.status === 'READY').length, 0)
     const overallProgress = totalPieces > 0 ? Math.round((readyPieces / totalPieces) * 100) : 0
 
-    // Map inventory stock for dialog
     const inventoryMap = inventoryStock.map((i: { profileId: string; _sum: { quantityAtHand: number | null } }) => ({
         profileId: i.profileId,
         quantity: i._sum.quantityAtHand || 0
     }))
 
-    // Stats from existing project data
     const {
         missingCertCount = 0,
         totalProjectCost = 0,
@@ -80,9 +81,21 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
         netCost = 0,
     } = project.stats || {}
 
+
+    // GROUPING PARTS BY SOURCE
+    const inHouseItems: UnifiedPartItem[] = [
+        ...parts.filter((p: any) => !p.isOutsourcedCut).map((p: any) => ({ kind: 'part' as const, data: p })),
+        ...plateParts.filter((p: any) => !p.isOutsourced).map((p: any) => ({ kind: 'plate' as const, data: p }))
+    ]
+
+    const outsourcedItems: UnifiedPartItem[] = [
+        ...parts.filter((p: any) => p.isOutsourcedCut).map((p: any) => ({ kind: 'part' as const, data: p })),
+        ...plateParts.filter((p: any) => p.isOutsourced).map((p: any) => ({ kind: 'plate' as const, data: p }))
+    ]
+
     return (
         <div className="container mx-auto py-6 space-y-6">
-            {/* Header */}
+            {/* Header ... (unchanged) */}
             <div className="flex justify-between items-start">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -123,7 +136,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                 </div>
             </div>
 
-            {/* Overview Cards */}
+            {/* Overview Cards ... (unchanged) */}
             <div className="grid grid-cols-6 gap-4">
                 <Card>
                     <CardHeader className="pb-2">
@@ -140,12 +153,23 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <Package className="h-4 w-4" /> Parts
+                            <Factory className="h-4 w-4" /> In-House
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{parts.length}</div>
-                        <p className="text-xs text-muted-foreground">{totalPieces} total pieces</p>
+                        <div className="text-2xl font-bold">{inHouseItems.length}</div>
+                        <p className="text-xs text-muted-foreground">Items to fabricate</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                            <ShoppingCart className="h-4 w-4" /> Outsourced
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{outsourcedItems.length}</div>
+                        <p className="text-xs text-muted-foreground">Items to buy/subcon</p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -179,19 +203,6 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <Scissors className="h-4 w-4" /> Plates
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{plateParts.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {(plateParts as { status: string }[]).filter((p: { status: string }) => p.status === 'RECEIVED' || p.status === 'QC_PASSED').length} received
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                             <Truck className="h-4 w-4" /> Deliveries
                         </CardTitle>
                     </CardHeader>
@@ -207,10 +218,13 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
             </div>
 
             {/* Tabs */}
-            <Tabs defaultValue="parts" className="w-full">
-                <TabsList className="grid w-full grid-cols-7">
-                    <TabsTrigger value="parts" className="gap-2">
-                        <Package className="h-4 w-4" /> Parts
+            <Tabs defaultValue="inhouse" className="w-full">
+                <TabsList className="grid w-full grid-cols-6">
+                    <TabsTrigger value="inhouse" className="gap-2">
+                        <Factory className="h-4 w-4" /> In-House
+                    </TabsTrigger>
+                    <TabsTrigger value="outsourced" className="gap-2">
+                        <ShoppingCart className="h-4 w-4" /> Outsourced
                     </TabsTrigger>
                     <TabsTrigger value="assemblies" className="gap-2">
                         <Layers className="h-4 w-4" /> Assemblies
@@ -221,31 +235,40 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     <TabsTrigger value="quality" className="gap-2">
                         <Shield className="h-4 w-4" /> Quality
                     </TabsTrigger>
-                    <TabsTrigger value="plates" className="gap-2">
-                        <Scissors className="h-4 w-4" /> Plates
-                    </TabsTrigger>
                     <TabsTrigger value="deliveries" className="gap-2">
                         <Truck className="h-4 w-4" /> Deliveries
                     </TabsTrigger>
-                    <TabsTrigger value="usage" className="gap-2">
-                        <BarChart3 className="h-4 w-4" /> Usage
-                    </TabsTrigger>
                 </TabsList>
 
-                {/* Parts Tab */}
-                <TabsContent value="parts" className="mt-6">
+                {/* In-House Tab */}
+                <TabsContent value="inhouse" className="mt-6">
                     <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Bill of Materials</h2>
+                        <div>
+                            <h2 className="text-xl font-semibold">In-House Production</h2>
+                            <p className="text-sm text-muted-foreground">Items fabricated internally (Profiles & Plates)</p>
+                        </div>
                         <CreatePartDialog
                             projectId={cleanId}
-                            profiles={profiles.map((p: { id: string; type: string; dimensions: string; weightPerMeter: number }) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            standardProfiles={standardProfiles.map((p: { type: string; dimensions: string; weightPerMeter: number }) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            grades={grades.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))}
-                            shapes={shapes.map((s: { id: string; params: unknown; formula: string | null }) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
+                            profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
+                            shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
                             inventory={inventoryMap}
                         />
                     </div>
-                    <PartsTable parts={parts as any} projectId={cleanId} />
+                    <UnifiedPartsTable items={inHouseItems} projectId={cleanId} />
+                </TabsContent>
+
+                {/* Outsourced Tab */}
+                <TabsContent value="outsourced" className="mt-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 className="text-xl font-semibold">Outsourced Items</h2>
+                            <p className="text-sm text-muted-foreground">Items to be purchased or sub-contracted</p>
+                        </div>
+                        {/* We could add generic "Create Outsourced Part" button here if CreatePartDialog doesn't cover it well enough */}
+                    </div>
+                    <UnifiedPartsTable items={outsourcedItems} projectId={cleanId} />
                 </TabsContent>
 
                 {/* Assemblies Tab */}
@@ -254,12 +277,12 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                         <h2 className="text-xl font-semibold">Assemblies</h2>
                         <CreateAssemblyDialog
                             projectId={cleanId}
-                            existingParts={(parts as { id: string; partNumber: string; description: string | null; profile?: { type: string; dimensions: string } | null }[])}
-                            existingAssemblies={(assemblies as { id: string; assemblyNumber: string; name: string }[])}
-                            profiles={profiles.map((p: { id: string; type: string; dimensions: string; weightPerMeter: number }) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            standardProfiles={standardProfiles.map((p: { type: string; dimensions: string; weightPerMeter: number }) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            grades={grades.map((g: { id: string; name: string }) => ({ id: g.id, name: g.name }))}
-                            shapes={shapes.map((s: { id: string; params: unknown; formula: string | null }) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
+                            existingParts={(parts as any)}
+                            existingAssemblies={(assemblies as any)}
+                            profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                            grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
+                            shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
                         />
                     </div>
                     <AssemblySummary assemblies={assemblies as any} />
@@ -284,15 +307,6 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     <QualityChecksList checks={qualityChecks as any} />
                 </TabsContent>
 
-                {/* Plates Tab */}
-                <TabsContent value="plates" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Plate Parts (Outsourced)</h2>
-                    </div>
-                    <PlatePartsSummary plateParts={plateParts as any} />
-                    <PlatePartsTable plateParts={plateParts as any} />
-                </TabsContent>
-
                 {/* Deliveries Tab */}
                 <TabsContent value="deliveries" className="mt-6">
                     <div className="flex justify-between items-center mb-4">
@@ -302,7 +316,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     <DeliveriesList deliveries={deliveries as any} />
                 </TabsContent>
 
-                {/* Usage Tab - Original content */}
+                {/* Usage Tab */}
                 <TabsContent value="usage" className="mt-6">
                     <UsageTab project={project} />
                 </TabsContent>

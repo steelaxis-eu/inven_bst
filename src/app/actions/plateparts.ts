@@ -302,3 +302,33 @@ export async function getPlatePartsSummary(projectId: string) {
 
     return summary
 }
+
+/**
+ * Toggle plate part outsourcing status
+ */
+export async function togglePlatePartSource(platePartId: string) {
+    try {
+        const part = await prisma.platePart.findUnique({
+            where: { id: platePartId }
+        })
+
+        if (!part) {
+            return { success: false, error: 'Plate part not found' }
+        }
+
+        // Toggle the boolean
+        const newStatus = !part.isOutsourced
+
+        await prisma.platePart.update({
+            where: { id: platePartId },
+            data: { isOutsourced: newStatus }
+        })
+
+        revalidatePath(`/projects/${part.projectId}`)
+        return { success: true, isOutsourced: newStatus }
+
+    } catch (e: any) {
+        console.error('togglePlatePartSource error:', e)
+        return { success: false, error: e.message }
+    }
+}

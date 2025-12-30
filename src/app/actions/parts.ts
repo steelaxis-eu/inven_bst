@@ -542,3 +542,33 @@ export async function getProjectProgress(projectId: string) {
         percentByWeight: totalWeight > 0 ? Math.round((readyWeight / totalWeight) * 100) : 0
     }
 }
+
+/**
+ * Toggle part outsourcing status
+ */
+export async function togglePartSource(partId: string) {
+    try {
+        const part = await prisma.part.findUnique({
+            where: { id: partId }
+        })
+
+        if (!part) {
+            return { success: false, error: 'Part not found' }
+        }
+
+        // Toggle the boolean
+        const newStatus = !part.isOutsourcedCut
+
+        await prisma.part.update({
+            where: { id: partId },
+            data: { isOutsourcedCut: newStatus }
+        })
+
+        revalidatePath(`/projects/${part.projectId}`)
+        return { success: true, isOutsourced: newStatus }
+
+    } catch (e: any) {
+        console.error('togglePartSource error:', e)
+        return { success: false, error: e.message }
+    }
+}

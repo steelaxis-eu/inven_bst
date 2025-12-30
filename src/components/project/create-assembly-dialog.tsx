@@ -223,7 +223,7 @@ export function CreateAssemblyDialog({
             width: parseFloat(plateWidth) || 0,
             plateLength: parseFloat(plateLength) || 0,
             unitWeight: parseFloat(plateWeight) || 0,
-            supplier: plateSupplier,
+            supplier: isPlateOutsourced ? plateSupplier : '',
             isNew: true
         }])
 
