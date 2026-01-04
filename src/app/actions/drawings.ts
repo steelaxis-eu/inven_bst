@@ -2,16 +2,13 @@
 
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
-import { createWorker } from 'tesseract.js'
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 import { createCanvas } from 'canvas'
 
-// Initialize PDF.js worker
-// We use the legacy build for Node.js support
-// pdfjsLib.GlobalWorkerOptions.workerSrc is not needed in Node usually if using legacy but good practice or might need mock
-// For pure node with pdfjs-dist@legacy, we often just need to mock typical browser APIs or use custom setup.
-// Let's try standard import first.
+// Initialize PDF.js worker logic
+// Note: In a server action, simple imports often suffice for legacy build
 
 export interface ParsedPart {
     id: string
@@ -26,10 +23,38 @@ export interface ParsedPart {
     confidence: number
 }
 
+const GENERATION_CONFIG = {
+    responseMimeType: "application/json",
+    responseSchema: {
+        type: SchemaType.OBJECT,
+        properties: {
+            partNumber: { type: SchemaType.STRING },
+            title: { type: SchemaType.STRING },
+            quantity: { type: SchemaType.NUMBER },
+            material: { type: SchemaType.STRING },
+            thickness: { type: SchemaType.NUMBER },
+            width: { type: SchemaType.NUMBER },
+            length: { type: SchemaType.NUMBER },
+            confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" }
+        }
+    } as const
+}
+
 export async function parseDrawingsZip(formData: FormData): Promise<{ success: boolean, parts?: ParsedPart[], error?: string }> {
     try {
         const file = formData.get('file') as File
         if (!file) return { success: false, error: "No file uploaded" }
+
+        const apiKey = process.env.GEMINI_API_KEY
+        if (!apiKey) {
+            return { success: false, error: "GEMINI_API_KEY is missing in server environment" }
+        }
+
+        const genAI = new GoogleGenerativeAI(apiKey)
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
+            generationConfig: GENERATION_CONFIG
+        })
 
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
@@ -44,52 +69,88 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
         const parsedParts: ParsedPart[] = []
 
-        // Initialize Tesseract worker once if possible, or per request
-        const worker = await createWorker('eng')
-
         for (const entry of pdfEntries) {
             try {
-                const pdfBuffer = entry.getData() // Uint8Array in adm-zip? Node buffer.
+                const pdfBuffer = entry.getData()
 
-                // Convert PDF to Image (First Page)
+                // 1. Render PDF Page 1 to Image
                 const loadingTask = pdfjsLib.getDocument({
                     data: new Uint8Array(pdfBuffer),
                     standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
-                    disableFontFace: true, // often helps in node
+                    disableFontFace: true,
                 })
 
                 const pdfDocument = await loadingTask.promise
                 const page = await pdfDocument.getPage(1)
 
-                const viewport = page.getViewport({ scale: 2.0 }) // Higher scale for better OCR
+                // Lower scale is often fine for Gemini types, but 2.0 ensures clarity
+                const viewport = page.getViewport({ scale: 2.0 })
                 const canvas = createCanvas(viewport.width, viewport.height)
                 const context = canvas.getContext('2d')
 
-                // Render
                 await page.render({
                     canvasContext: context as any,
                     viewport: viewport
                 }).promise
 
-                // Get Image Data
                 const imageBuffer = canvas.toBuffer('image/png')
+                const imageBase64 = imageBuffer.toString('base64')
 
-                // OCR
-                const { data: { text } } = await worker.recognize(imageBuffer)
+                // 2. Send to Gemini
+                const prompt = `
+          Analyze this technical drawing. Extract the following details into JSON:
+          - partNumber: The main part number (often in the title block).
+          - title: The part description or title.
+          - quantity: The required quantity (QTY). If not found, default to 1.
+          - material: The material grade (e.g., S355, 304, AlMg3). Standardize if possible.
+          - thickness: The thickness of the plate/sheet in mm.
+          - width: The width in mm.
+          - length: The length in mm.
+          - confidence: Your confidence (0-100) in the extraction, especially Part Number and Qty.
+        `
 
-                // Parse Text
-                const part = parseOcrText(text, entry.name)
-                parsedParts.push(part)
+                const result = await model.generateContent([
+                    prompt,
+                    {
+                        inlineData: {
+                            data: imageBase64,
+                            mimeType: "image/png"
+                        }
+                    }
+                ])
+
+                const response = result.response
+                const text = response.text()
+
+                let data: any = {}
+                try {
+                    data = JSON.parse(text)
+                } catch (e) {
+                    console.error("Failed to parse Gemini JSON", text)
+                    // fallback rudimentary
+                    data = { partNumber: "PARSE_ERROR" }
+                }
+
+                parsedParts.push({
+                    id: uuidv4(),
+                    filename: entry.name,
+                    partNumber: data.partNumber || entry.name.replace('.pdf', ''),
+                    description: data.title || "",
+                    quantity: data.quantity || 1,
+                    material: data.material || "",
+                    thickness: data.thickness || 0,
+                    width: data.width || 0,
+                    length: data.length || 0,
+                    confidence: data.confidence || 0
+                })
 
             } catch (e) {
-                console.error(`Failed to parse ${entry.name}:`, e)
-                // Add a dummy entry so user knows it failed? Or skip?
-                // Let's add with error name
+                console.error(`Failed to process ${entry.name} with Gemini:`, e)
                 parsedParts.push({
                     id: uuidv4(),
                     filename: entry.name,
                     partNumber: entry.name.replace('.pdf', ''),
-                    description: "FAILED TO PARSE",
+                    description: "AI PROCESSING FAILED",
                     quantity: 0,
                     material: "",
                     thickness: 0,
@@ -100,93 +161,10 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
             }
         }
 
-        await worker.terminate()
-
         return { success: true, parts: parsedParts }
 
     } catch (error: any) {
         console.error("ZIP Parse Error:", error)
         return { success: false, error: error.message || "Failed to process ZIP file" }
-    }
-}
-
-function parseOcrText(text: string, filename: string): ParsedPart {
-    // Normalize text: remove extra spaces, fix common OCR errors
-    // 0 vs O, etc. if relevant. 
-    // Text often comes with newlines.
-    const cleanText = text
-    const lines = text.split('\n')
-
-    // 1. Part Number: Default to filename, but look for "Part No:" or "Part Number"
-    let partNumber = filename.replace(/\.pdf$/i, '')
-    // OCR often messes up labels, look for patterns
-    const partNoMatch = text.match(/(?:Part\s*No|Part\s*Number|Item\s*No)[\s.:]+([A-Z0-9-]+)/i)
-    if (partNoMatch) {
-        // If match is reasonably long, use it
-        if (partNoMatch[1].length > 3) partNumber = partNoMatch[1]
-    }
-
-    // 2. Quantity
-    let quantity = 1
-    // Look for "QTY: 5" or "Quantity 5"
-    // OCR might see "QTV" or "0TY"
-    const qtyMatch = text.match(/(?:QTY|QUAN|QTV)[\s.:]+([0-9]+)/i)
-    if (qtyMatch) {
-        quantity = parseInt(qtyMatch[1])
-    }
-
-    // 3. Material
-    let material = ""
-    // Common grades
-    const grades = ['S355', 'S235', 'S275', '304', '316', 'ALU', 'HARDOX', 'S355J2', 'S355J2+N']
-    for (const g of grades) {
-        if (new RegExp(g, 'i').test(text)) { // wait, 'await' in sync loop? no.
-            // also avoid matching substrings incorrectly
-            if (text.toUpperCase().includes(g.toUpperCase())) {
-                material = g
-                break
-            }
-        }
-    }
-
-    // 4. Dimensions
-    // Look for patterns like "10x100x200" or "PL 10*100*200" or "Ø50"
-    // OCR might output 'x', 'X', '*', 'x'
-    let thickness = 0, width = 0, length = 0
-
-    // Try to find standard dimension line: T x W x L
-    // e.g. 10 x 200 x 3000
-    // Regex allows whitespace and X/x/*
-    const dimMatch = text.match(/([0-9]+(?:\.[0-9]+)?)\s*[xX*]\s*([0-9]+(?:\.[0-9]+)?)\s*[xX*]\s*([0-9]+(?:\.[0-9]+)?)/)
-    if (dimMatch) {
-        // Sort dimensions: smallest = thick, middle = width, largest = length
-        const dims = [parseFloat(dimMatch[1]), parseFloat(dimMatch[2]), parseFloat(dimMatch[3])].sort((a, b) => a - b)
-        thickness = dims[0]
-        width = dims[1]
-        length = dims[2]
-    } else {
-        // Try to find Thickness (t=10, thk=10)
-        const thkMatch = text.match(/(?:thk|t|thickness)[\s.:=]+([0-9]+(?:\.[0-9]+)?)/i)
-        if (thkMatch) thickness = parseFloat(thkMatch[1])
-    }
-
-    // Confidence is rudimentary
-    let confidence = 0
-    if (qtyMatch) confidence += 20
-    if (material) confidence += 20
-    if (width > 0 && length > 0) confidence += 40
-    if (partNumber !== filename.replace('.pdf', '')) confidence += 20
-
-    return {
-        id: uuidv4(),
-        filename,
-        partNumber: partNumber.trim(),
-        description: "", // tough to extract description reliably without specific layout
-        quantity,
-        material,
-        thickness,
-        width,
-        length,
-        confidence
     }
 }

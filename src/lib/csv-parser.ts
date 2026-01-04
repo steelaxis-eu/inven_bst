@@ -2,7 +2,7 @@
  * CSV/Excel Parser Utility for Inventory Import
  */
 
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 export interface ParsedInventoryRow {
     lotId: string
@@ -43,34 +43,27 @@ export function generateCSVTemplate(): string {
 /**
  * Generate an Excel (.xlsx) template for inventory import
  */
-export function generateExcelTemplate(): Uint8Array {
-    const wb = XLSX.utils.book_new()
+export async function generateExcelTemplate(): Promise<Uint8Array> {
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('Inventory')
 
-    const exampleData = [
-        HEADERS,
-        ['LOT-001', 'HEA', '200', 'S355', 6000, 10, 1500.00, 'cert-001.pdf', 'SteelCorp', 'INV-2024-001'],
-        ['LOT-002', 'IPE', '300', 'S235', 12000, 5, 2400.00, '', '', 'INV-2024-001'],
-    ]
+    // Add Headers
+    worksheet.addRow(HEADERS)
 
-    const ws = XLSX.utils.aoa_to_sheet(exampleData)
+    // Add Example Rows
+    worksheet.addRow(['LOT-001', 'HEA', '200', 'S355', 6000, 10, 1500.00, 'cert-001.pdf', 'SteelCorp', 'INV-2024-001'])
+    worksheet.addRow(['LOT-002', 'IPE', '300', 'S235', 12000, 5, 2400.00, '', '', 'INV-2024-001'])
 
     // Set column widths
-    ws['!cols'] = [
-        { wch: 12 }, // LotID
-        { wch: 12 }, // ProfileType
-        { wch: 12 }, // Dimensions
-        { wch: 8 },  // Grade
-        { wch: 12 }, // Length
-        { wch: 8 },  // Quantity
-        { wch: 12 }, // TotalCost
-        { wch: 20 }, // Certificate
-        { wch: 15 }, // Supplier
-        { wch: 15 }, // InvoiceNumber
-    ]
+    const colWidths = [12, 12, 12, 8, 12, 8, 12, 20, 15, 15]
+    worksheet.columns.forEach((col, idx) => {
+        if (col && idx < colWidths.length) {
+            col.width = colWidths[idx]
+        }
+    })
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Inventory')
-
-    return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array
+    const buffer = await workbook.xlsx.writeBuffer()
+    return new Uint8Array(buffer)
 }
 
 /**
@@ -99,15 +92,50 @@ export function parseCSV(csvText: string): ParseResult {
 /**
  * Parse Excel file into inventory rows
  */
-export function parseExcel(data: ArrayBuffer): ParseResult {
-    const wb = XLSX.read(data, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 })
+export async function parseExcel(data: ArrayBuffer): Promise<ParseResult> {
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(data)
 
-    // Skip header row
-    const dataRows = rows.slice(1).filter(row => row.length > 0 && row[0])
+    // Get first worksheet
+    const worksheet = workbook.worksheets[0]
+    if (!worksheet) {
+        return { rows: [], totalValid: 0, totalInvalid: 0 }
+    }
 
-    const parsedRows = dataRows.map(row => parseRowFromArray(row.map(c => String(c ?? ''))))
+    const rows: string[][] = []
+
+    worksheet.eachRow((row, rowNumber) => {
+        // Skip header row usually row 1
+        if (rowNumber === 1) return
+
+        const rowValues: string[] = []
+        // Iterate cells 1 to max column
+        for (let i = 1; i <= row.cellCount || i <= 10; i++) {
+            const cell = row.getCell(i)
+            // .text or .value could be used. .text gives string representation formatted
+            // value might be object for hyperlinks etc. safe to use toString or text ?
+            // For simple data imports, text or value works. 
+            // exceljs .value can be null.
+            const val = cell.value
+            if (val === null || val === undefined) {
+                rowValues.push('')
+            } else if (typeof val === 'object') {
+                // handle potential rich text or hyperlinks
+                if ('text' in val) rowValues.push((val as any).text)
+                else if ('result' in val) rowValues.push(String((val as any).result))
+                else rowValues.push(String(val))
+            } else {
+                rowValues.push(String(val))
+            }
+        }
+
+        // Only add if not completely empty
+        if (rowValues.some(v => v.trim() !== '')) {
+            rows.push(rowValues)
+        }
+    })
+
+    const parsedRows = rows.map(row => parseRowFromArray(row))
 
     return {
         rows: parsedRows,

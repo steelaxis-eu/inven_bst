@@ -28,8 +28,8 @@ export function CSVImportDialog() {
         URL.revokeObjectURL(url)
     }
 
-    const handleDownloadExcel = () => {
-        const data = generateExcelTemplate()
+    const handleDownloadExcel = async () => {
+        const data = await generateExcelTemplate()
         const blob = new Blob([data.buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -50,7 +50,7 @@ export function CSVImportDialog() {
         let result
         if (isExcel) {
             const buffer = await file.arrayBuffer()
-            result = parseExcel(buffer)
+            result = await parseExcel(buffer)
         } else {
             const text = await file.text()
             result = parseCSV(text)
