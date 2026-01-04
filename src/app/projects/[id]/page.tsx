@@ -14,7 +14,14 @@ import { Progress } from "@/components/ui/progress"
 import { DownloadCertificatesButton } from "@/components/download-certificates-button"
 
 import { UnifiedPartsTable, UnifiedPartItem } from "@/components/project/unified-parts-table"
+import { ImportDrawingsDialog } from '@/components/project/import-drawings-dialog'
 import { CreatePartDialog } from "@/components/project/create-part-dialog"
+
+// ... existing imports
+
+// Inside the component...
+
+
 import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialog"
 import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
@@ -248,14 +255,22 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                             <h2 className="text-xl font-semibold">In-House Production</h2>
                             <p className="text-sm text-muted-foreground">Items fabricated internally (Profiles & Plates)</p>
                         </div>
-                        <CreatePartDialog
-                            projectId={cleanId}
-                            profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
-                            shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
-                            inventory={inventoryMap}
-                        />
+                        <div className="flex gap-2">
+                            <ImportDrawingsDialog
+                                projectId={cleanId}
+                                profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                                standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                                grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
+                            />
+                            <CreatePartDialog
+                                projectId={cleanId}
+                                profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                                standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
+                                grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
+                                shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
+                                inventory={inventoryMap}
+                            />
+                        </div>
                     </div>
                     <UnifiedPartsTable items={inHouseItems} projectId={cleanId} />
                 </TabsContent>

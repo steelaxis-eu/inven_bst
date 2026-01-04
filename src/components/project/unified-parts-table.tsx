@@ -4,8 +4,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { ChevronDown, ChevronRight, Package, MoreHorizontal, RefreshCw, Scissors, Factory } from 'lucide-react'
+import { ChevronDown, ChevronRight, Package, MoreHorizontal, RefreshCw, Scissors, Factory, ClipboardList } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { togglePartSource, deletePart, finishPart } from '@/app/actions/parts'
@@ -24,20 +25,39 @@ interface UnifiedPartsTableProps {
 }
 
 export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) {
-    const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set())
+    const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [loadingId, setLoadingId] = useState<string | null>(null)
 
+    const allIds = items.map(i => i.data.id)
+    const allSelected = items.length > 0 && selectedIds.length === items.length
+
     const toggleExpand = (id: string) => {
-        const newExpanded = new Set(expandedParts)
-        if (newExpanded.has(id)) {
-            newExpanded.delete(id)
+        // ... (removed)
+    }
+
+    const handleSelect = (id: string) => {
+        if (selectedIds.includes(id)) {
+            setSelectedIds(selectedIds.filter(i => i !== id))
         } else {
-            newExpanded.add(id)
+            setSelectedIds([...selectedIds, id])
         }
-        setExpandedParts(newExpanded)
+    }
+
+    const handleSelectAll = () => {
+        if (allSelected) {
+            setSelectedIds([])
+        } else {
+            setSelectedIds(allIds)
+        }
+    }
+
+    const handleCreateWO = () => {
+        toast.info(`Creating Work Order for ${selectedIds.length} items (Coming Soon)`)
+        // TODO: Open WO Dialog
     }
 
     const handleToggleSource = async (item: UnifiedPartItem) => {
+        // ... (keep existing)
         const id = item.kind === 'part' ? item.data.id : item.data.id
         setLoadingId(id)
 
@@ -62,6 +82,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     const handleDelete = async (item: UnifiedPartItem) => {
+        // ... (keep existing)
         if (!window.confirm("Are you sure you want to delete this part?")) return
 
         const id = item.data.id
@@ -88,6 +109,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     const handleFinish = async (item: UnifiedPartItem) => {
+        // ... (keep existing)
         const id = item.data.id
         setLoadingId(id)
 
@@ -132,54 +154,74 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden">
-            <Table>
-                <TableHeader>
-                    <TableRow className="bg-muted/50">
-                        <TableHead className="w-10"></TableHead>
-                        <TableHead>Part #</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Dimensions</TableHead>
-                        <TableHead>Grade</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead className="text-right">Weight</TableHead>
-                        <TableHead className="w-40">Status / Progress</TableHead>
-                        <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {items.map((item) => {
-                        const data = item.data
-                        const isPart = item.kind === 'part'
-                        const id = data.id
-                        const isExpanded = expandedParts.has(id)
+        <div className="space-y-4">
+            {/* Toolbar */}
+            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">
+                        {selectedIds.length > 0
+                            ? `${selectedIds.length} selected`
+                            : 'Select parts to process'
+                        }
+                    </span>
+                </div>
+                {selectedIds.length > 0 && (
+                    <Button
+                        size="sm"
+                        onClick={handleCreateWO}
+                        className="gap-2"
+                    >
+                        <ClipboardList className="h-4 w-4" />
+                        Create Work Order ({selectedIds.length})
+                    </Button>
+                )}
+            </div>
 
-                        // Derived values
-                        const dimensions = isPart
-                            ? (data.profile ? `${data.profile.type} ${data.profile.dimensions} (${data.length}mm)` : '-')
-                            : `${data.thickness}mm x ${data.width}mm x ${data.length}mm`
+            <div className="border rounded-lg overflow-hidden">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-muted/50">
+                            <TableHead className="w-10">
+                                <Checkbox
+                                    checked={allSelected}
+                                    onCheckedChange={handleSelectAll}
+                                />
+                            </TableHead>
+                            <TableHead>Part #</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Dimensions</TableHead>
+                            <TableHead>Grade</TableHead>
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead className="text-right">Weight</TableHead>
+                            <TableHead className="w-40">Status / Progress</TableHead>
+                            <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {items.map((item) => {
+                            const data = item.data
+                            const isPart = item.kind === 'part'
+                            const id = data.id
 
-                        const weight = isPart
-                            ? (data.unitWeight * data.quantity)
-                            : (data.unitWeight * data.quantity)
+                            // Derived values
+                            const dimensions = isPart
+                                ? (data.profile ? `${data.profile.type} ${data.profile.dimensions} (${data.length}mm)` : '-')
+                                : `${data.thickness}mm x ${data.width}mm x ${data.length}mm`
 
-                        const progress = isPart ? getProgress(data.pieces) : 0
+                            const weight = isPart
+                                ? (data.unitWeight * data.quantity)
+                                : (data.unitWeight * data.quantity)
 
-                        return (
-                            <>
-                                <TableRow key={id} className="hover:bg-muted/30">
+                            const progress = isPart ? getProgress(data.pieces) : 0
+
+                            return (
+                                <TableRow key={id} className={`hover:bg-muted/30 ${selectedIds.includes(id) ? 'bg-muted/50' : ''}`}>
                                     <TableCell>
-                                        {isPart && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 w-6 p-0"
-                                                onClick={() => toggleExpand(id)}
-                                            >
-                                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                            </Button>
-                                        )}
+                                        <Checkbox
+                                            checked={selectedIds.includes(id)}
+                                            onCheckedChange={() => handleSelect(id)}
+                                        />
                                     </TableCell>
                                     <TableCell className="font-mono font-medium">
                                         {data.partNumber}
@@ -256,29 +298,11 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                         </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
-                                {/* Expanded Content for Parts (Pieces) */}
-                                {isPart && isExpanded && (
-                                    <TableRow>
-                                        <TableCell colSpan={10} className="bg-muted/10 p-0">
-                                            <div className="p-4 grid grid-cols-10 gap-2">
-                                                {data.pieces.map((piece: any) => (
-                                                    <div key={piece.id} className="text-xs border rounded p-1 text-center bg-background">
-                                                        {piece.pieceNumber} <br />
-                                                        <span className={cn(
-                                                            "font-bold",
-                                                            piece.status === 'READY' ? "text-green-600" : "text-gray-500"
-                                                        )}>{piece.status}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </>
-                        )
-                    })}
-                </TableBody>
-            </Table>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
         </div>
     )
 }
