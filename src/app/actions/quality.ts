@@ -15,6 +15,9 @@ export interface CreateQualityCheckInput {
     type: string          // VISUAL, DIMENSIONAL, NDT, COATING
     dueDate?: Date
     notes?: string
+    status?: 'PENDING' | 'PASSED' | 'FAILED' | 'WAIVED'
+    findings?: string
+    ncr?: string
 }
 
 /**
@@ -28,14 +31,27 @@ export async function createQualityCheck(input: CreateQualityCheckInput) {
             return { success: false, error: 'Missing required fields' }
         }
 
+        const user = await getCurrentUser()
+
+        const data: any = {
+            projectId,
+            processStage,
+            type,
+            dueDate: rest.dueDate ? new Date(rest.dueDate) : undefined,
+            notes: rest.notes
+        }
+
+        // Handle immediate inspection result
+        if (rest.status && rest.status !== 'PENDING') {
+            data.status = rest.status
+            data.inspectedAt = new Date()
+            data.inspectedBy = user?.id || 'system'
+            data.findings = rest.findings
+            data.ncr = rest.ncr
+        }
+
         const qc = await prisma.qualityCheck.create({
-            data: {
-                projectId,
-                processStage,
-                type,
-                ...rest,
-                dueDate: rest.dueDate ? new Date(rest.dueDate) : undefined
-            }
+            data
         })
 
         revalidatePath(`/projects/${projectId}`)

@@ -41,12 +41,20 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
         processStage: '',
         type: '',
         dueDate: '',
-        notes: ''
+        notes: '',
+        status: 'PENDING',
+        findings: '',
+        ncr: ''
     })
 
     const handleSubmit = async () => {
         if (!formData.processStage || !formData.type) {
             toast.error("Please fill in required fields")
+            return
+        }
+
+        if (formData.status === 'FAILED' && (!formData.findings || !formData.ncr)) {
+            toast.error("Please provide findings and NCR number for failed inspection")
             return
         }
 
@@ -58,7 +66,10 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
                 processStage: formData.processStage,
                 type: formData.type,
                 dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
-                notes: formData.notes
+                notes: formData.notes,
+                status: formData.status as any,
+                findings: formData.findings,
+                ncr: formData.ncr
             })
 
             if (result.success) {
@@ -69,7 +80,10 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
                     processStage: '',
                     type: '',
                     dueDate: '',
-                    notes: ''
+                    notes: '',
+                    status: 'PENDING',
+                    findings: '',
+                    ncr: ''
                 })
                 router.refresh()
             } else {
@@ -171,6 +185,61 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
                             value={formData.notes}
                             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                         />
+                    </div>
+
+                    <div className="border-t pt-4 mt-2 mb-2">
+                        <Label className="mb-2 block font-semibold text-primary">Result Recording (Optional)</Label>
+                        <div className="grid gap-4 bg-muted/20 p-4 rounded-md border">
+                            <div className="grid gap-2">
+                                <Label>Status</Label>
+                                <Select
+                                    value={formData.status}
+                                    onValueChange={(val) => setFormData({ ...formData, status: val })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="PENDING">Pending (Schedule for later)</SelectItem>
+                                        <SelectItem value="PASSED">PASSED</SelectItem>
+                                        <SelectItem value="FAILED">FAILED (Create NCR)</SelectItem>
+                                        <SelectItem value="WAIVED">WAIVED</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {formData.status === 'FAILED' && (
+                                <>
+                                    <div className="grid gap-2">
+                                        <Label className="text-destructive">Discrepancies / Findings</Label>
+                                        <Textarea
+                                            className="border-destructive/50"
+                                            placeholder="Describe the defect..."
+                                            value={formData.findings}
+                                            onChange={(e) => setFormData({ ...formData, findings: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label className="text-destructive">NCR Number (Required)</Label>
+                                        <Input
+                                            className="border-destructive/50"
+                                            placeholder="e.g. NCR-23-001"
+                                            value={formData.ncr}
+                                            onChange={(e) => setFormData({ ...formData, ncr: e.target.value })}
+                                        />
+                                        <p className="text-[0.8rem] text-muted-foreground">
+                                            An NCR record will be linked to this inspection.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+
+                            {formData.status === 'PASSED' && (
+                                <div className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded text-sm text-green-800 dark:text-green-300">
+                                    Inspection will be marked as passed immediately.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <DialogFooter>
