@@ -53,8 +53,8 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
             return
         }
 
-        if (formData.status === 'FAILED' && (!formData.findings || !formData.ncr)) {
-            toast.error("Please provide findings and NCR number for failed inspection")
+        if (formData.status === 'FAILED' && !formData.findings) {
+            toast.error("Please provide findings for failed inspection")
             return
         }
 
@@ -220,15 +220,15 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
                                         />
                                     </div>
                                     <div className="grid gap-2">
-                                        <Label className="text-destructive">NCR Number (Required)</Label>
+                                        <Label className="text-destructive">NCR Number (Optional)</Label>
                                         <Input
                                             className="border-destructive/50"
-                                            placeholder="e.g. NCR-23-001"
+                                            placeholder="(Auto-generated if empty)"
                                             value={formData.ncr}
                                             onChange={(e) => setFormData({ ...formData, ncr: e.target.value })}
                                         />
                                         <p className="text-[0.8rem] text-muted-foreground">
-                                            An NCR record will be linked to this inspection.
+                                            Leave empty to auto-generate from Settings.
                                         </p>
                                     </div>
                                 </>

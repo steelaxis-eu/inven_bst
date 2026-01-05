@@ -17,15 +17,18 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { Pencil, Trash2 } from "lucide-react"
 
+import { updateGlobalSettings } from "@/app/actions/settings"
+
 interface SettingsClientProps {
     initialShapes: any[]
     initialGrades: any[]
     initialStandardProfiles: any[]
     initialSteelProfiles: any[]
     initialSuppliers: any[]
+    initialGlobalSettings: any
 }
 
-export function SettingsClient({ initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles, initialSuppliers }: SettingsClientProps) {
+export function SettingsClient({ initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles, initialSuppliers, initialGlobalSettings }: SettingsClientProps) {
     // Standard Profile State
     const [profileDialogOpen, setProfileDialogOpen] = useState(false)
     const [newProfile, setNewProfile] = useState({ type: '', dimensions: '', weight: '', area: '' })
@@ -52,6 +55,34 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
     const [editingSupplier, setEditingSupplier] = useState<any>(null)
     const [supplierForm, setSupplierForm] = useState({ name: '', code: '', contact: '', email: '', phone: '', notes: '' })
     const [loadingSupplier, setLoadingSupplier] = useState(false)
+
+    // Global Settings State
+    const [settings, setSettings] = useState(initialGlobalSettings || {})
+    const [savingSettings, setSavingSettings] = useState(false)
+
+    const handleSaveGlobalSettings = async () => {
+        setSavingSettings(true)
+        try {
+            const result = await updateGlobalSettings({
+                ncrFormat: settings.ncrFormat,
+                ncrNextSeq: parseInt(settings.ncrNextSeq),
+                lotFormat: settings.lotFormat,
+                lotNextSeq: parseInt(settings.lotNextSeq),
+                projectFormat: settings.projectFormat,
+                projectNextSeq: parseInt(settings.projectNextSeq),
+                scrapPricePerKg: settings.scrapPricePerKg ? parseFloat(settings.scrapPricePerKg) : undefined
+            })
+            if (result.success) {
+                toast.success("System settings updated")
+            } else {
+                toast.error("Failed to update settings")
+            }
+        } catch (e) {
+            toast.error("An error occurred")
+        } finally {
+            setSavingSettings(false)
+        }
+    }
 
     // Handlers
     const handleAddProfile = async () => {
@@ -222,12 +253,13 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
 
     return (
         <Tabs defaultValue="profiles" className="space-y-4">
-            <TabsList className="flex w-full overflow-x-auto md:grid md:grid-cols-5 h-auto">
+            <TabsList className="flex w-full overflow-x-auto md:grid md:grid-cols-6 h-auto">
                 <TabsTrigger value="profiles">Active Profiles</TabsTrigger>
                 <TabsTrigger value="shapes">Shapes</TabsTrigger>
                 <TabsTrigger value="catalog">Standard Catalog</TabsTrigger>
                 <TabsTrigger value="grades">Grades</TabsTrigger>
                 <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
+                <TabsTrigger value="system">Numbering & System</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profiles">
@@ -510,6 +542,126 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="system">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Auto-Numbering & System Configuration</CardTitle>
+                        <CardDescription>
+                            Define formats for auto-generated IDs and global parameters. Use placeholders:
+                            <code className="bg-muted px-1 rounded mx-1">{'{YYYY}'}</code>
+                            <code className="bg-muted px-1 rounded mx-1">{'{YY}'}</code>
+                            <code className="bg-muted px-1 rounded mx-1">{'{MM}'}</code>
+                            <code className="bg-muted px-1 rounded mx-1">{'{DD}'}</code>
+                            <code className="bg-muted px-1 rounded mx-1">{'{SEQ}'}</code>
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {/* NCR Settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+                            <div className="col-span-1">
+                                <Label className="font-semibold text-lg">NCR Numbers</Label>
+                                <p className="text-sm text-muted-foreground">For Quality issues.</p>
+                            </div>
+                            <div className="col-span-1 md:col-span-2 grid gap-4">
+                                <div className="grid gap-2">
+                                    <Label>Format</Label>
+                                    <Input
+                                        value={settings.ncrFormat || ''}
+                                        onChange={(e) => setSettings({ ...settings, ncrFormat: e.target.value })}
+                                        placeholder="NCR-{YYYY}-{SEQ}"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Next Sequence Number</Label>
+                                    <Input
+                                        type="number"
+                                        value={settings.ncrNextSeq || 1}
+                                        onChange={(e) => setSettings({ ...settings, ncrNextSeq: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Lot Settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+                            <div className="col-span-1">
+                                <Label className="font-semibold text-lg">Lot IDs</Label>
+                                <p className="text-sm text-muted-foreground">For Inventory batches.</p>
+                            </div>
+                            <div className="col-span-1 md:col-span-2 grid gap-4">
+                                <div className="grid gap-2">
+                                    <Label>Format</Label>
+                                    <Input
+                                        value={settings.lotFormat || ''}
+                                        onChange={(e) => setSettings({ ...settings, lotFormat: e.target.value })}
+                                        placeholder="LOT-{YY}{MM}-{SEQ}"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Next Sequence Number</Label>
+                                    <Input
+                                        type="number"
+                                        value={settings.lotNextSeq || 1}
+                                        onChange={(e) => setSettings({ ...settings, lotNextSeq: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Project Settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
+                            <div className="col-span-1">
+                                <Label className="font-semibold text-lg">Project Numbers</Label>
+                                <p className="text-sm text-muted-foreground">For new Projects.</p>
+                            </div>
+                            <div className="col-span-1 md:col-span-2 grid gap-4">
+                                <div className="grid gap-2">
+                                    <Label>Format</Label>
+                                    <Input
+                                        value={settings.projectFormat || ''}
+                                        onChange={(e) => setSettings({ ...settings, projectFormat: e.target.value })}
+                                        placeholder="P-{YY}-{SEQ}"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Next Sequence Number</Label>
+                                    <Input
+                                        type="number"
+                                        value={settings.projectNextSeq || 1}
+                                        onChange={(e) => setSettings({ ...settings, projectNextSeq: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* General Settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="col-span-1">
+                                <Label className="font-semibold text-lg">General</Label>
+                                <p className="text-sm text-muted-foreground">Global parameters.</p>
+                            </div>
+                            <div className="col-span-1 md:col-span-2 grid gap-4">
+                                <div className="grid gap-2">
+                                    <Label>Default Scrap Price (€/kg)</Label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={settings.scrapPricePerKg || 0}
+                                        onChange={(e) => setSettings({ ...settings, scrapPricePerKg: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4">
+                            <Button onClick={handleSaveGlobalSettings} disabled={savingSettings}>
+                                {savingSettings ? 'Saving...' : 'Save Configuration'}
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>

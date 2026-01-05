@@ -63,6 +63,18 @@ model Project {
 model GlobalSettings {
   id              String @id @default("settings") // Singleton
   updatedAt       DateTime @updatedAt
+  
+  // Numbering Schemas
+  ncrFormat       String @default("NCR-{YYYY}-{SEQ}")
+  ncrNextSeq      Int    @default(1)
+  
+  lotFormat       String @default("LOT-{YY}{MM}-{SEQ}")
+  lotNextSeq      Int    @default(1)
+  
+  projectFormat   String @default("P-{YY}-{SEQ}")
+  projectNextSeq  Int    @default(1)
+  
+  scrapPricePerKg Float  @default(0.15)
 }
 
 // SteelProfile represents a unique Shape (Type + Dimensions)

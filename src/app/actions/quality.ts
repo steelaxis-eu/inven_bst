@@ -4,6 +4,8 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
 
+import { generateNextId } from './settings'
+
 // ============================================================================
 // QUALITY CHECK CRUD
 // ============================================================================
@@ -41,13 +43,19 @@ export async function createQualityCheck(input: CreateQualityCheckInput) {
             notes: rest.notes
         }
 
+
+
         // Handle immediate inspection result
         if (rest.status && rest.status !== 'PENDING') {
             data.status = rest.status
             data.inspectedAt = new Date()
             data.inspectedBy = user?.id || 'system'
             data.findings = rest.findings
-            data.ncr = rest.ncr
+
+            if (rest.status === 'FAILED') {
+                // Auto-generate NCR if not provided
+                data.ncr = rest.ncr || await generateNextId('NCR')
+            }
         }
 
         const qc = await prisma.qualityCheck.create({

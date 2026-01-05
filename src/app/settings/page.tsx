@@ -1,3 +1,4 @@
+import { getGlobalSettings } from "@/app/actions/settings"
 import { getProfileShapes, getGrades, getStandardProfiles, getProfiles } from "@/app/actions/inventory"
 import { getSuppliers } from "@/app/actions/suppliers"
 import { Button } from "@/components/ui/button"
@@ -8,12 +9,13 @@ export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
     // Fetch all necessary settings data via server actions
-    const [shapes, grades, standardProfiles, steelProfiles, suppliers] = await Promise.all([
+    const [shapes, grades, standardProfiles, steelProfiles, suppliers, globalSettings] = await Promise.all([
         getProfileShapes(),
         getGrades(),
         getStandardProfiles(),
         getProfiles(),
-        getSuppliers()
+        getSuppliers(),
+        getGlobalSettings()
     ])
 
     return (
@@ -29,6 +31,7 @@ export default async function SettingsPage() {
                 initialStandardProfiles={standardProfiles}
                 initialSteelProfiles={steelProfiles}
                 initialSuppliers={suppliers}
+                initialGlobalSettings={globalSettings}
             />
         </div>
     )
