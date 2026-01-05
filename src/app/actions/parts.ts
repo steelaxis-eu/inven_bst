@@ -675,7 +675,7 @@ export async function receivePartBatch(input: ReceiveBatchInput) {
         // Let's rely on part.profileId and part.gradeId. 
 
         if (!part.profileId || !part.gradeId) {
-            return { success: false, error: 'Part must have linked Profile and Grade to receive with traceability.' }
+            return { success: false, error: 'Part missing Profile/Grade. Please edit the part details to link a Profile and Grade before receiving.' }
         }
 
         // Check if Inventory Lot already exists (e.g. receiving remaining 5 pieces of same Heat later)
@@ -746,6 +746,56 @@ export async function receivePartBatch(input: ReceiveBatchInput) {
 
     } catch (e: any) {
         console.error('receivePartBatch error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Generate missing pieces for a standard part (Fix for legacy data)
+ */
+export async function generatePartPieces(partId: string) {
+    try {
+        const part = await prisma.part.findUnique({
+            where: { id: partId },
+            include: { pieces: true }
+        }) as any
+
+        if (!part) {
+            return { success: false, error: 'Part not found' }
+        }
+
+        const currentCount = part.pieces.length
+        if (currentCount >= part.quantity) {
+            return { success: true, message: 'Pieces already exist', pieces: part.pieces }
+        }
+
+        const missingCount = part.quantity - currentCount
+        if (missingCount <= 0) return { success: true, pieces: part.pieces }
+
+        // Determine starting number
+        const maxNum = part.pieces.reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+
+        const newPieces = Array.from({ length: missingCount }, (_, i) => ({
+            partId: part.id,
+            pieceNumber: maxNum + i + 1,
+            status: 'PENDING'
+        }))
+
+        await prisma.partPiece.createMany({ data: newPieces })
+
+        revalidatePath(`/projects/${part.projectId}`)
+
+        // Return refreshed list
+        const updatedPieces = await prisma.partPiece.findMany({
+            where: { partId },
+            orderBy: { pieceNumber: 'asc' },
+            include: { inventory: true }
+        })
+
+        return { success: true, message: `Generated ${missingCount} pieces`, pieces: updatedPieces }
+
+    } catch (e: any) {
+        console.error('generatePartPieces error:', e)
         return { success: false, error: e.message }
     }
 }

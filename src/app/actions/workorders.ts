@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
+import { optimizeCuttingPlan, StockInfo } from '@/lib/optimization'
 
 // ============================================================================
 // WORK ORDER CRUD
@@ -324,6 +325,59 @@ export async function completeCuttingWOWithWorkflow(
 }
 
 /**
+ * Validation: Check if welding WO requirements are met (e.g. VT passed)
+ */
+async function validateWeldingRequirements(items: any[]): Promise<{ valid: boolean; error?: string }> {
+    // Collect all assembly IDs
+    const assemblyIds = new Set<string>()
+
+    // Direct assembly items
+    items.forEach(i => {
+        if (i.assemblyId) assemblyIds.add(i.assemblyId)
+    })
+
+    // Piece items -> Trace to Assembly
+    const pieceIds = items.filter(i => i.pieceId).map(i => i.pieceId)
+    if (pieceIds.length > 0) {
+        const pieces = await prisma.partPiece.findMany({
+            where: { id: { in: pieceIds } },
+            select: { assemblyPiece: { select: { assemblyId: true } } }
+        })
+        pieces.forEach(p => {
+            if (p.assemblyPiece?.assemblyId) assemblyIds.add(p.assemblyPiece.assemblyId)
+        })
+    }
+
+    if (assemblyIds.size === 0) return { valid: true }
+
+    // Check QCs - Find assemblies that DO NOT have a PASSED VISUAL/NDT check
+    // We check for 'VISUAL' type specifically as per "VT Validation" requirement
+    const validQCs = await prisma.qualityCheck.findMany({
+        where: {
+            assemblyId: { in: Array.from(assemblyIds) },
+            type: 'VISUAL',
+            status: 'PASSED'
+        },
+        select: { assemblyId: true }
+    })
+
+    const validAssemblyIds = new Set(validQCs.map(qc => qc.assemblyId))
+    const missing = Array.from(assemblyIds).filter(id => !validAssemblyIds.has(id))
+
+    if (missing.length > 0) {
+        // Fetch assembly names for error message
+        const missingAssemblies = await prisma.assembly.findMany({
+            where: { id: { in: missing } },
+            select: { assemblyNumber: true, name: true }
+        })
+        const names = missingAssemblies.map(a => `${a.assemblyNumber}`).join(', ')
+        return { valid: false, error: `Cannot complete Welding: Visual Testing (VT) not passed for assemblies: ${names}` }
+    }
+
+    return { valid: true }
+}
+
+/**
  * Complete work order and update all piece statuses
  * Also handles creating follow-up WOs in the workflow chain
  */
@@ -336,6 +390,14 @@ export async function completeWorkOrder(workOrderId: string) {
 
         if (!wo) {
             return { success: false, error: 'Work order not found' }
+        }
+
+        // VALIDATION: Welding WOs require VT check
+        if (wo.type === 'WELDING') {
+            const validation = await validateWeldingRequirements(wo.items)
+            if (!validation.valid) {
+                return { success: false, error: validation.error }
+            }
         }
 
         const pieceIds = wo.items.filter(i => i.pieceId).map(i => i.pieceId!)
@@ -713,137 +775,396 @@ export async function completeMaterialPrepWorkOrder(
 }
 
 /**
- * Create Work Order with smart stock checking
- * - If CUTTING and no stock: Creates MATERIAL_PREP first, then CUTTING blocked by it
- * - Otherwise creates the requested WO type
+ * Check if inventory has sufficient stock using Optimization Logic
+ * Returns the optimized plan
+ */
+export async function getOptimizationPreview(pieceIds: string[]) {
+    try {
+        // 1. Get pieces with their part profiles
+        const pieces = await prisma.partPiece.findMany({
+            where: { id: { in: pieceIds } },
+            include: {
+                part: {
+                    include: { profile: true, grade: true }
+                }
+            }
+        })
+
+        if (pieces.length === 0) return { success: false, error: 'No pieces found' }
+
+        // Group by Profile/Grade (Optimization must be done per material type)
+        // We'll run optimization for each unique Material Group
+        const materialGroups: Record<string, typeof pieces> = {}
+
+        pieces.forEach(p => {
+            const key = `${p.part.profileId || 'custom'}|${p.part.gradeId || 'custom'}`
+            if (!materialGroups[key]) materialGroups[key] = []
+            materialGroups[key].push(p)
+        })
+
+        const planResults = []
+
+        for (const [key, groupPieces] of Object.entries(materialGroups)) {
+            const firstPart = groupPieces[0].part
+            if (!firstPart.profileId || !firstPart.gradeId) {
+                // Cannot optimize custom/undefined profiles
+                planResults.push({
+                    materialKey: key,
+                    profile: 'Custom / Unknown',
+                    grade: 'Unknown',
+                    canOptimize: false,
+                    error: 'Missing Profile/Grade data'
+                })
+                continue
+            }
+
+            // Fetch Available Stock (Inventory + Remnants)
+            const inventory = await prisma.inventory.findMany({
+                where: {
+                    profileId: firstPart.profileId,
+                    gradeId: firstPart.gradeId,
+                    status: 'ACTIVE',
+                    quantityAtHand: { gt: 0 }
+                }
+            })
+
+            const remnants = await prisma.remnant.findMany({
+                where: {
+                    profileId: firstPart.profileId,
+                    gradeId: firstPart.gradeId,
+                    status: 'AVAILABLE'
+                }
+            })
+
+            // Format for Optimizer
+            const stockInfo: StockInfo[] = [
+                ...remnants.map(r => ({
+                    id: r.id,
+                    length: r.length,
+                    quantity: r.quantity, // Should be 1 typically
+                    type: 'REMNANT' as const
+                })),
+                ...inventory.map(i => ({
+                    id: i.id,
+                    length: i.length,
+                    quantity: i.quantityAtHand,
+                    type: 'INVENTORY' as const
+                }))
+            ]
+
+            const partsRequest = groupPieces.map(p => ({
+                id: p.id,
+                length: p.part.length || 0,
+                quantity: 1
+            }))
+
+            const result = optimizeCuttingPlan(partsRequest, stockInfo, 12000) // Default 12m new bar
+
+            planResults.push({
+                materialKey: key,
+                profile: `${firstPart.profile?.type} ${firstPart.profile?.dimensions}`,
+                grade: firstPart.grade?.name,
+                canOptimize: true,
+                pieceIds: partsRequest.map(p => p.id),
+                result
+            })
+        }
+
+        return { success: true, plans: planResults }
+
+    } catch (e: any) {
+        console.error('getOptimizationPreview error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Create Work Order with smart logic
+ * - In-House Cutting: Runs Optimization -> Splits into Immediate vs Prep+Blocked
+ * - Outsourced: Handles Drawing bundling + Prep if supplying material
  */
 export async function createSmartWorkOrder(input: {
     projectId: string
     pieceIds: string[]
-    type: 'MATERIAL_PREP' | 'CUTTING' | 'MACHINING' | 'FABRICATION' | 'WELDING' | 'PAINTING'
+    type: string
     title?: string
     priority?: string
     scheduledDate?: Date
     notes?: string
+    // Outsourced specific
+    isOutsourced?: boolean
+    supplyMaterial?: boolean
+    vendor?: string
+    // Optimization confirmation
+    cachedPlan?: any // If user passed verified plan (optional, for now we re-run)
 }): Promise<{
     success: boolean
-    data?: { mainWO: any; prepWO?: any }
-    needsMaterialPrep?: boolean
+    message?: string
     error?: string
 }> {
     try {
-        const { projectId, pieceIds, type, title, priority, scheduledDate, notes } = input
+        const { projectId, pieceIds, type, title, isOutsourced, supplyMaterial, vendor, priority, scheduledDate, notes } = input
 
         if (!projectId || pieceIds.length === 0) {
             return { success: false, error: 'Project ID and pieces required' }
         }
 
-        // For CUTTING, check stock first and OPTIMIZE
-        if (type === 'CUTTING') {
-            const stockCheck = await checkMaterialStock(pieceIds)
-            if (!stockCheck.success) {
-                return { success: false, error: stockCheck.error }
-            }
+        const user = await getCurrentUser()
+        if (!user?.id) return { success: false, error: 'Unauthorized' }
 
-            const { inStock, needsMaterial } = stockCheck.data!
-            let createdMainWO = null
-            let createdPrepWO = null
+        // ====================================================================
+        // SCENARIO 1: OUTSOURCED WORK
+        // ====================================================================
+        if (isOutsourced) {
+            const woNumber = await generateWorkOrderNumber(projectId)
 
-            // 1. Create Active Cutting WO for "In Stock" pieces (Optimization: Cut straight away)
-            if (inStock.length > 0) {
-                const workOrderNumber = await generateWorkOrderNumber(projectId)
+            if (supplyMaterial) {
+                // A. INTERNAL SUPPLY -> MATERIAL PREP (BLOCKING) -> OUTSOURCED
+                // We need to calculate what material to send.
+                // Run Optimization to see what we have vs what we need? 
+                // Or acts as "Material Prep" for the RAW lengths.
+                // Logic: We are sending material. This implies we pick from stock.
+                // We'll create a PREP WO to "Pick/Cut Material".
+                // Then Outsourced WO is for the processing.
 
-                // Add suffix if we are splitting
-                const titleSuffix = needsMaterial.length > 0 ? ' (Batch 1 - In Stock)' : ''
-
-                createdMainWO = await prisma.workOrder.create({
-                    data: {
-                        projectId,
-                        workOrderNumber,
-                        title: (title || 'Cutting') + titleSuffix,
-                        type: 'CUTTING',
-                        priority: priority || 'MEDIUM',
-                        status: 'PENDING', // Active immediately!
-                        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                        notes: notes,
-                        items: {
-                            create: inStock.map(m => ({ pieceId: m.pieceId }))
-                        }
-                    },
-                    include: { items: true }
-                })
-            }
-
-            // 2. Create Material Prep + Blocked Cutting WO for "Needs Material" pieces
-            if (needsMaterial.length > 0) {
                 const prepWONumber = await generateWorkOrderNumber(projectId)
-                const blockedWONumber = await generateWorkOrderNumber(projectId)
+                const outsourcedWONumber = await generateWorkOrderNumber(projectId) // Re-gen to keep order if needed
 
-                // Create MATERIAL_PREP WO
-                createdPrepWO = await prisma.workOrder.create({
-                    data: {
-                        projectId,
-                        workOrderNumber: prepWONumber,
-                        title: `Material Prep: ${[...new Set(needsMaterial.map(m => m.profileType))].join(', ')}`,
-                        type: 'MATERIAL_PREP',
-                        priority: priority || 'MEDIUM',
-                        status: 'PENDING',
-                        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                        notes: `Profiles needed:\n${[...new Set(needsMaterial.map(m => `${m.profileType} ${m.dimensions}`))].join('\n')}`,
-                        items: {
-                            create: needsMaterial.map(m => ({ pieceId: m.pieceId }))
+                // We'll rely on the user to define exactly what material in the Prep WO if complex.
+                // For automation, we'd run optimization. Let's assume we do run it to find stock.
+                // Re-using optimization logic here is smart.
+
+                const optRes = await getOptimizationPreview(pieceIds)
+                let prepNotes = "Sanity Check: Prepare material for Outsourced Job.\n"
+
+                if (optRes.success && optRes.plans) {
+                    optRes.plans.forEach((p: any) => {
+                        if (p.canOptimize) {
+                            prepNotes += `\n${p.profile} (${p.grade}): Used ${p.result.stockUsed.length} existing items, Need ${p.result.newStockNeeded.length} new bars.`
                         }
-                    }
+                    })
+                }
+
+                await prisma.$transaction(async (tx) => {
+                    // 1. Material Prep WO
+                    const prepWO = await tx.workOrder.create({
+                        data: {
+                            projectId,
+                            workOrderNumber: prepWONumber,
+                            title: `Prep for ${vendor || 'Vendor'} (${title || 'Outsourced'})`,
+                            type: 'MATERIAL_PREP', // Picking/Cutting starts here
+                            priority: priority || 'MEDIUM',
+                            status: 'PENDING',
+                            scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                            notes: prepNotes + "\n\n" + (notes || ''),
+                            // We link the actual pieces here? No, Pre-WO usually handles "Stock".
+                            // But we can link pieces to track them.
+                            // If we link pieces to Prep, they might get "Completed". 
+                            // We want pieces to be "Completed" only after Outsourced return.
+                            // So Prep WO items should be "Stock Items" ideally. 
+                            // But our schema links WOItem to Piece. 
+                            // Let's link pieces to the OUTSOURCED WO primarily.
+                            // The Prep WO is just a task.
+                        }
+                    })
+
+                    // 2. Outsourced WO (Blocked)
+                    await tx.workOrder.create({
+                        data: {
+                            projectId,
+                            workOrderNumber: outsourcedWONumber,
+                            title: title || `Outsourced ${type}`,
+                            type: type, // e.g. CUTTING, HDG
+                            priority: priority || 'MEDIUM',
+                            status: 'PENDING',
+                            scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined, // Likely later
+                            blockedByWOId: prepWO.id,
+                            notes: `Vendor: ${vendor}\nSupply Material: YES\n` + (notes || ''),
+                            items: {
+                                create: pieceIds.map(id => ({ pieceId: id }))
+                            }
+                        }
+                    })
                 })
 
-                // Create Cutting WO blocked by Prep WO
+                return { success: true, message: 'Created Prep WO and Blocked Outsourced WO' }
+
+            } else {
+                // B. VENDOR SUPPLY -> STANDARD OUTSOURCED WO
                 await prisma.workOrder.create({
                     data: {
                         projectId,
-                        workOrderNumber: blockedWONumber,
-                        title: (title || 'Cutting') + ' (Batch 2 - Pending Material)',
-                        type: 'CUTTING',
+                        workOrderNumber: woNumber,
+                        title: title || `Outsourced ${type}`,
+                        type: type,
                         priority: priority || 'MEDIUM',
                         status: 'PENDING',
-                        blockedByWOId: createdPrepWO.id,
                         scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                        notes: `[Waiting for material - ${createdPrepWO.workOrderNumber}]\n${notes || ''}`.trim(),
+                        notes: `Vendor: ${vendor}\nSupply Material: NO (Vendor Provided)\n` + (notes || ''),
                         items: {
-                            create: needsMaterial.map(m => ({ pieceId: m.pieceId }))
+                            create: pieceIds.map(id => ({ pieceId: id }))
                         }
                     }
                 })
+                return { success: true, message: 'Created Outsourced WO' }
             }
+        }
+
+        // ====================================================================
+        // SCENARIO 2: IN-HOUSE CUTTING (OPTIMIZATION SPLIT)
+        // ====================================================================
+        if (type === 'CUTTING') {
+            // Run Optimization
+            const optRes = await getOptimizationPreview(pieceIds)
+
+            if (!optRes.success || !optRes.plans) {
+                // Fallback to simple WO if optimization fails
+                await prisma.workOrder.create({
+                    data: {
+                        projectId,
+                        workOrderNumber: await generateWorkOrderNumber(projectId),
+                        title: title || 'Cutting',
+                        type: 'CUTTING',
+                        status: 'PENDING',
+                        items: { create: pieceIds.map(id => ({ pieceId: id })) }
+                    }
+                })
+                return { success: true, message: 'Optimization failed, created simple WO' }
+            }
+
+            // Lists to bucket piece IDs
+            const immediatePieceIds: string[] = []
+            const blockedPieceIds: string[] = []
+            let materialPrepRequired = false
+            let prepSummary = "Material Required for Cutting:\n"
+
+            for (const plan of optRes.plans) {
+                if (!plan.canOptimize || !plan.result) {
+                    // Cannot optimize -> Default to manual/immediate
+                    // Add all pieces in this plan to immediate
+                    if (plan.pieceIds) {
+                        plan.pieceIds.forEach((id: string) => immediatePieceIds.push(id))
+                    }
+                    continue
+                }
+
+                const result = plan.result
+
+                // 1. In-Stock allocations -> Immediate
+                result.stockUsed.forEach((stock: any) => {
+                    stock.parts.forEach((p: any) => immediatePieceIds.push(p.partId))
+                })
+
+                // 2. New Stock allocations -> Blocked
+                if (result.newStockNeeded.length > 0) {
+                    materialPrepRequired = true
+                    prepSummary += `\n[${plan.profile} - ${plan.grade}]`
+
+                    result.newStockNeeded.forEach((ns: any) => {
+                        prepSummary += `\n- Buy ${ns.quantity}x ${ns.length}mm`
+                        ns.parts.forEach((p: any) => blockedPieceIds.push(p.partId))
+                    })
+                }
+
+                // 3. Unallocated (Too long?) -> Blocked/Manual
+                result.unallocated.forEach((p: any) => blockedPieceIds.push(p.id))
+            }
+
+            // EXECUTE TRANSACTION
+            await prisma.$transaction(async (tx) => {
+                let prepWOId = null
+
+                // A. Material Prep WO (if needed)
+                if (materialPrepRequired || blockedPieceIds.length > 0) {
+                    // Even if only unallocated, we might need prep. 
+                    // If blocked pieces exist, we need a blocker.
+
+                    const prepDate = scheduledDate ? new Date(scheduledDate) : new Date()
+                    // Prep should be earlier? Or same start?
+
+                    const prepWO = await tx.workOrder.create({
+                        data: {
+                            projectId,
+                            workOrderNumber: await generateWorkOrderNumber(projectId),
+                            title: `Material Prep (${title || 'Cutting'})`,
+                            type: 'MATERIAL_PREP',
+                            priority: priority || 'MEDIUM',
+                            status: 'PENDING',
+                            scheduledDate: prepDate,
+                            notes: prepSummary + "\n\n" + (notes || ''),
+                        }
+                    })
+                    prepWOId = prepWO.id
+                }
+
+                // B. Immediate Cutting WO
+                if (immediatePieceIds.length > 0) {
+                    await tx.workOrder.create({
+                        data: {
+                            projectId,
+                            workOrderNumber: await generateWorkOrderNumber(projectId),
+                            title: (title || 'Cutting') + ' (In Stock)',
+                            type: 'CUTTING',
+                            priority: priority || 'MEDIUM',
+                            status: 'PENDING',
+                            scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                            notes: (notes || '') + "\n[Auto-Optimized: Uses Stock/Remnants]",
+                            items: {
+                                create: immediatePieceIds.map(id => ({ pieceId: id }))
+                            }
+                        }
+                    })
+                }
+
+                // C. Blocked Cutting WO
+                if (blockedPieceIds.length > 0 && prepWOId) {
+                    await tx.workOrder.create({
+                        data: {
+                            projectId,
+                            workOrderNumber: await generateWorkOrderNumber(projectId),
+                            title: (title || 'Cutting') + ' (Pending Material)',
+                            type: 'CUTTING',
+                            priority: priority || 'MEDIUM',
+                            status: 'PENDING',
+                            scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                            blockedByWOId: prepWOId,
+                            notes: (notes || '') + "\n[Waiting for Material Prep]",
+                            items: {
+                                create: blockedPieceIds.map(id => ({ pieceId: id }))
+                            }
+                        }
+                    })
+                }
+            })
 
             revalidatePath(`/projects/${projectId}`)
             return {
                 success: true,
-                data: { mainWO: createdMainWO, prepWO: createdPrepWO },
-                needsMaterialPrep: needsMaterial.length > 0
+                message: `Created WOs: ${immediatePieceIds.length} ready, ${blockedPieceIds.length} waiting for material.`
             }
         }
 
-        // Default behavior for other types (or if no stock check logic needed)
-        const workOrderNumber = await generateWorkOrderNumber(projectId)
-        const wo = await prisma.workOrder.create({
+        // ====================================================================
+        // SCENARIO 3: STANDARD (WELDING, ETC)
+        // ====================================================================
+        await prisma.workOrder.create({
             data: {
                 projectId,
-                workOrderNumber,
+                workOrderNumber: await generateWorkOrderNumber(projectId),
                 title: title || type,
-                type,
+                type: type,
                 priority: priority || 'MEDIUM',
                 status: 'PENDING',
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                 notes,
                 items: {
-                    create: pieceIds.map(pieceId => ({ pieceId }))
+                    create: pieceIds.map(id => ({ pieceId: id }))
                 }
-            },
-            include: { items: true }
+            }
         })
 
         revalidatePath(`/projects/${projectId}`)
-        return { success: true, data: { mainWO: wo } }
+        return { success: true, message: 'Work Order created' }
 
     } catch (e: any) {
         console.error('createSmartWorkOrder error:', e)

@@ -3,10 +3,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Truck, Calendar, Package, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Truck, Calendar, Package, CheckCircle, AlertTriangle, Printer } from 'lucide-react'
+import Link from 'next/link'
+import { Button } from "@/components/ui/button"
 
 interface DeliverySchedule {
     id: string
+    projectId: string
     name: string
     scheduledDate: Date
     status: string
@@ -65,7 +68,7 @@ function DeliveryCard({ delivery }: { delivery: DeliverySchedule }) {
     const isReady = readiness.percent === 100
 
     return (
-        <Card className={`${isOverdue ? 'border-red-300 bg-red-50/30' : isReady ? 'border-green-300 bg-green-50/30' : ''}`}>
+        <Card className={`${isOverdue ? 'border-red-300 bg-red-50/30' : isReady ? 'border-green-300 bg-green-50/30' : ''} flex flex-col h-full`}>
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                     <div>
@@ -94,8 +97,8 @@ function DeliveryCard({ delivery }: { delivery: DeliverySchedule }) {
                     </Badge>
                 </div>
             </CardHeader>
-            <CardContent>
-                <div className="space-y-3">
+            <CardContent className="flex-1 flex flex-col">
+                <div className="space-y-3 flex-1">
                     <div>
                         <div className="flex items-center justify-between text-sm mb-1">
                             <span className="text-muted-foreground">Readiness</span>
@@ -137,6 +140,15 @@ function DeliveryCard({ delivery }: { delivery: DeliverySchedule }) {
                             Ready to ship
                         </div>
                     )}
+                </div>
+
+                <div className="mt-4 pt-4 border-t flex justify-between items-center bg-white/50 -mx-6 -mb-6 p-4 rounded-b-lg">
+                    <Link href={`/projects/${delivery.projectId}/deliveries/${delivery.id}/print`} target="_blank" className="w-full">
+                        <Button variant="outline" size="sm" className="w-full">
+                            <Printer className="mr-2 h-3 w-3" />
+                            Print Packing List
+                        </Button>
+                    </Link>
                 </div>
             </CardContent>
         </Card>

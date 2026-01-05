@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { BatchCutDialog } from "./batch-cut-dialog"
 import { MaterialPrepDialog } from "./material-prep-dialog"
+import { DownloadDrawingsButton } from '@/components/work-order/download-drawings-button'
 
 // --- Interfaces ---
 
@@ -290,6 +291,7 @@ function WorkOrderTable({
                                                                 <Printer className="h-4 w-4" />
                                                             </Button>
                                                         </Link>
+                                                        <DownloadDrawingsButton workOrderId={wo.id} workOrderNumber={wo.workOrderNumber} className="h-8 w-8 p-0 text-gray-600" />
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

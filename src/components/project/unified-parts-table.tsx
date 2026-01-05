@@ -14,6 +14,7 @@ import { togglePlatePartSource, deletePlatePart, updatePlatePartStatus } from '@
 import { cn } from '@/lib/utils'
 import { Trash2, CheckCircle, Pencil } from 'lucide-react'
 import { PartDetailsDialog } from './part-details-dialog'
+import { CreateWorkOrderDialog } from './create-work-order-dialog'
 import { PlateDetailsDialog } from './plate-details-dialog'
 import { ReceiveItemsDialog } from './receive-items-dialog'
 import { AssemblyDetailsDialog } from './assembly-details-dialog'
@@ -45,6 +46,10 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     const [assemblyDetailsOpen, setAssemblyDetailsOpen] = useState(false)
     const [selectedAssembly, setSelectedAssembly] = useState<any>(null)
 
+    // Create Work Order State
+    const [createWODialogOpen, setCreateWODialogOpen] = useState(false)
+    const [woPieceIds, setWoPieceIds] = useState<string[]>([])
+
     const handleOpenDetails = (item: UnifiedPartItem) => {
         if (item.kind === 'part') {
             setSelectedPart(item.data)
@@ -75,7 +80,25 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     const handleCreateWO = () => {
-        toast.info(`Creating Work Order for ${selectedIds.length} items (Coming Soon)`)
+        const selectedItems = items.filter(i => selectedIds.includes(i.data.id))
+        const pieceIds: string[] = []
+
+        selectedItems.forEach(item => {
+            if (item.data.pieces && Array.isArray(item.data.pieces)) {
+                // Determine which pieces to include?
+                // For now, include ALL pieces of the selected parts
+                // The User optimizes or filters later (or we could select specific pieces, but table selects Parts)
+                item.data.pieces.forEach((p: any) => pieceIds.push(p.id))
+            }
+        })
+
+        if (pieceIds.length === 0) {
+            toast.error("No pieces found in selected parts. (Try generating pieces first?)")
+            return
+        }
+
+        setWoPieceIds(pieceIds)
+        setCreateWODialogOpen(true)
     }
 
     const handleToggleSource = async (item: UnifiedPartItem) => {
@@ -332,8 +355,9 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                             </div>
                                         ) : (
                                             <Badge variant="outline" className={cn(
-                                                data.status === 'RECEIVED' ? 'bg-green-100 text-green-800' :
-                                                    data.status === 'ORDERED' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'
+                                                data.status === 'RECEIVED' ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-800' :
+                                                    data.status === 'ORDERED' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800' :
+                                                        'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'
                                             )}>
                                                 {data.status}
                                             </Badge>
@@ -427,6 +451,18 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                     }}
                 />
             )}
+
+            {/* Create Work Order Dialog */}
+            <CreateWorkOrderDialog
+                open={createWODialogOpen}
+                onOpenChange={setCreateWODialogOpen}
+                pieceIds={woPieceIds}
+                projectId={projectId}
+                onSuccess={() => {
+                    setSelectedIds([])
+                    toast.success("Work Order Created")
+                }}
+            />
         </div>
     )
 }

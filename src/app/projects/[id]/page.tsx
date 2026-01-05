@@ -26,7 +26,7 @@ import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialo
 import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
 import { WorkOrdersList, WorkOrderSummary } from "@/components/project/workorders-list"
-import { QualityChecksList, QualitySummary } from "@/components/project/quality-checks-list"
+import { ProjectQualityTab } from "@/components/project/project-quality-tab"
 import { PlatePartsSummary } from "@/components/project/plate-parts-table"
 import { DeliveriesList, DeliveriesSummary } from "@/components/project/deliveries-list"
 
@@ -316,11 +316,11 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
 
                 {/* Quality Tab */}
                 <TabsContent value="quality" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Quality Checks</h2>
-                    </div>
-                    <QualitySummary checks={qualityChecks as any} />
-                    <QualityChecksList checks={qualityChecks as any} />
+                    <ProjectQualityTab
+                        projectId={cleanId}
+                        checks={qualityChecks as any}
+                        assemblies={assemblies as any}
+                    />
                 </TabsContent>
 
                 {/* Deliveries Tab */}

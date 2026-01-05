@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,13 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from 'sonner'
-import { Upload, X, FileText, CheckCircle } from 'lucide-react'
+import { Upload, X, FileText, CheckCircle, RefreshCw } from 'lucide-react'
 // Actions
 import { getSignedUploadUrl } from '@/app/actions/upload'
 // We will need bulk update actions for parts and plate parts
-import { bulkUpdatePieceStatus } from '@/app/actions/parts'
+import { bulkUpdatePieceStatus, generatePartPieces } from '@/app/actions/parts'
 // Need to create this action for plates
-import { bulkUpdatePlatePieceStatus } from '@/app/actions/plateparts'
+import { bulkUpdatePlatePieceStatus, generatePlatePieces } from '@/app/actions/plateparts'
 
 // Define a unified interface for the dialog input
 interface ReceivableItem {
@@ -40,15 +40,26 @@ export function ReceiveItemsDialog({ open, onOpenChange, item, projectId, onSucc
     const [step, setStep] = useState<'select' | 'details'>('select')
     const [selectedPieceIds, setSelectedPieceIds] = useState<string[]>([])
 
+    // Local state for pieces (allows us to update list after generation)
+    const [currentPieces, setCurrentPieces] = useState<any[]>(item.pieces || [])
+
     // Form State
     const [supplier, setSupplier] = useState('')
     const [lotId, setLotId] = useState('') // Heat Number / Batch ID
     const [certificateFile, setCertificateFile] = useState<File | null>(null)
     const [isUploading, setIsUploading] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [isGenerating, setIsGenerating] = useState(false)
+
+    // Sync pieces when item changes
+    useEffect(() => {
+        if (item.pieces) {
+            setCurrentPieces(item.pieces)
+        }
+    }, [item])
 
     // Filter only pending pieces
-    const availablePieces = item.pieces.filter(p => p.status === 'PENDING')
+    const availablePieces = currentPieces.filter(p => p.status === 'PENDING')
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
@@ -72,6 +83,25 @@ export function ReceiveItemsDialog({ open, onOpenChange, item, projectId, onSucc
             return
         }
         setStep('details')
+    }
+
+    const handleGeneratePieces = async () => {
+        setIsGenerating(true)
+        try {
+            const action = item.type === 'part' ? generatePartPieces : generatePlatePieces
+            const res = await action(item.id)
+
+            if (res.success && res.pieces) {
+                toast.success(res.message || "Pieces generated successfully")
+                setCurrentPieces(res.pieces)
+            } else {
+                toast.error(res.error || "Failed to generate pieces")
+            }
+        } catch (error) {
+            toast.error("An error occurred while generating pieces")
+        } finally {
+            setIsGenerating(false)
+        }
     }
 
     const handleUploadAndSave = async () => {
@@ -154,6 +184,7 @@ export function ReceiveItemsDialog({ open, onOpenChange, item, projectId, onSucc
                                     id="select-all"
                                     checked={selectedPieceIds.length === availablePieces.length && availablePieces.length > 0}
                                     onCheckedChange={handleSelectAll}
+                                    disabled={availablePieces.length === 0}
                                 />
                                 <label htmlFor="select-all" className="text-sm cursor-pointer">Select All</label>
                             </div>
@@ -161,8 +192,27 @@ export function ReceiveItemsDialog({ open, onOpenChange, item, projectId, onSucc
 
                         <div className="border rounded-md max-h-[300px] overflow-y-auto p-2 grid grid-cols-4 gap-2">
                             {availablePieces.length === 0 ? (
-                                <div className="col-span-4 text-center py-8 text-muted-foreground">
-                                    No pending pieces available.
+                                <div className="col-span-4 flex flex-col items-center justify-center py-8 text-muted-foreground gap-4">
+                                    <p>No pending pieces available.</p>
+
+                                    {/* Show Generate Button if we have 0 pieces but quantity > 0 (Legacy Data Fix) */}
+                                    {currentPieces.length === 0 && item.quantity > 0 && (
+                                        <div className="bg-yellow-50 dark:bg-yellow-950/30 p-4 rounded-md border border-yellow-200 dark:border-yellow-900 flex flex-col items-center gap-2 max-w-sm">
+                                            <p className="text-sm text-yellow-800 dark:text-yellow-200 text-center">
+                                                This item appears to be missing tracking data (likely created before the tracking update).
+                                            </p>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={handleGeneratePieces}
+                                                disabled={isGenerating}
+                                                className="gap-2"
+                                            >
+                                                {isGenerating ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                                Generate {item.quantity} Tracking Pieces
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 availablePieces.map(piece => (

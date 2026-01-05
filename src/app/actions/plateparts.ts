@@ -625,3 +625,55 @@ export async function cutPlatePieceWithMaterial(
         return { success: false, error: e.message }
     }
 }
+
+/**
+ * Generate missing pieces for a plate part (Fix for legacy data)
+ */
+export async function generatePlatePieces(platePartId: string) {
+    try {
+        const part = await prisma.platePart.findUnique({
+            where: { id: platePartId },
+            include: { pieces: true }
+        }) as any
+
+        if (!part) {
+            return { success: false, error: 'Plate Part not found' }
+        }
+
+        const currentCount = part.pieces.length
+        if (currentCount >= part.quantity) {
+            return { a: true, message: 'Pieces already exist', pieces: part.pieces } // Using 'a' for success to match pattern or stick to standard
+            // Standard: { success: true, ... }
+            return { success: true, message: 'Pieces already exist', pieces: part.pieces }
+        }
+
+        const missingCount = part.quantity - currentCount
+        if (missingCount <= 0) return { success: true, pieces: part.pieces }
+
+        // Determine starting number
+        const maxNum = part.pieces.reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+
+        const newPieces = Array.from({ length: missingCount }, (_, i) => ({
+            platePartId: part.id,
+            pieceNumber: maxNum + i + 1,
+            status: 'PENDING'
+        }))
+
+        // Transaction not strictly needed but good practice
+        await prisma.platePiece.createMany({ data: newPieces })
+
+        revalidatePath(`/projects/${part.projectId}`)
+
+        // Return refreshed list
+        const updatedPieces = await prisma.platePiece.findMany({
+            where: { platePartId },
+            orderBy: { pieceNumber: 'asc' }
+        })
+
+        return { success: true, message: `Generated ${missingCount} pieces`, pieces: updatedPieces }
+
+    } catch (e: any) {
+        console.error('generatePlatePieces error:', e)
+        return { success: false, error: e.message }
+    }
+}
