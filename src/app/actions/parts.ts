@@ -3,6 +3,11 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
+import {
+    PartPieceStatus,
+    InventoryStatus,
+    RemnantStatus
+} from '@prisma/client'
 
 // ============================================================================
 // PART CRUD
@@ -98,7 +103,7 @@ export async function createPart(input: CreatePartInput) {
             const pieces = Array.from({ length: quantity }, (_, i) => ({
                 partId: part.id,
                 pieceNumber: i + 1,
-                status: 'PENDING'
+                status: PartPieceStatus.PENDING
             }))
 
             await tx.partPiece.createMany({ data: pieces })
@@ -198,14 +203,14 @@ export async function updatePartQuantity(partId: string, newQuantity: number) {
                     (_, i) => ({
                         partId,
                         pieceNumber: currentQuantity + i + 1,
-                        status: 'PENDING'
+                        status: PartPieceStatus.PENDING
                     })
                 )
                 await tx.partPiece.createMany({ data: newPieces })
             } else if (newQuantity < currentQuantity) {
                 // Remove excess pieces (only if PENDING)
                 const piecesToRemove = part.pieces
-                    .filter(p => p.pieceNumber > newQuantity && p.status === 'PENDING')
+                    .filter(p => p.pieceNumber > newQuantity && p.status === PartPieceStatus.PENDING)
                     .map(p => p.id)
 
                 if (piecesToRemove.length < currentQuantity - newQuantity) {
@@ -241,7 +246,7 @@ export async function deletePart(partId: string) {
             return { success: false, error: 'Part not found' }
         }
 
-        const hasNonPending = part.pieces.some(p => p.status !== 'PENDING')
+        const hasNonPending = part.pieces.some(p => p.status !== PartPieceStatus.PENDING)
         if (hasNonPending) {
             return { success: false, error: 'Cannot delete part with pieces already in production' }
         }
@@ -261,12 +266,12 @@ export async function deletePart(partId: string) {
 // PART PIECE STATUS UPDATES
 // ============================================================================
 
-type PieceStatus = 'PENDING' | 'CUT' | 'FABRICATED' | 'WELDED' | 'PAINTED' | 'READY'
+// export type PieceStatus = 'PENDING' | 'CUT' | 'FABRICATED' | 'WELDED' | 'PAINTED' | 'READY'
 
 /**
  * Update a single piece's status
  */
-export async function updatePieceStatus(pieceId: string, newStatus: PieceStatus) {
+export async function updatePieceStatus(pieceId: string, newStatus: PartPieceStatus) {
     try {
         const user = await getCurrentUser()
 
@@ -284,19 +289,19 @@ export async function updatePieceStatus(pieceId: string, newStatus: PieceStatus)
 
         // Set timestamp based on status
         switch (newStatus) {
-            case 'CUT':
+            case PartPieceStatus.CUT:
                 updateData.cutAt = now
                 break
-            case 'FABRICATED':
+            case PartPieceStatus.FABRICATED:
                 updateData.fabricatedAt = now
                 break
-            case 'WELDED':
+            case PartPieceStatus.WELDED:
                 updateData.weldedAt = now
                 break
-            case 'PAINTED':
+            case PartPieceStatus.PAINTED:
                 updateData.paintedAt = now
                 break
-            case 'READY':
+            case PartPieceStatus.READY:
                 updateData.completedAt = now
                 updateData.completedBy = user?.id || 'system'
                 break
@@ -319,7 +324,7 @@ export async function updatePieceStatus(pieceId: string, newStatus: PieceStatus)
 /**
  * Bulk update multiple pieces to a new status
  */
-export async function bulkUpdatePieceStatus(pieceIds: string[], newStatus: PieceStatus) {
+export async function bulkUpdatePieceStatus(pieceIds: string[], newStatus: PartPieceStatus) {
     try {
         const user = await getCurrentUser()
         const now = new Date()
@@ -327,19 +332,19 @@ export async function bulkUpdatePieceStatus(pieceIds: string[], newStatus: Piece
         const updateData: any = { status: newStatus }
 
         switch (newStatus) {
-            case 'CUT':
+            case PartPieceStatus.CUT:
                 updateData.cutAt = now
                 break
-            case 'FABRICATED':
+            case PartPieceStatus.FABRICATED:
                 updateData.fabricatedAt = now
                 break
-            case 'WELDED':
+            case PartPieceStatus.WELDED:
                 updateData.weldedAt = now
                 break
-            case 'PAINTED':
+            case PartPieceStatus.PAINTED:
                 updateData.paintedAt = now
                 break
-            case 'READY':
+            case PartPieceStatus.READY:
                 updateData.completedAt = now
                 updateData.completedBy = user?.id || 'system'
                 break
@@ -385,7 +390,7 @@ export async function cutPieceWithMaterial(
             return { success: false, error: 'Piece not found' }
         }
 
-        if (piece.status !== 'PENDING') {
+        if (piece.status !== PartPieceStatus.PENDING) {
             return { success: false, error: 'Piece has already been cut' }
         }
 
@@ -429,7 +434,7 @@ export async function cutPieceWithMaterial(
                 // Mark remnant as used
                 await tx.remnant.update({
                     where: { id: materialId },
-                    data: { status: 'USED' }
+                    data: { status: RemnantStatus.USED }
                 })
             }
 
@@ -472,7 +477,7 @@ export async function cutPieceWithMaterial(
                             gradeId,
                             length: remainingLength,
                             costPerMeter,
-                            status: createRemnant ? 'AVAILABLE' : 'SCRAP',
+                            status: createRemnant ? RemnantStatus.AVAILABLE : RemnantStatus.SCRAP,
                             projectId,
                             createdBy: user.id,
                             modifiedBy: user.id
@@ -485,7 +490,7 @@ export async function cutPieceWithMaterial(
             await tx.partPiece.update({
                 where: { id: pieceId },
                 data: {
-                    status: 'CUT',
+                    status: PartPieceStatus.CUT,
                     cutAt: new Date(),
                     inventoryId: materialType === 'INVENTORY' ? materialId : undefined,
                     remnantId: materialType === 'REMNANT' ? materialId : undefined
@@ -518,9 +523,9 @@ export async function getPartProgress(partId: string) {
     })
 
     const total = pieces.length
-    const ready = pieces.filter(p => p.status === 'READY').length
-    const cut = pieces.filter(p => ['CUT', 'FABRICATED', 'WELDED', 'PAINTED', 'READY'].includes(p.status)).length
-    const inProgress = pieces.filter(p => !['PENDING', 'READY'].includes(p.status)).length
+    const ready = pieces.filter(p => p.status === PartPieceStatus.READY).length
+    const cut = pieces.filter(p => ([PartPieceStatus.CUT, PartPieceStatus.FABRICATED, PartPieceStatus.WELDED, PartPieceStatus.PAINTED, PartPieceStatus.READY] as any[]).includes(p.status)).length
+    const inProgress = pieces.filter(p => !([PartPieceStatus.PENDING, PartPieceStatus.READY] as any[]).includes(p.status)).length
 
     return {
         total,
@@ -556,7 +561,7 @@ export async function getProjectProgress(projectId: string) {
             totalPieces++
             totalWeight += partWeight
 
-            if (piece.status === 'READY') {
+            if (piece.status === PartPieceStatus.READY) {
                 readyPieces++
                 readyWeight += partWeight
             }
@@ -626,7 +631,7 @@ export async function finishPart(partId: string) {
         await prisma.partPiece.updateMany({
             where: { partId },
             data: {
-                status: 'READY',
+                status: PartPieceStatus.READY,
                 completedAt: now,
                 completedBy: user?.id || 'system'
             }
@@ -744,7 +749,7 @@ export async function receivePartBatch(input: ReceiveBatchInput) {
             await tx.partPiece.updateMany({
                 where: { id: { in: pieceIds } },
                 data: {
-                    status: 'READY', // Or RECEIVED?
+                    status: PartPieceStatus.READY, // Or RECEIVED?
                     inventoryId, // LINK TRACEABILITY
                     completedAt: now,
                     completedBy: user.id
@@ -806,7 +811,7 @@ export async function generatePartPieces(partId: string) {
         const newPieces = Array.from({ length: missingCount }, (_, i) => ({
             partId: part.id,
             pieceNumber: maxNum + i + 1,
-            status: 'PENDING'
+            status: PartPieceStatus.PENDING
         }))
 
         await prisma.partPiece.createMany({ data: newPieces })

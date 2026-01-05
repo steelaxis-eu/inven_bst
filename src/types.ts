@@ -3,6 +3,44 @@
  * Shared TypeScript interfaces for domain entities
  */
 
+import {
+    ProjectStatus,
+    ProjectPriority,
+    InventoryStatus,
+    RemnantStatus,
+    PartPieceStatus,
+    AssemblyStatus,
+    WorkOrderStatus,
+    WorkOrderType,
+    QualityCheckStatus,
+    DeliveryStatus,
+    PlatePartStatus,
+    PlatePieceStatus,
+    OptimizationJobStatus,
+    WorkOrderPriority,
+    ProcessStage,
+    QualityCheckType
+} from '@prisma/client'
+
+export {
+    ProjectStatus,
+    ProjectPriority,
+    InventoryStatus,
+    RemnantStatus,
+    PartPieceStatus,
+    AssemblyStatus,
+    WorkOrderStatus,
+    WorkOrderType,
+    QualityCheckStatus,
+    DeliveryStatus,
+    PlatePartStatus,
+    PlatePieceStatus,
+    OptimizationJobStatus,
+    WorkOrderPriority,
+    ProcessStage,
+    QualityCheckType
+}
+
 // ============================================================================
 // Base Types
 // ============================================================================
@@ -50,7 +88,7 @@ export interface Inventory {
     quantityAtHand: number
     costPerMeter: number
     certificateFilename: string | null
-    status: 'ACTIVE' | 'EXHAUSTED'
+    status: InventoryStatus
     createdAt: Date
     updatedAt: Date
     createdBy: string | null
@@ -70,7 +108,7 @@ export interface Remnant {
     length: number
     quantity: number
     costPerMeter: number
-    status: 'AVAILABLE' | 'USED' | 'SCRAP'
+    status: RemnantStatus
     createdAt: Date
     updatedAt: Date
     createdBy: string | null
@@ -86,9 +124,6 @@ export interface RemnantWithRelations extends Remnant {
 // ============================================================================
 // Project Types
 // ============================================================================
-
-export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'ARCHIVED'
-export type ProjectPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 
 export interface Project {
     id: string
@@ -111,8 +146,6 @@ export interface Project {
 // ============================================================================
 // Part & Piece Types (BOM)
 // ============================================================================
-
-export type PartPieceStatus = 'PENDING' | 'CUT' | 'FABRICATED' | 'WELDED' | 'PAINTED' | 'READY'
 
 export interface Part {
     id: string
@@ -140,6 +173,7 @@ export interface PartWithRelations extends Part {
     profile: SteelProfile | null
     grade: MaterialGrade | null
     pieces: PartPiece[]
+    assemblyParts: (AssemblyPart & { assembly: Assembly })[]
 }
 
 export interface PartPiece {
@@ -162,7 +196,14 @@ export interface PartPiece {
 // Assembly Types
 // ============================================================================
 
-export type AssemblyStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'ASSEMBLED' | 'QC_PASSED' | 'SHIPPED'
+export interface AssemblyPiece {
+    id: string
+    assemblyId: string
+    pieceNumber: number
+    status: AssemblyStatus
+    notes: string | null
+    completedAt: Date | null
+}
 
 export interface Assembly {
     id: string
@@ -171,6 +212,7 @@ export interface Assembly {
     assemblyNumber: string
     name: string
     description: string | null
+    quantity: number
     sequence: number
     status: AssemblyStatus
     scheduledDate: Date | null
@@ -182,8 +224,10 @@ export interface Assembly {
 
 export interface AssemblyWithRelations extends Assembly {
     parent: Assembly | null
-    children: Assembly[]
+    children: (Assembly & { pieces: AssemblyPiece[] })[]
     assemblyParts: AssemblyPartWithRelations[]
+    pieces: AssemblyPiece[]
+    plateAssemblyParts: PlateAssemblyPartWithRelations[]
 }
 
 export interface AssemblyPart {
@@ -201,8 +245,6 @@ export interface AssemblyPartWithRelations extends AssemblyPart {
 // ============================================================================
 // Delivery Schedule Types
 // ============================================================================
-
-export type DeliveryStatus = 'PENDING' | 'SHIPPED' | 'DELIVERED'
 
 export interface DeliverySchedule {
     id: string
@@ -231,10 +273,6 @@ export interface DeliveryScheduleWithRelations extends DeliverySchedule {
 // Quality Check Types
 // ============================================================================
 
-export type QualityCheckStatus = 'PENDING' | 'PASSED' | 'FAILED' | 'WAIVED'
-export type ProcessStage = 'FABRICATION' | 'WELDING' | 'PAINTING' | 'FINAL'
-export type QualityCheckType = 'VISUAL' | 'DIMENSIONAL' | 'NDT' | 'COATING'
-
 export interface QualityCheck {
     id: string
     projectId: string
@@ -254,10 +292,6 @@ export interface QualityCheck {
 // ============================================================================
 // Work Order Types
 // ============================================================================
-
-export type WorkOrderType = 'CUTTING' | 'FABRICATION' | 'WELDING' | 'PAINTING' | 'ASSEMBLY'
-export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
-export type WorkOrderPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
 
 export interface WorkOrder {
     id: string
@@ -283,7 +317,7 @@ export interface WorkOrderItem {
     pieceId: string | null
     assemblyId: string | null
     platePartId: string | null
-    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+    status: WorkOrderStatus
     completedAt: Date | null
     notes: string | null
 }
@@ -315,8 +349,6 @@ export interface ProjectDocument {
 // Plate Part Types (Outsourced Laser/Plasma)
 // ============================================================================
 
-export type PlatePartStatus = 'PENDING' | 'ORDERED' | 'IN_PRODUCTION' | 'RECEIVED' | 'QC_PASSED'
-
 export interface PlatePart {
     id: string
     projectId: string
@@ -342,6 +374,17 @@ export interface PlatePart {
     updatedAt: Date
 }
 
+export interface PlatePiece {
+    id: string
+    platePartId: string
+    pieceNumber: number
+    status: PlatePieceStatus
+    inventoryId: string | null
+    receivedAt: Date | null
+    receivedBy: string | null
+    notes: string | null
+}
+
 export interface PlateAssemblyPart {
     id: string
     assemblyId: string
@@ -350,6 +393,9 @@ export interface PlateAssemblyPart {
     notes: string | null
 }
 
+export interface PlateAssemblyPartWithRelations extends PlateAssemblyPart {
+    platePart: PlatePart
+}
 
 // ============================================================================
 // Usage Types
@@ -451,6 +497,4 @@ export interface ProjectStats {
 export interface MaterialSummaryItem {
     profile: string
     totalLength: number
-    totalCost: number
-    count: number
 }

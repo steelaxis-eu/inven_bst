@@ -8,6 +8,128 @@ datasource db {
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+  ARCHIVED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  URGENT
+}
+
+enum WorkOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum InventoryStatus {
+  ACTIVE
+  EXHAUSTED
+}
+
+enum RemnantStatus {
+  AVAILABLE
+  USED
+  SCRAP
+}
+
+enum PartPieceStatus {
+  PENDING
+  CUT
+  FABRICATED
+  WELDED
+  PAINTED
+  READY
+}
+
+enum AssemblyStatus {
+  PENDING
+  NOT_STARTED
+  IN_PROGRESS
+  ASSEMBLED
+  QC_PASSED
+  SHIPPED
+}
+
+enum WorkOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum WorkOrderType {
+  MATERIAL_PREP
+  CUTTING
+  MACHINING
+  FABRICATION
+  WELDING
+  PAINTING
+  ASSEMBLY
+  COATING
+}
+
+enum QualityCheckStatus {
+  PENDING
+  PASSED
+  FAILED
+  WAIVED
+}
+
+enum ProcessStage {
+  FABRICATION
+  WELDING
+  PAINTING
+  FINAL
+}
+
+enum QualityCheckType {
+  VISUAL
+  DIMENSIONAL
+  NDT
+  COATING
+}
+
+enum DeliveryStatus {
+  PENDING
+  SHIPPED
+  DELIVERED
+}
+
+enum PlatePartStatus {
+  PENDING
+  ORDERED
+  IN_PRODUCTION
+  RECEIVED
+  QC_PASSED
+}
+
+enum PlatePieceStatus {
+  PENDING
+  CUT
+  RECEIVED
+  QC_PASSED
+}
+
+enum OptimizationJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Customer {
   id            String   @id @default(uuid())
   companyName   String
@@ -29,10 +151,10 @@ model Project {
   customerId      String?
   customer        Customer?   @relation(fields: [customerId], references: [id])
   description     String?
-  priority        String      @default("MEDIUM")  // LOW, MEDIUM, HIGH, CRITICAL
+  priority        ProjectPriority @default(MEDIUM)
   scheduledStart  DateTime?
   scheduledEnd    DateTime?
-  status          String      @default("ACTIVE") // ACTIVE, COMPLETED, ON_HOLD, ARCHIVED
+  status          ProjectStatus   @default(ACTIVE)
   coatingType     String?              // HDG, PAINTED, POWDER_COATED, etc.
   coatingSpec     String?              // Coating specification details (e.g., "RAL 7016")
   createdAt       DateTime    @default(now())
@@ -148,7 +270,7 @@ model Inventory {
   quantityAtHand    Int
   costPerMeter      Float    @default(0)
   certificateFilename String?
-  status            String   @default("ACTIVE") // ACTIVE, EXHAUSTED
+  status            InventoryStatus @default(ACTIVE)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   createdBy         String?
@@ -175,7 +297,7 @@ model Remnant {
   length      Float    // mm
   quantity    Int      @default(1)
   costPerMeter Float     @default(0)
-  status      String   @default("AVAILABLE") // AVAILABLE, USED
+  status      RemnantStatus @default(AVAILABLE)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdBy         String?
@@ -282,8 +404,7 @@ model PartPiece {
   id              String    @id @default(uuid())
   partId          String
   pieceNumber     Int                 // 1, 2, 3... up to Part.quantity
-  status          String    @default("PENDING")
-                  // PENDING → CUT → FABRICATED → WELDED → PAINTED → READY
+  status          PartPieceStatus @default(PENDING)
   inventoryId     String?             // Material source (inventory lot)
   remnantId       String?             // Or material from remnant
   cutAt           DateTime?
@@ -321,8 +442,7 @@ model Assembly {
   description     String?
   quantity        Int       @default(1)  // Total instances (e.g., 5 Frames required)
   sequence        Int       @default(0)  // Fabrication order
-  status          String    @default("NOT_STARTED")
-                  // NOT_STARTED → IN_PROGRESS → ASSEMBLED → QC_PASSED → SHIPPED
+  status          AssemblyStatus @default(NOT_STARTED)
   scheduledDate   DateTime?           // When customer needs it
   shippedAt       DateTime?
   notes           String?
@@ -352,8 +472,7 @@ model AssemblyPiece {
   id              String    @id @default(uuid())
   assemblyId      String
   pieceNumber     Int       // 1, 2, ... up to Assembly.quantity
-  status          String    @default("PENDING")
-                  // PENDING → IN_PROGRESS → ASSEMBLED → QC_PASSED → SHIPPED
+  status          AssemblyStatus @default(PENDING)
 
   // Timestamps
   assembledAt     DateTime?
@@ -394,7 +513,7 @@ model DeliverySchedule {
   name          String              // e.g., "Phase 1 Delivery", "Week 3 Shipment"
   scheduledDate DateTime
   notes         String?
-  status        String   @default("PENDING")  // PENDING, SHIPPED, DELIVERED
+  status        DeliveryStatus @default(PENDING)
   shippedAt     DateTime?
   deliveredAt   DateTime?
   createdAt     DateTime @default(now())
@@ -433,9 +552,9 @@ model QualityCheck {
   id            String    @id @default(uuid())
   projectId     String
   assemblyId    String?             // Optional - can be project-level or assembly-level
-  processStage  String              // FABRICATION, WELDING, PAINTING, FINAL, etc.
-  type          String              // VISUAL, DIMENSIONAL, NDT, COATING
-  status        String    @default("PENDING")  // PENDING → PASSED → FAILED → WAIVED
+  processStage  ProcessStage
+  type          QualityCheckType
+  status        QualityCheckStatus @default(PENDING)
   inspectedBy   String?
   inspectedAt   DateTime?
   dueDate       DateTime?
@@ -466,9 +585,9 @@ model WorkOrder {
   workOrderNumber String             // e.g., "WO-2024-001"
   title         String
   description   String?
-  type          String              // MATERIAL_PREP, CUTTING, MACHINING, FABRICATION, WELDING, PAINTING, ASSEMBLY
-  priority      String    @default("MEDIUM")  // LOW, MEDIUM, HIGH, URGENT
-  status        String    @default("PENDING")  // PENDING → IN_PROGRESS → COMPLETED → CANCELLED
+  type          WorkOrderType
+  priority      WorkOrderPriority @default(MEDIUM)
+  status        WorkOrderStatus @default(PENDING)
   assignedTo    String?             // Worker/team
   scheduledDate DateTime?
   startedAt     DateTime?
@@ -499,7 +618,7 @@ model WorkOrderItem {
   pieceId       String?             // Link to PartPiece
   assemblyId    String?             // Or link to Assembly
   platePartId   String?             // Or link to PlatePart
-  status        String   @default("PENDING")  // PENDING → IN_PROGRESS → COMPLETED
+  status        WorkOrderStatus   @default(PENDING)  // PENDING → IN_PROGRESS → COMPLETED
   completedAt   DateTime?
   notes         String?
 
@@ -575,7 +694,7 @@ model PlatePart {
   nestingSheet    String?             // Nesting sheet reference
   supplier        String?             // Outsource vendor name
   poNumber        String?             // Purchase order number
-  status          String    @default("PENDING")
+  status          PlatePartStatus @default(PENDING)
                   // PENDING → ORDERED → IN_PRODUCTION → RECEIVED → QC_PASSED
   orderedAt       DateTime?
   expectedDate    DateTime?
@@ -604,7 +723,7 @@ model PlatePiece {
   id              String    @id @default(uuid())
   platePartId     String
   pieceNumber     Int       // 1, 2, ...
-  status          String    @default("PENDING")
+  status          PlatePieceStatus @default(PENDING)
                   // PENDING → CUT → RECEIVED → QC_PASSED
   
   inventoryId     String?   // Virtual Inventory (Batch) ID for traceability
@@ -649,7 +768,7 @@ model OptimizationJob {
   id          String   @id @default(uuid())
   projectId   String
   type        String   // NESTING, WEIGHT_RECALC, IMPORT_DRAWINGS
-  status      String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  status      OptimizationJobStatus @default(PENDING) // PENDING, PROCESSING, COMPLETED, FAILED
   parameters  Json?    // Input params
   result      Json?    // Output result or summary
   error       String?

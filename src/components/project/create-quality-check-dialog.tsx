@@ -63,8 +63,8 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
             const result = await createQualityCheck({
                 projectId,
                 assemblyId: formData.assemblyId === 'PROJECT_LEVEL' ? undefined : formData.assemblyId,
-                processStage: formData.processStage,
-                type: formData.type,
+                processStage: formData.processStage as any,
+                type: formData.type as any,
                 dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
                 notes: formData.notes,
                 status: formData.status as any,

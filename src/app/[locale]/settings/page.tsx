@@ -3,7 +3,7 @@ import { getProfileShapes, getGrades, getStandardProfiles, getProfiles } from "@
 import { getSuppliers } from "@/app/actions/suppliers"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { SettingsClient } from "@/app/settings/client-page"
+import { SettingsClient } from "./client-page"
 
 export const dynamic = 'force-dynamic'
 

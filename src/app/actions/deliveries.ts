@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { DeliveryStatus, AssemblyStatus, PartPieceStatus } from '@prisma/client'
 
 // ============================================================================
 // DELIVERY SCHEDULE CRUD
@@ -116,14 +117,14 @@ export async function updateDeliverySchedule(
  */
 export async function updateDeliveryStatus(
     scheduleId: string,
-    status: 'PENDING' | 'SHIPPED' | 'DELIVERED'
+    status: DeliveryStatus
 ) {
     try {
         const updateData: any = { status }
 
-        if (status === 'SHIPPED') {
+        if (status === DeliveryStatus.SHIPPED) {
             updateData.shippedAt = new Date()
-        } else if (status === 'DELIVERED') {
+        } else if (status === DeliveryStatus.DELIVERED) {
             updateData.deliveredAt = new Date()
         }
 
@@ -133,14 +134,14 @@ export async function updateDeliveryStatus(
         })
 
         // Also update associated assemblies
-        if (status === 'SHIPPED') {
+        if (status === DeliveryStatus.SHIPPED) {
             const items = await prisma.deliveryItem.findMany({
                 where: { deliveryScheduleId: scheduleId }
             })
 
             await prisma.assembly.updateMany({
                 where: { id: { in: items.map(i => i.assemblyId) } },
-                data: { status: 'SHIPPED', shippedAt: new Date() }
+                data: { status: AssemblyStatus.SHIPPED, shippedAt: new Date() }
             })
         }
 
@@ -166,7 +167,7 @@ export async function deleteDeliverySchedule(scheduleId: string) {
             return { success: false, error: 'Schedule not found' }
         }
 
-        if (schedule.status !== 'PENDING') {
+        if (schedule.status !== DeliveryStatus.PENDING) {
             return { success: false, error: 'Cannot delete shipped or delivered schedule' }
         }
 
@@ -282,7 +283,7 @@ export async function getDeliveryReadiness(scheduleId: string) {
 
         for (const ap of assembly.assemblyParts) {
             const piecesNeeded = ap.quantityInAssembly
-            const readyPieces = ap.part.pieces.filter(p => p.status === 'READY').length
+            const readyPieces = ap.part.pieces.filter(p => p.status === PartPieceStatus.READY).length
             const available = Math.min(readyPieces, piecesNeeded)
 
             totalPiecesNeeded += piecesNeeded
@@ -329,7 +330,7 @@ export async function getUpcomingDeliveries(projectId: string, daysAhead: number
     const schedules = await prisma.deliverySchedule.findMany({
         where: {
             projectId,
-            status: 'PENDING',
+            status: DeliveryStatus.PENDING,
             scheduledDate: { lte: futureDate }
         },
         include: {
@@ -359,7 +360,7 @@ export async function getUpcomingDeliveries(projectId: string, daysAhead: number
         schedule.items.forEach(item => {
             item.assembly.assemblyParts.forEach(ap => {
                 const needed = ap.quantityInAssembly
-                const ready = ap.part.pieces.filter(p => p.status === 'READY').length
+                const ready = ap.part.pieces.filter(p => p.status === PartPieceStatus.READY).length
                 totalPieces += needed
                 readyPieces += Math.min(ready, needed)
             })

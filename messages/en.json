@@ -1,0 +1,28 @@
+{
+    "Navigation": {
+        "dashboard": "Dashboard",
+        "projects": "Projects",
+        "inventory": "Inventory",
+        "stock": "Stock",
+        "customers": "Customers",
+        "settings": "Settings",
+        "history": "History"
+    },
+    "Dashboard": {
+        "welcome": "Welcome back, {name}",
+        "title": "SteelAxis Overview",
+        "inventory_title": "Inventory",
+        "inventory_desc": "Manage stock levels, add new items, and check availability.",
+        "register_usage_title": "Register Usage",
+        "register_usage_desc": "Record material consumption and generate remnants.",
+        "usage_history_title": "Usage History",
+        "usage_history_desc": "View complete history of all material usage and scraps.",
+        "projects_title": "Projects",
+        "projects_desc": "Organize work into projects and track assignments.",
+        "search_stock_title": "Search Stock",
+        "search_stock_desc": "Quickly find specific profiles across inventory.",
+        "settings_title": "Settings",
+        "settings_desc": "Configure scrap prices and parameters.",
+        "system_active": "System Active"
+    }
+}

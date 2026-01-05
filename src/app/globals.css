@@ -119,4 +119,16 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Glassmorphism utility */
+  .glass {
+    background: color-mix(in oklch, var(--background) 50%, transparent);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+  }
+
+  /* Micro-animations */
+  .transition-premium {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }

@@ -1,0 +1,28 @@
+{
+    "Navigation": {
+        "dashboard": "Panelis",
+        "projects": "Projekti",
+        "inventory": "Inventārs",
+        "stock": "Noliktava",
+        "customers": "Klienti",
+        "settings": "Iestatījumi",
+        "history": "Vēsture"
+    },
+    "Dashboard": {
+        "welcome": "Sveicināti atpakaļ, {name}",
+        "title": "SteelAxis Pārskats",
+        "inventory_title": "Inventārs",
+        "inventory_desc": "Pārvaldiet krājumu līmeņus, pievienojiet jaunas vienības un pārbaudiet pieejamību.",
+        "register_usage_title": "Reģistrēt Patēriņu",
+        "register_usage_desc": "Ierakstiet materiālu patēriņu un ģenerējiet atlikumus.",
+        "usage_history_title": "Patēriņa Vēsture",
+        "usage_history_desc": "Skatiet pilnu materiālu izmantošanas un lūžņu vēsturi.",
+        "projects_title": "Projekti",
+        "projects_desc": "Organizējiet darbu projektos un sekojiet līdzi uzdevumiem.",
+        "search_stock_title": "Meklēt krājumos",
+        "search_stock_desc": "Ātri atrodiet specifiskus profilus visā inventārā.",
+        "settings_title": "Iestatījumi",
+        "settings_desc": "Konfigurējiet lūžņu cenas un parametrus.",
+        "system_active": "Sistēma Aktīva"
+    }
+}

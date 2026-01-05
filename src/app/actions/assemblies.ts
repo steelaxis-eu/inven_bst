@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { AssemblyStatus, PartPieceStatus, PlatePieceStatus } from '@prisma/client'
 
 // ============================================================================
 // ASSEMBLY CRUD
@@ -47,7 +48,7 @@ export async function createAssembly(input: CreateAssemblyInput) {
                 const pieces = Array.from({ length: quantity }, (_, i) => ({
                     assemblyId: assembly.id,
                     pieceNumber: i + 1,
-                    status: 'PENDING'
+                    status: AssemblyStatus.PENDING
                 }))
                 await tx.assemblyPiece.createMany({ data: pieces })
             }
@@ -196,7 +197,7 @@ export async function updateAssembly(
                             const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
                                 partId: ap.partId,
                                 pieceNumber: maxNum + i + 1,
-                                status: 'PENDING'
+                                status: PartPieceStatus.PENDING
                             }))
                             await tx.partPiece.createMany({ data: newPieces })
                         }
@@ -221,26 +222,26 @@ export async function updateAssembly(
                     if (totalDiff === 0) continue
 
                     if (totalDiff > 0) {
-                        const plate = await tx.platePart.findUnique({ where: { id: pap.platePartId }, include: { pieces: true } })
+                        const plate = await (tx as any).platePart.findUnique({ where: { id: pap.platePartId }, include: { pieces: true } })
                         if (plate) {
-                            const maxNum = plate.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                            const maxNum = (plate.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
                             await tx.platePart.update({ where: { id: pap.platePartId }, data: { quantity: { increment: totalDiff } } })
                             const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
                                 platePartId: pap.platePartId,
                                 pieceNumber: maxNum + i + 1,
-                                status: 'PENDING'
+                                status: PlatePieceStatus.PENDING
                             }))
-                            await tx.platePiece.createMany({ data: newPieces })
+                            await (tx as any).platePiece.createMany({ data: newPieces })
                         }
                     } else {
                         const amountToRemove = Math.abs(totalDiff)
                         await tx.platePart.update({ where: { id: pap.platePartId }, data: { quantity: { decrement: amountToRemove } } })
-                        const pieces = await tx.platePiece.findMany({
+                        const pieces = await (tx as any).platePiece.findMany({
                             where: { platePartId: pap.platePartId },
                             orderBy: { pieceNumber: 'desc' },
                             take: amountToRemove
                         })
-                        await tx.platePiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+                        await (tx as any).platePiece.deleteMany({ where: { id: { in: pieces.map((p: any) => p.id) } } })
                     }
                 }
             }
@@ -262,12 +263,12 @@ export async function updateAssembly(
  */
 export async function updateAssemblyStatus(
     assemblyId: string,
-    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'ASSEMBLED' | 'QC_PASSED' | 'SHIPPED'
+    status: AssemblyStatus
 ) {
     try {
         const updateData: any = { status }
 
-        if (status === 'SHIPPED') {
+        if (status === AssemblyStatus.SHIPPED) {
             updateData.shippedAt = new Date()
         }
 
@@ -386,7 +387,7 @@ export async function addPartToAssembly(
                 const newPieces = Array.from({ length: totalToAdd }, (_, i) => ({
                     partId: partId,
                     pieceNumber: maxNum + i + 1,
-                    status: 'PENDING'
+                    status: PartPieceStatus.PENDING
                 }))
                 await tx.partPiece.createMany({ data: newPieces })
             }
@@ -440,13 +441,13 @@ export async function addPlatePartToAssembly(
             // Increment PlatePart quantity
             const totalToAdd = assembly.quantity * quantityInAssembly
 
-            const platePartWithPieces = await tx.platePart.findUnique({
+            const platePartWithPieces: any = await (tx as any).platePart.findUnique({
                 where: { id: platePartId },
                 include: { pieces: { select: { pieceNumber: true } } }
             })
 
             if (platePartWithPieces && totalToAdd > 0) {
-                const maxNum = platePartWithPieces.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                const maxNum = (platePartWithPieces.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
 
                 await tx.platePart.update({
                     where: { id: platePartId },
@@ -460,9 +461,9 @@ export async function addPlatePartToAssembly(
                 const newPieces = Array.from({ length: totalToAdd }, (_, i) => ({
                     platePartId: platePartId,
                     pieceNumber: maxNum + i + 1,
-                    status: 'PENDING'
+                    status: PlatePieceStatus.PENDING
                 }))
-                await tx.platePiece.createMany({ data: newPieces })
+                await (tx as any).platePiece.createMany({ data: newPieces })
             }
         })
 
@@ -605,7 +606,7 @@ export async function updateAssemblyPartQuantity(
                     const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
                         partId,
                         pieceNumber: maxNum + i + 1,
-                        status: 'PENDING'
+                        status: PartPieceStatus.PENDING
                     }))
                     await tx.partPiece.createMany({ data: newPieces })
                 }
@@ -658,26 +659,26 @@ export async function updatePlateAssemblyPartQuantity(
             })
 
             if (totalDiff > 0) {
-                const plate = await tx.platePart.findUnique({ where: { id: platePartId }, include: { pieces: true } })
+                const plate = await (tx as any).platePart.findUnique({ where: { id: platePartId }, include: { pieces: true } })
                 if (plate) {
-                    const maxNum = plate.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                    const maxNum = (plate.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
                     await tx.platePart.update({ where: { id: platePartId }, data: { quantity: { increment: totalDiff } } })
                     const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
                         platePartId,
                         pieceNumber: maxNum + i + 1,
-                        status: 'PENDING'
+                        status: PlatePieceStatus.PENDING
                     }))
-                    await tx.platePiece.createMany({ data: newPieces })
+                    await (tx as any).platePiece.createMany({ data: newPieces })
                 }
             } else if (totalDiff < 0) {
                 const amountToRemove = Math.abs(totalDiff)
                 await tx.platePart.update({ where: { id: platePartId }, data: { quantity: { decrement: amountToRemove } } })
-                const pieces = await tx.platePiece.findMany({
+                const pieces = await (tx as any).platePiece.findMany({
                     where: { platePartId },
                     orderBy: { pieceNumber: 'desc' },
                     take: amountToRemove
                 })
-                await tx.platePiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+                await (tx as any).platePiece.deleteMany({ where: { id: { in: pieces.map((p: any) => p.id) } } })
             }
 
             return assembly
@@ -736,7 +737,7 @@ export async function getAssemblyProgress(assemblyId: string) {
         const unitWeight = part.unitWeight || 0
 
         // Count ready pieces for this part
-        const readyPieces = part.pieces.filter(p => p.status === 'READY').length
+        const readyPieces = part.pieces.filter(p => p.status === PartPieceStatus.READY).length
         const availableForAssembly = Math.min(readyPieces, piecesNeeded)
 
         totalPiecesNeeded += piecesNeeded
@@ -814,7 +815,7 @@ export async function getProjectAssemblyProgress(projectId: string) {
         for (const ap of assembly.assemblyParts) {
             const part = ap.part
             const piecesNeeded = ap.quantityInAssembly
-            const readyPieces = part.pieces.filter(p => p.status === 'READY').length
+            const readyPieces = part.pieces.filter(p => (p.status as string) === PartPieceStatus.READY).length
             const availableForAssembly = Math.min(readyPieces, piecesNeeded)
 
             totalPiecesNeeded += piecesNeeded

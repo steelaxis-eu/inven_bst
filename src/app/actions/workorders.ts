@@ -4,6 +4,16 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
 import { optimizeCuttingPlan, StockInfo } from '@/lib/optimization'
+import {
+    WorkOrderStatus,
+    WorkOrderType,
+    WorkOrderPriority,
+    PartPieceStatus,
+    AssemblyStatus,
+    QualityCheckStatus,
+    QualityCheckType,
+    InventoryStatus
+} from '@prisma/client'
 
 // ============================================================================
 // WORK ORDER CRUD
@@ -12,9 +22,9 @@ import { optimizeCuttingPlan, StockInfo } from '@/lib/optimization'
 export interface CreateWorkOrderInput {
     projectId: string
     title: string
-    type: string        // CUTTING, FABRICATION, WELDING, PAINTING, ASSEMBLY
+    type: WorkOrderType
     description?: string
-    priority?: string   // LOW, MEDIUM, HIGH, URGENT
+    priority?: WorkOrderPriority
     assignedTo?: string
     scheduledDate?: Date
     notes?: string
@@ -56,7 +66,7 @@ export async function createWorkOrder(input: CreateWorkOrderInput) {
                 workOrderNumber,
                 title,
                 type,
-                priority: rest.priority || 'MEDIUM',
+                priority: (rest.priority as any) || WorkOrderPriority.MEDIUM,
                 ...rest,
                 scheduledDate: rest.scheduledDate ? new Date(rest.scheduledDate) : undefined
             }
@@ -116,14 +126,14 @@ export async function getWorkOrder(workOrderId: string) {
  */
 export async function updateWorkOrderStatus(
     workOrderId: string,
-    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
+    status: WorkOrderStatus
 ) {
     try {
         const updateData: any = { status }
 
-        if (status === 'IN_PROGRESS') {
+        if (status === WorkOrderStatus.IN_PROGRESS) {
             updateData.startedAt = new Date()
-        } else if (status === 'COMPLETED') {
+        } else if (status === WorkOrderStatus.COMPLETED) {
             updateData.completedAt = new Date()
         }
 
@@ -174,13 +184,13 @@ export async function addItemsToWorkOrder(
  */
 export async function updateWorkOrderItemStatus(
     itemId: string,
-    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED',
+    status: WorkOrderStatus,
     options?: { needsMachining?: boolean }
 ) {
     try {
         const updateData: any = { status }
 
-        if (status === 'COMPLETED') {
+        if (status === WorkOrderStatus.COMPLETED) {
             updateData.completedAt = new Date()
         }
 
@@ -194,13 +204,13 @@ export async function updateWorkOrderItemStatus(
         })
 
         // Track pieces that need machining or go straight to welding
-        if (status === 'COMPLETED' && item.pieceId && item.workOrder.type === 'CUTTING') {
+        if (status === WorkOrderStatus.COMPLETED && item.pieceId && item.workOrder.type === WorkOrderType.CUTTING) {
             // Store the machining flag on the piece (we'll use notes for now)
             if (options?.needsMachining) {
                 await prisma.partPiece.update({
                     where: { id: item.pieceId },
                     data: {
-                        status: 'CUT',
+                        status: PartPieceStatus.CUT,
                         cutAt: new Date(),
                         // We'll track this in the part notes or create immediate WO
                     }
@@ -209,7 +219,7 @@ export async function updateWorkOrderItemStatus(
                 await prisma.partPiece.update({
                     where: { id: item.pieceId },
                     data: {
-                        status: 'CUT',
+                        status: PartPieceStatus.CUT,
                         cutAt: new Date()
                     }
                 })
@@ -243,7 +253,7 @@ export async function completeCuttingWOWithWorkflow(
             return { success: false, error: 'Work order not found' }
         }
 
-        if (wo.type !== 'CUTTING') {
+        if (wo.type !== WorkOrderType.CUTTING) {
             return { success: false, error: 'This is only for CUTTING work orders' }
         }
 
@@ -254,18 +264,18 @@ export async function completeCuttingWOWithWorkflow(
         await prisma.$transaction(async (tx) => {
             await tx.workOrder.update({
                 where: { id: workOrderId },
-                data: { status: 'COMPLETED', completedAt: new Date() }
+                data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
             await tx.workOrderItem.updateMany({
-                where: { workOrderId, status: { not: 'COMPLETED' } },
-                data: { status: 'COMPLETED', completedAt: new Date() }
+                where: { workOrderId, status: { not: WorkOrderStatus.COMPLETED } },
+                data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
             // Update all pieces to CUT status
             await tx.partPiece.updateMany({
                 where: { id: { in: allPieceIds } },
-                data: { status: 'CUT', cutAt: new Date() }
+                data: { status: PartPieceStatus.CUT, cutAt: new Date() }
             })
         })
 
@@ -278,9 +288,9 @@ export async function completeCuttingWOWithWorkflow(
                     projectId: wo.projectId,
                     workOrderNumber: woNumber,
                     title: `Machining (from ${wo.workOrderNumber})`,
-                    type: 'MACHINING',
+                    type: WorkOrderType.MACHINING,
                     priority: wo.priority,
-                    status: 'PENDING',
+                    status: WorkOrderStatus.PENDING,
                     notes: `Drilling/machining for ${machinedPieceIds.length} pieces from cutting WO`,
                     items: {
                         create: machinedPieceIds.map(pieceId => ({ pieceId }))
@@ -298,9 +308,9 @@ export async function completeCuttingWOWithWorkflow(
                     projectId: wo.projectId,
                     workOrderNumber: woNumber,
                     title: `Welding (from ${wo.workOrderNumber})`,
-                    type: 'WELDING',
+                    type: WorkOrderType.WELDING,
                     priority: wo.priority,
-                    status: 'PENDING',
+                    status: WorkOrderStatus.PENDING,
                     notes: `${directToWelding.length} pieces ready for welding`,
                     items: {
                         create: directToWelding.map(pieceId => ({ pieceId }))
@@ -339,11 +349,11 @@ async function validateWeldingRequirements(items: any[]): Promise<{ valid: boole
     // Piece items -> Trace to Assembly
     const pieceIds = items.filter(i => i.pieceId).map(i => i.pieceId)
     if (pieceIds.length > 0) {
-        const pieces = await prisma.partPiece.findMany({
+        const pieces = await (prisma as any).partPiece.findMany({
             where: { id: { in: pieceIds } },
             select: { assemblyPiece: { select: { assemblyId: true } } }
         })
-        pieces.forEach(p => {
+        pieces.forEach((p: any) => {
             if (p.assemblyPiece?.assemblyId) assemblyIds.add(p.assemblyPiece.assemblyId)
         })
     }
@@ -355,8 +365,8 @@ async function validateWeldingRequirements(items: any[]): Promise<{ valid: boole
     const validQCs = await prisma.qualityCheck.findMany({
         where: {
             assemblyId: { in: Array.from(assemblyIds) },
-            type: 'VISUAL',
-            status: 'PASSED'
+            type: QualityCheckType.VISUAL,
+            status: QualityCheckStatus.PASSED
         },
         select: { assemblyId: true }
     })
@@ -393,7 +403,7 @@ export async function completeWorkOrder(workOrderId: string) {
         }
 
         // VALIDATION: Welding WOs require VT check
-        if (wo.type === 'WELDING') {
+        if (wo.type === WorkOrderType.WELDING) {
             const validation = await validateWeldingRequirements(wo.items)
             if (!validation.valid) {
                 return { success: false, error: validation.error }
@@ -406,13 +416,13 @@ export async function completeWorkOrder(workOrderId: string) {
             // Mark work order as completed
             await tx.workOrder.update({
                 where: { id: workOrderId },
-                data: { status: 'COMPLETED', completedAt: new Date() }
+                data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
             // Mark all items as completed
             await tx.workOrderItem.updateMany({
-                where: { workOrderId, status: { not: 'COMPLETED' } },
-                data: { status: 'COMPLETED', completedAt: new Date() }
+                where: { workOrderId, status: { not: WorkOrderStatus.COMPLETED } },
+                data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
             // Update piece statuses based on work order type
@@ -421,27 +431,27 @@ export async function completeWorkOrder(workOrderId: string) {
                 const statusField: Record<string, any> = {}
 
                 switch (wo.type) {
-                    case 'MATERIAL_PREP':
+                    case WorkOrderType.MATERIAL_PREP:
                         // Material is now available - no piece status change
                         break
-                    case 'CUTTING':
-                        statusField.status = 'CUT'
+                    case WorkOrderType.CUTTING:
+                        statusField.status = PartPieceStatus.CUT
                         statusField.cutAt = now
                         break
-                    case 'MACHINING':
-                        statusField.status = 'FABRICATED'
+                    case WorkOrderType.MACHINING:
+                        statusField.status = PartPieceStatus.FABRICATED
                         statusField.fabricatedAt = now
                         break
-                    case 'FABRICATION':
-                        statusField.status = 'FABRICATED'
+                    case WorkOrderType.FABRICATION:
+                        statusField.status = PartPieceStatus.FABRICATED
                         statusField.fabricatedAt = now
                         break
-                    case 'WELDING':
-                        statusField.status = 'WELDED'
+                    case WorkOrderType.WELDING:
+                        statusField.status = PartPieceStatus.WELDED
                         statusField.weldedAt = now
                         break
-                    case 'COATING':
-                        statusField.status = 'PAINTED'
+                    case WorkOrderType.COATING:
+                        statusField.status = PartPieceStatus.PAINTED
                         statusField.paintedAt = now
                         break
                 }
@@ -457,7 +467,7 @@ export async function completeWorkOrder(workOrderId: string) {
             // Unblock dependent WOs (those waiting on this one)
             // Just clear the blocking reference - notes will stay as-is
             await tx.workOrder.updateMany({
-                where: { blockedByWOId: workOrderId, status: 'PENDING' },
+                where: { blockedByWOId: workOrderId, status: WorkOrderStatus.PENDING },
                 data: {
                     blockedByWOId: null
                 }
@@ -469,7 +479,7 @@ export async function completeWorkOrder(workOrderId: string) {
         // Only WELDING→COATING is auto-created
         let followUpWO = null
 
-        if (wo.type === 'WELDING' && pieceIds.length > 0) {
+        if (wo.type === WorkOrderType.WELDING && pieceIds.length > 0) {
             // Auto-create COATING WO after WELDING completes
             const woNumber = await generateWorkOrderNumber(wo.projectId)
             followUpWO = await prisma.workOrder.create({
@@ -477,9 +487,9 @@ export async function completeWorkOrder(workOrderId: string) {
                     projectId: wo.projectId,
                     workOrderNumber: woNumber,
                     title: `Coating (from ${wo.workOrderNumber})`,
-                    type: 'COATING',
+                    type: WorkOrderType.COATING,
                     priority: wo.priority,
-                    status: 'PENDING',
+                    status: WorkOrderStatus.PENDING,
                     notes: `Auto-created after welding ${wo.workOrderNumber} completed`,
                     items: {
                         create: pieceIds.map((pieceId: string) => ({ pieceId }))
@@ -508,7 +518,7 @@ export async function deleteWorkOrder(workOrderId: string) {
             return { success: false, error: 'Work order not found' }
         }
 
-        if (!['PENDING', 'CANCELLED'].includes(wo.status)) {
+        if (!([WorkOrderStatus.PENDING, WorkOrderStatus.CANCELLED] as any[]).includes(wo.status)) {
             return { success: false, error: 'Cannot delete work order that is in progress or completed' }
         }
 
@@ -580,11 +590,11 @@ export async function checkAssemblyReadiness(assemblyIds: string[]): Promise<{
             const parts: PartReadiness[] = asm.assemblyParts.map(ap => {
                 const needed = ap.quantityInAssembly
                 const pieces = ap.part.pieces
-                const ready = pieces.filter(p => p.status === 'READY').length
+                const ready = pieces.filter(p => p.status === PartPieceStatus.READY).length
                 const inProgress = pieces.filter(p =>
-                    ['CUT', 'FABRICATED', 'WELDED', 'PAINTED'].includes(p.status)
+                    ([PartPieceStatus.CUT, PartPieceStatus.FABRICATED, PartPieceStatus.WELDED, PartPieceStatus.PAINTED] as any[]).includes(p.status)
                 ).length
-                const notStarted = pieces.filter(p => p.status === 'NOT_STARTED').length
+                const notStarted = pieces.filter(p => p.status === PartPieceStatus.PENDING).length
 
                 return {
                     partId: ap.part.id,
@@ -646,7 +656,7 @@ export async function checkMaterialStock(pieceIds: string[]): Promise<{
         const inventoryItems = await prisma.inventory.findMany({
             where: {
                 NOT: { profileId: undefined },
-                status: 'AVAILABLE'
+                status: InventoryStatus.ACTIVE
             },
             include: { profile: true }
         })
@@ -709,7 +719,7 @@ export async function completeMaterialPrepWorkOrder(
             include: { items: true }
         })
 
-        if (!wo || wo.type !== 'MATERIAL_PREP') {
+        if (!wo || wo.type !== WorkOrderType.MATERIAL_PREP) {
             return { success: false, error: 'Invalid Work Order' }
         }
 
@@ -730,7 +740,7 @@ export async function completeMaterialPrepWorkOrder(
                         quantityAtHand: item.quantity,
                         costPerMeter,
                         certificateFilename: item.certificate,
-                        status: 'ACTIVE',
+                        status: InventoryStatus.ACTIVE,
                         createdBy: 'Material Prep WO',
                         modifiedBy: 'Material Prep WO'
                     }
@@ -740,12 +750,12 @@ export async function completeMaterialPrepWorkOrder(
             // 2. Complete the WO
             await tx.workOrder.update({
                 where: { id: workOrderId },
-                data: { status: 'COMPLETED', completedAt: new Date() }
+                data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
             await tx.workOrderItem.updateMany({
                 where: { workOrderId },
-                data: { status: 'COMPLETED', completedAt: new Date() }
+                data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
             // 3. Unblock dependent WOs (Cutting WOs waiting for this material)
@@ -888,7 +898,7 @@ export async function createSmartWorkOrder(input: {
     pieceIds: string[]
     type: string
     title?: string
-    priority?: string
+    priority?: WorkOrderPriority
     scheduledDate?: Date
     notes?: string
     // Outsourced specific
@@ -952,9 +962,9 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: prepWONumber,
                             title: `Prep for ${vendor || 'Vendor'} (${title || 'Outsourced'})`,
-                            type: 'MATERIAL_PREP', // Picking/Cutting starts here
-                            priority: priority || 'MEDIUM',
-                            status: 'PENDING',
+                            type: WorkOrderType.MATERIAL_PREP, // Picking/Cutting starts here
+                            priority: (priority as any) || WorkOrderPriority.MEDIUM,
+                            status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             notes: prepNotes + "\n\n" + (notes || ''),
                             // We link the actual pieces here? No, Pre-WO usually handles "Stock".
@@ -974,9 +984,9 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: outsourcedWONumber,
                             title: title || `Outsourced ${type}`,
-                            type: type, // e.g. CUTTING, HDG
-                            priority: priority || 'MEDIUM',
-                            status: 'PENDING',
+                            type: type as WorkOrderType, // e.g. CUTTING, HDG
+                            priority: priority || WorkOrderPriority.MEDIUM,
+                            status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined, // Likely later
                             blockedByWOId: prepWO.id,
                             notes: `Vendor: ${vendor}\nSupply Material: YES\n` + (notes || ''),
@@ -996,9 +1006,9 @@ export async function createSmartWorkOrder(input: {
                         projectId,
                         workOrderNumber: woNumber,
                         title: title || `Outsourced ${type}`,
-                        type: type,
-                        priority: priority || 'MEDIUM',
-                        status: 'PENDING',
+                        type: type as WorkOrderType,
+                        priority: priority || WorkOrderPriority.MEDIUM,
+                        status: WorkOrderStatus.PENDING,
                         scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                         notes: `Vendor: ${vendor}\nSupply Material: NO (Vendor Provided)\n` + (notes || ''),
                         items: {
@@ -1024,8 +1034,8 @@ export async function createSmartWorkOrder(input: {
                         projectId,
                         workOrderNumber: await generateWorkOrderNumber(projectId),
                         title: title || 'Cutting',
-                        type: 'CUTTING',
-                        status: 'PENDING',
+                        type: WorkOrderType.CUTTING,
+                        status: WorkOrderStatus.PENDING,
                         items: { create: pieceIds.map(id => ({ pieceId: id })) }
                     }
                 })
@@ -1087,9 +1097,9 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: await generateWorkOrderNumber(projectId),
                             title: `Material Prep (${title || 'Cutting'})`,
-                            type: 'MATERIAL_PREP',
-                            priority: priority || 'MEDIUM',
-                            status: 'PENDING',
+                            type: WorkOrderType.MATERIAL_PREP,
+                            priority: priority || WorkOrderPriority.MEDIUM,
+                            status: WorkOrderStatus.PENDING,
                             scheduledDate: prepDate,
                             notes: prepSummary + "\n\n" + (notes || ''),
                         }
@@ -1104,9 +1114,9 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: await generateWorkOrderNumber(projectId),
                             title: (title || 'Cutting') + ' (In Stock)',
-                            type: 'CUTTING',
-                            priority: priority || 'MEDIUM',
-                            status: 'PENDING',
+                            type: WorkOrderType.CUTTING,
+                            priority: priority || WorkOrderPriority.MEDIUM,
+                            status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             notes: (notes || '') + "\n[Auto-Optimized: Uses Stock/Remnants]",
                             items: {
@@ -1123,9 +1133,9 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: await generateWorkOrderNumber(projectId),
                             title: (title || 'Cutting') + ' (Pending Material)',
-                            type: 'CUTTING',
-                            priority: priority || 'MEDIUM',
-                            status: 'PENDING',
+                            type: WorkOrderType.CUTTING,
+                            priority: priority || WorkOrderPriority.MEDIUM,
+                            status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             blockedByWOId: prepWOId,
                             notes: (notes || '') + "\n[Waiting for Material Prep]",
@@ -1152,9 +1162,9 @@ export async function createSmartWorkOrder(input: {
                 projectId,
                 workOrderNumber: await generateWorkOrderNumber(projectId),
                 title: title || type,
-                type: type,
-                priority: priority || 'MEDIUM',
-                status: 'PENDING',
+                type: type as WorkOrderType,
+                priority: priority || WorkOrderPriority.MEDIUM,
+                status: WorkOrderStatus.PENDING,
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                 notes,
                 items: {
@@ -1186,6 +1196,7 @@ export async function createPartPrepWorkOrder(input: {
     // Delegate to smart WO creator
     return createSmartWorkOrder({
         ...input,
+        priority: input.priority as any,
         type: 'CUTTING'
     })
 }
@@ -1239,9 +1250,9 @@ export async function createAssemblyWorkOrder(input: {
                 projectId,
                 workOrderNumber,
                 title: title || defaultTitle,
-                type: 'ASSEMBLY',
-                priority: priority || 'MEDIUM',
-                status: allReady ? 'PENDING' : 'PENDING',  // stays PENDING until manually activated
+                type: WorkOrderType.ASSEMBLY,
+                priority: (priority as any) || WorkOrderPriority.MEDIUM,
+                status: WorkOrderStatus.PENDING,  // stays PENDING until manually activated
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                 notes: allReady ? notes : `${notes || ''}\n[Waiting for parts]`.trim(),
                 items: {
@@ -1275,12 +1286,12 @@ export async function activateWorkOrder(workOrderId: string) {
             return { success: false, error: 'Work order not found' }
         }
 
-        if (wo.status !== 'PENDING') {
+        if (wo.status !== WorkOrderStatus.PENDING) {
             return { success: false, error: 'Work order is not PENDING' }
         }
 
         // For assembly work orders, check part readiness
-        if (wo.type === 'ASSEMBLY') {
+        if (wo.type === WorkOrderType.ASSEMBLY) {
             const assemblyIds = wo.items
                 .filter(i => i.assemblyId)
                 .map(i => i.assemblyId!)
@@ -1311,7 +1322,7 @@ export async function activateWorkOrder(workOrderId: string) {
         await prisma.workOrder.update({
             where: { id: workOrderId },
             data: {
-                status: 'IN_PROGRESS',
+                status: WorkOrderStatus.IN_PROGRESS,
                 startedAt: new Date(),
                 notes: wo.notes?.replace('[Waiting for parts]', '[Parts ready]') || undefined
             }

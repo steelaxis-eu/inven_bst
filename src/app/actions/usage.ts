@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { WorkOrderStatus, PartPieceStatus } from '@prisma/client'
 
 // ============================================================================
 // NEW BATCH LOGIC
@@ -93,7 +94,7 @@ export async function recordBatchUsage({
                 await tx.workOrderItem.update({
                     where: { id: cut.workOrderItemId },
                     data: {
-                        status: 'COMPLETED',
+                        status: WorkOrderStatus.COMPLETED,
                         completedAt: new Date()
                     }
                 })
@@ -103,7 +104,7 @@ export async function recordBatchUsage({
                     await tx.partPiece.update({
                         where: { id: cut.pieceId },
                         data: {
-                            status: 'CUT',
+                            status: PartPieceStatus.CUT,
                             cutAt: new Date()
                         }
                     })

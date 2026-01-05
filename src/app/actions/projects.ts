@@ -1,10 +1,11 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { ProjectStatus, RemnantStatus, ProjectPriority } from '@prisma/client'
 
 export async function getActiveProjects() {
     return await prisma.project.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: ProjectStatus.ACTIVE },
         orderBy: { projectNumber: 'asc' },
         include: { customer: true }
     })
@@ -41,7 +42,7 @@ export async function createProject(data: CreateProjectInput) {
                 contractDate: data.contractDate,
                 estimatedHours: data.estimatedHours ? parseFloat(data.estimatedHours.toString()) : null,
                 deliveryDate: data.deliveryDate,
-                status: 'ACTIVE',
+                status: ProjectStatus.ACTIVE,
                 createdBy: 'System',
                 modifiedBy: 'System'
             }
@@ -57,7 +58,7 @@ export async function archiveProject(id: string) {
     try {
         await prisma.project.update({
             where: { id },
-            data: { status: 'ARCHIVED' }
+            data: { status: ProjectStatus.ARCHIVED }
         })
         return { success: true }
     } catch (e: any) {
@@ -70,7 +71,7 @@ export interface UpdateProjectInput {
     client?: string
     customerId?: string
     description?: string
-    priority?: string
+    priority?: ProjectPriority
     coatingType?: string
     coatingSpec?: string
     corrosionCategory?: string
@@ -88,7 +89,7 @@ export async function updateProject(id: string, data: UpdateProjectInput) {
         await prisma.project.update({
             where: { id },
             data: {
-                ...data,
+                ...(data as any),
                 modifiedBy: 'System'
             }
         })
@@ -230,7 +231,7 @@ export async function getProject(id: string) {
     // 4. Scrap Calc
     let totalScrapValue = 0
     let totalScrapWeight = 0
-    const scraps = project.remnants?.filter(r => r.status === 'SCRAP') || []
+    const scraps = project.remnants?.filter(r => r.status === RemnantStatus.SCRAP) || []
     scraps.forEach(scrap => {
         if (scrap.profile && scrap.profile.weightPerMeter) {
             const weight = (scrap.length / 1000) * scrap.profile.weightPerMeter

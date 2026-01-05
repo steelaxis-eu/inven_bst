@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
+import { QualityCheckStatus, ProcessStage, QualityCheckType } from '@prisma/client'
 
 import { generateNextId } from './settings'
 
@@ -13,11 +14,11 @@ import { generateNextId } from './settings'
 export interface CreateQualityCheckInput {
     projectId: string
     assemblyId?: string
-    processStage: string  // FABRICATION, WELDING, PAINTING, FINAL
-    type: string          // VISUAL, DIMENSIONAL, NDT, COATING
+    processStage: ProcessStage  // FABRICATION, WELDING, PAINTING, FINAL
+    type: QualityCheckType          // VISUAL, DIMENSIONAL, NDT, COATING
     dueDate?: Date
     notes?: string
-    status?: 'PENDING' | 'PASSED' | 'FAILED' | 'WAIVED'
+    status?: QualityCheckStatus
     findings?: string
     ncr?: string
 }
@@ -46,13 +47,13 @@ export async function createQualityCheck(input: CreateQualityCheckInput) {
 
 
         // Handle immediate inspection result
-        if (rest.status && rest.status !== 'PENDING') {
+        if (rest.status && rest.status !== QualityCheckStatus.PENDING) {
             data.status = rest.status
             data.inspectedAt = new Date()
             data.inspectedBy = user?.id || 'system'
             data.findings = rest.findings
 
-            if (rest.status === 'FAILED') {
+            if (rest.status === QualityCheckStatus.FAILED) {
                 // Auto-generate NCR if not provided
                 data.ncr = rest.ncr || await generateNextId('NCR')
             }
@@ -101,7 +102,7 @@ export async function getAssemblyQualityChecks(assemblyId: string) {
  */
 export async function updateQualityCheckStatus(
     qcId: string,
-    status: 'PENDING' | 'PASSED' | 'FAILED' | 'WAIVED',
+    status: QualityCheckStatus,
     findings?: string,
     ncr?: string
 ) {
@@ -110,12 +111,12 @@ export async function updateQualityCheckStatus(
 
         const updateData: any = { status, findings }
 
-        if (status !== 'PENDING') {
+        if (status !== QualityCheckStatus.PENDING) {
             updateData.inspectedAt = new Date()
             updateData.inspectedBy = user?.id || 'system'
         }
 
-        if (status === 'FAILED' && ncr) {
+        if (status === QualityCheckStatus.FAILED && ncr) {
             updateData.ncr = ncr
         }
 
@@ -175,11 +176,11 @@ export async function getProjectQualitySummary(projectId: string) {
 
     checks.forEach(c => {
         summary.total += c._count
-        switch (c.status) {
-            case 'PENDING': summary.pending = c._count; break
-            case 'PASSED': summary.passed = c._count; break
-            case 'FAILED': summary.failed = c._count; break
-            case 'WAIVED': summary.waived = c._count; break
+        switch (c.status as QualityCheckStatus) {
+            case QualityCheckStatus.PENDING: summary.pending = c._count; break
+            case QualityCheckStatus.PASSED: summary.passed = c._count; break
+            case QualityCheckStatus.FAILED: summary.failed = c._count; break
+            case QualityCheckStatus.WAIVED: summary.waived = c._count; break
         }
     })
 

@@ -51,7 +51,7 @@ export function EditProjectDialog({ project }: EditProjectDialogProps) {
                 name,
                 client: client || undefined,
                 description: description || undefined,
-                priority,
+                priority: priority as any,
                 coatingType: coatingType === 'NONE' ? undefined : coatingType,
                 coatingSpec: coatingSpec || undefined
             })

@@ -43,7 +43,7 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
                 lotId,
                 length: parseFloat(length),
                 quantityAtHand: parseInt(quantity),
-                status,
+                status: status as any,
                 totalCost: parseFloat(totalCost)
             })
             if (res.success) {

@@ -232,9 +232,9 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     return (
         <div className="space-y-4">
             {/* Toolbar */}
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+            <div className="flex items-center justify-between p-3 bg-card/40 backdrop-blur-sm rounded-lg border border-border/50 transition-premium hover:bg-card/60">
                 <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm text-muted-foreground font-medium">
                         {selectedIds.length > 0
                             ? `${selectedIds.length} selected`
                             : 'Select parts to process'
@@ -245,7 +245,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                     <Button
                         size="sm"
                         onClick={handleCreateWO}
-                        className="gap-2"
+                        className="gap-2 shadow-lg shadow-primary/20"
                     >
                         <ClipboardList className="h-4 w-4" />
                         Create Work Order ({selectedIds.length})
@@ -253,10 +253,10 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                 )}
             </div>
 
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border border-border/50 rounded-lg overflow-hidden shelf-sm">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-muted/50">
+                        <TableRow className="bg-muted/30 border-b border-border/50">
                             <TableHead className="w-10">
                                 <Checkbox
                                     checked={allSelected}
@@ -293,7 +293,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                             const progress = isPart ? getProgress(data.pieces) : 0
 
                             return (
-                                <TableRow key={id} className={`hover:bg-muted/30 ${selectedIds.includes(id) ? 'bg-muted/50' : ''}`}>
+                                <TableRow key={id} className={`transition-all duration-200 hover:bg-muted/40 ${selectedIds.includes(id) ? 'bg-primary/5 dark:bg-primary/10' : ''}`}>
                                     <TableCell>
                                         <Checkbox
                                             checked={selectedIds.includes(id)}
@@ -303,7 +303,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                     <TableCell className="font-mono font-medium">
                                         <button
                                             onClick={() => handleOpenDetails(item)}
-                                            className="hover:underline text-primary text-left"
+                                            className="hover:underline text-primary text-left font-semibold transition-colors"
                                         >
                                             {data.partNumber}
                                         </button>
@@ -314,7 +314,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                                 <Package className="h-3 w-3" /> Profile
                                             </Badge>
                                         ) : (
-                                            <Badge variant="secondary" className="gap-1">
+                                            <Badge variant="secondary" className="gap-1 bg-secondary/50 backdrop-blur-sm">
                                                 <Scissors className="h-3 w-3" /> Plate
                                             </Badge>
                                         )}
@@ -349,9 +349,9 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                     </TableCell>
                                     <TableCell>
                                         {isPart ? (
-                                            <div className="flex items-center gap-2">
-                                                <Progress value={progress} className="h-2 flex-1" />
-                                                <span className="text-xs w-8">{progress}%</span>
+                                            <div className="flex items-center gap-3">
+                                                <Progress value={progress} className="h-1.5 flex-1 bg-muted/30" />
+                                                <span className="text-[10px] font-mono font-bold w-12 text-muted-foreground">{progress}%</span>
                                             </div>
                                         ) : (
                                             <Badge variant="outline" className={cn(

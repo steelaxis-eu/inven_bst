@@ -2,10 +2,11 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { InventoryStatus } from '@prisma/client'
 
 export async function getInventory() {
     return await prisma.inventory.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: InventoryStatus.ACTIVE },
         include: {
             profile: true,
             grade: true
@@ -82,7 +83,7 @@ export async function createInventory(data: {
             quantityAtHand: data.quantity, // Initially same
             costPerMeter: costPerMeter,
             certificateFilename: data.certificate,
-            status: 'ACTIVE',
+            status: InventoryStatus.ACTIVE,
             createdBy: 'System', // TODO: Get real user
             modifiedBy: 'System'
         }
@@ -118,7 +119,7 @@ export async function updateInventory(id: string, data: {
     lotId: string,
     length: number,
     quantityAtHand: number,
-    status: string,
+    status: InventoryStatus,
     totalCost?: number
 }) {
     try {
@@ -232,7 +233,7 @@ export async function createInventoryBatch(items: {
                         quantityAtHand: data.quantity,
                         costPerMeter: costPerMeter,
                         certificateFilename: data.certificate,
-                        status: 'ACTIVE',
+                        status: InventoryStatus.ACTIVE,
                         createdBy: 'System',
                         modifiedBy: 'System'
                     }

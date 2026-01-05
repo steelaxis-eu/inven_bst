@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { PlatePartStatus, PlatePieceStatus } from '@prisma/client'
 import { getCurrentUser } from '@/lib/auth'
 
 // ============================================================================
@@ -71,10 +72,10 @@ export async function createPlatePart(input: CreatePlatePartInput) {
             const pieces = Array.from({ length: quantity }, (_, i) => ({
                 platePartId: part.id,
                 pieceNumber: i + 1,
-                status: 'PENDING'
+                status: PlatePieceStatus.PENDING
             }))
 
-            await tx.platePiece.createMany({ data: pieces })
+            await (tx as any).platePiece.createMany({ data: pieces })
 
             return part
         })
@@ -206,7 +207,7 @@ export async function updatePlatePart(
  */
 export async function updatePlatePartStatus(
     platePartId: string,
-    status: 'PENDING' | 'ORDERED' | 'IN_PRODUCTION' | 'RECEIVED' | 'QC_PASSED',
+    status: PlatePartStatus,
     additionalData?: {
         poNumber?: string
         expectedDate?: Date
@@ -217,12 +218,12 @@ export async function updatePlatePartStatus(
         const updateData: any = { status }
 
         switch (status) {
-            case 'ORDERED':
+            case PlatePartStatus.ORDERED:
                 updateData.orderedAt = new Date()
                 if (additionalData?.poNumber) updateData.poNumber = additionalData.poNumber
                 if (additionalData?.expectedDate) updateData.expectedDate = new Date(additionalData.expectedDate)
                 break
-            case 'RECEIVED':
+            case PlatePartStatus.RECEIVED:
                 updateData.receivedAt = new Date()
                 if (additionalData?.receivedQty !== undefined) updateData.receivedQty = additionalData.receivedQty
                 break
@@ -253,7 +254,7 @@ export async function deletePlatePart(platePartId: string) {
             return { success: false, error: 'Plate part not found' }
         }
 
-        if (part.status !== 'PENDING') {
+        if (part.status !== PlatePartStatus.PENDING) {
             return { success: false, error: 'Cannot delete plate part that has been ordered' }
         }
 
@@ -363,7 +364,7 @@ export async function bulkUpdatePlatePieceStatus(pieceIds: string[], newStatus: 
             updateData.receivedBy = user?.id
         }
 
-        await prisma.platePiece.updateMany({
+        await (prisma as any).platePiece.updateMany({
             where: { id: { in: pieceIds } },
             data: updateData
         })
@@ -394,7 +395,7 @@ export async function receivePlateBatch(input: ReceivePlateBatchInput) {
 
         if (pieceIds.length === 0) return { success: false, error: 'No pieces selected' }
 
-        const firstPiece = await prisma.platePiece.findUnique({
+        const firstPiece = await (prisma as any).platePiece.findUnique({
             where: { id: pieceIds[0] },
             include: { platePart: true }
         })
@@ -476,7 +477,7 @@ export async function receivePlateBatch(input: ReceivePlateBatchInput) {
 
         await prisma.$transaction(async (tx) => {
             // 1. Update Pieces
-            await tx.platePiece.updateMany({
+            await (tx as any).platePiece.updateMany({
                 where: { id: { in: pieceIds } },
                 data: {
                     status: 'RECEIVED',
@@ -605,10 +606,10 @@ export async function cutPlatePieceWithMaterial(
             })
 
             // 3. Update Piece
-            await tx.platePiece.update({
+            await (tx as any).platePiece.update({
                 where: { id: pieceId },
                 data: {
-                    status: 'CUT',
+                    status: PlatePieceStatus.CUT,
                     inventoryId: materialType === 'INVENTORY' ? materialId : undefined,
                     notes: `Cut from ${materialType} ${materialId}`
                 }
@@ -642,8 +643,6 @@ export async function generatePlatePieces(platePartId: string) {
 
         const currentCount = part.pieces.length
         if (currentCount >= part.quantity) {
-            return { a: true, message: 'Pieces already exist', pieces: part.pieces } // Using 'a' for success to match pattern or stick to standard
-            // Standard: { success: true, ... }
             return { success: true, message: 'Pieces already exist', pieces: part.pieces }
         }
 
@@ -656,16 +655,16 @@ export async function generatePlatePieces(platePartId: string) {
         const newPieces = Array.from({ length: missingCount }, (_, i) => ({
             platePartId: part.id,
             pieceNumber: maxNum + i + 1,
-            status: 'PENDING'
+            status: PlatePieceStatus.PENDING
         }))
 
         // Transaction not strictly needed but good practice
-        await prisma.platePiece.createMany({ data: newPieces })
+        await (prisma as any).platePiece.createMany({ data: newPieces })
 
         revalidatePath(`/projects/${part.projectId}`)
 
         // Return refreshed list
-        const updatedPieces = await prisma.platePiece.findMany({
+        const updatedPieces = await (prisma as any).platePiece.findMany({
             where: { platePartId },
             orderBy: { pieceNumber: 'asc' }
         })

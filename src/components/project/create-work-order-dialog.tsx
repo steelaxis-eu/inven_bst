@@ -139,7 +139,7 @@ export function CreateWorkOrderDialog({
                 pieceIds,
                 type: values.type,
                 title: values.title,
-                priority: values.priority,
+                priority: values.priority as any,
                 scheduledDate: values.scheduledDate,
                 notes: values.notes,
                 isOutsourced: values.isOutsourced,

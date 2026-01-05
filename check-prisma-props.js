@@ -1,0 +1,7 @@
+const { PrismaClient } = require('@prisma/client')
+const prisma = new PrismaClient()
+console.log('Inventory properties:', Object.keys(prisma.inventory))
+console.log('PlatePart properties:', Object.keys(prisma.platePart || {}))
+console.log('PlatePiece properties:', Object.keys(prisma.platePiece || {}))
+console.log('All model-like properties:', Object.keys(prisma).filter(k => !k.startsWith('_') && !k.startsWith('$')))
+prisma.$disconnect()
