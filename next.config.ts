@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@napi-rs/canvas", "canvas"],
   experimental: {
     // serverActions: true, // Next 14 has this by default
+    outputFileTracingIncludes: {
+      '/**': ['./node_modules/@napi-rs/canvas/**/*'],
+    }
   }
 };
 
