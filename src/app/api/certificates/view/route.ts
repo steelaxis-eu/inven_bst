@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase-server'
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const path = searchParams.get('path')
+    const bucketParam = searchParams.get('bucket')
+    const allowedBuckets = ['certificates', 'projects']
+    const bucket = allowedBuckets.includes(bucketParam || '') ? bucketParam! : 'certificates'
 
     if (!path) {
         return NextResponse.json({ error: 'Path is required' }, { status: 400 })
@@ -14,7 +17,7 @@ export async function GET(request: NextRequest) {
 
         // Download file from Supabase
         const { data, error } = await supabase.storage
-            .from('certificates')
+            .from(bucket)
             .download(path)
 
         if (error) {

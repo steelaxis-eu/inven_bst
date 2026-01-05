@@ -284,6 +284,8 @@ model PartPiece {
   part            Part              @relation(fields: [partId], references: [id], onDelete: Cascade)
   inventory       Inventory?        @relation(fields: [inventoryId], references: [id])
   remnant         Remnant?          @relation(fields: [remnantId], references: [id])
+  assemblyPieceId String?
+  assemblyPiece   AssemblyPiece?    @relation(fields: [assemblyPieceId], references: [id])
   documents       ProjectDocument[]
   workOrderItems  WorkOrderItem[]
 
@@ -292,6 +294,7 @@ model PartPiece {
   @@index([status])
   @@index([inventoryId])
   @@index([remnantId])
+  @@index([assemblyPieceId])
 }
 
 // Assembly: Grouping of parts (supports nesting via parentId)
@@ -302,6 +305,7 @@ model Assembly {
   assemblyNumber  String              // e.g., "A-001"
   name            String              // e.g., "Main Frame Section 1"
   description     String?
+  quantity        Int       @default(1)  // Total instances (e.g., 5 Frames required)
   sequence        Int       @default(0)  // Fabrication order
   status          String    @default("NOT_STARTED")
                   // NOT_STARTED → IN_PROGRESS → ASSEMBLED → QC_PASSED → SHIPPED
@@ -315,6 +319,7 @@ model Assembly {
   project           Project              @relation(fields: [projectId], references: [id])
   parent            Assembly?            @relation("SubAssemblies", fields: [parentId], references: [id])
   children          Assembly[]           @relation("SubAssemblies")
+  pieces            AssemblyPiece[]
   assemblyParts     AssemblyPart[]
   deliveryItems     DeliveryItem[]
   qualityChecks     QualityCheck[]
@@ -325,6 +330,29 @@ model Assembly {
   @@unique([projectId, assemblyNumber])
   @@index([projectId])
   @@index([parentId])
+  @@index([status])
+}
+
+// AssemblyPiece: Individual instance tracking (Frame 1 of 5, Frame 2 of 5)
+model AssemblyPiece {
+  id              String    @id @default(uuid())
+  assemblyId      String
+  pieceNumber     Int       // 1, 2, ... up to Assembly.quantity
+  status          String    @default("PENDING")
+                  // PENDING → IN_PROGRESS → ASSEMBLED → QC_PASSED → SHIPPED
+
+  // Timestamps
+  assembledAt     DateTime?
+  qcPassedAt      DateTime?
+  shippedAt       DateTime?
+  notes           String?
+
+  // Relations
+  assembly        Assembly    @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  childPieces     PartPiece[] // The parts that make up this specific assembly instance
+
+  @@unique([assemblyId, pieceNumber])
+  @@index([assemblyId])
   @@index([status])
 }
 

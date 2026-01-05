@@ -100,7 +100,10 @@ export async function getProjectParts(projectId: string) {
             profile: true,
             grade: true,
             pieces: {
-                orderBy: { pieceNumber: 'asc' }
+                orderBy: { pieceNumber: 'asc' },
+                include: {
+                    inventory: true
+                }
             },
             assemblyParts: {
                 include: {

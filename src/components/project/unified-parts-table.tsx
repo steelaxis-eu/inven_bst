@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { ChevronDown, ChevronRight, Package, MoreHorizontal, RefreshCw, Scissors, Factory, ClipboardList } from 'lucide-react'
+import { ChevronDown, ChevronRight, Package, MoreHorizontal, RefreshCw, Scissors, Factory, ClipboardList, FileText } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { togglePartSource, deletePart, finishPart } from '@/app/actions/parts'
 import { togglePlatePartSource, deletePlatePart, updatePlatePartStatus } from '@/app/actions/plateparts'
 import { cn } from '@/lib/utils'
 import { Trash2, CheckCircle, Pencil } from 'lucide-react'
+import { PartDetailsDialog } from './part-details-dialog'
 
 // Union type for the table
 export type UnifiedPartItem =
@@ -27,6 +28,17 @@ interface UnifiedPartsTableProps {
 export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) {
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [loadingId, setLoadingId] = useState<string | null>(null)
+    const [detailsOpen, setDetailsOpen] = useState(false)
+    const [selectedPart, setSelectedPart] = useState<any>(null)
+
+    const handleOpenDetails = (item: UnifiedPartItem) => {
+        if (item.kind === 'part') {
+            setSelectedPart(item.data)
+            setDetailsOpen(true)
+        } else {
+            toast.info("Plate details coming soon")
+        }
+    }
 
     const allIds = items.map(i => i.data.id)
     const allSelected = items.length > 0 && selectedIds.length === items.length
@@ -135,7 +147,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     const handleEdit = (item: UnifiedPartItem) => {
-        toast.info("Edit feature coming soon")
+        handleOpenDetails(item)
     }
 
     const getProgress = (pieces: any[]) => {
@@ -189,6 +201,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                             </TableHead>
                             <TableHead>Part #</TableHead>
                             <TableHead>Type</TableHead>
+                            <TableHead className="w-10">Dwng</TableHead>
                             <TableHead>Description</TableHead>
                             <TableHead>Dimensions</TableHead>
                             <TableHead>Grade</TableHead>
@@ -224,7 +237,12 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                         />
                                     </TableCell>
                                     <TableCell className="font-mono font-medium">
-                                        {data.partNumber}
+                                        <button
+                                            onClick={() => handleOpenDetails(item)}
+                                            className="hover:underline text-primary text-left"
+                                        >
+                                            {data.partNumber}
+                                        </button>
                                     </TableCell>
                                     <TableCell>
                                         {isPart ? (
@@ -235,6 +253,19 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                             <Badge variant="secondary" className="gap-1">
                                                 <Scissors className="h-3 w-3" /> Plate
                                             </Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {(isPart ? data.drawingRef : data.dxfStoragePath) && (
+                                            <a
+                                                href={`/api/certificates/view?path=${encodeURIComponent(isPart ? data.drawingRef : data.dxfStoragePath)}&bucket=projects`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 hover:text-blue-800"
+                                                title="Open Drawing"
+                                            >
+                                                <FileText className="h-4 w-4" />
+                                            </a>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-muted-foreground text-sm">
@@ -303,6 +334,19 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                     </TableBody>
                 </Table>
             </div>
+
+            {selectedPart && (
+                <PartDetailsDialog
+                    open={detailsOpen}
+                    onOpenChange={setDetailsOpen}
+                    part={selectedPart}
+                    projectId={projectId}
+                    onUpdate={() => {
+                        setDetailsOpen(false)
+                        window.location.reload()
+                    }}
+                />
+            )}
         </div>
     )
 }

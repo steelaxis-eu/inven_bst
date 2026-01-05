@@ -14,6 +14,7 @@ import { CreateAssemblyWODialog } from './create-assembly-wo-dialog'
 import { finishPart } from '@/app/actions/parts'
 import { updatePlatePartStatus } from '@/app/actions/plateparts'
 import { removePartFromAssembly, removePlatePartFromAssembly } from '@/app/actions/assemblies'
+import { AssemblyDetailsDialog } from './assembly-details-dialog'
 
 interface Assembly {
     id: string
@@ -112,12 +113,14 @@ function AssemblyItem({
     assembly,
     level = 0,
     selected,
-    onSelect
+    onSelect,
+    onViewDetails
 }: {
     assembly: Assembly
     level?: number
     selected: boolean
     onSelect: (id: string, checked: boolean) => void
+    onViewDetails: (assembly: Assembly) => void
 }) {
     const [expanded, setExpanded] = useState(false)
     const [detailsOpen, setDetailsOpen] = useState(false)
@@ -298,12 +301,20 @@ function AssemblyItem({
                                 {totalWeight.toFixed(1)} kg
                             </div>
                         </div>
-                        <div className="bg-background p-3 rounded border">
-                            <div className="text-xs text-muted-foreground uppercase mb-1">Status</div>
-                            <Badge variant="outline" className={`${STATUS_COLORS[assembly.status] || ''} text-sm`}>
+                        <div className="text-lg font-semibold flex items-center gap-2">
+                            <Weight className="h-4 w-4 text-muted-foreground" />
+                            {totalWeight.toFixed(1)} kg
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <div className="bg-background p-3 rounded border flex-1 flex flex-col justify-center items-center">
+                            <Badge variant="outline" className={`${STATUS_COLORS[assembly.status] || ''} text-sm mb-1`}>
                                 {assembly.status.replace('_', ' ')}
                             </Badge>
                         </div>
+                        <Button size="sm" variant="outline" className="w-full text-xs h-8" onClick={(e) => { e.stopPropagation(); onViewDetails(assembly); }}>
+                            View Details & Traceability
+                        </Button>
                     </div>
 
                     {/* Parts Table */}
@@ -386,12 +397,14 @@ function AssemblyItem({
                     )}
 
                     {/* Notes */}
+                    {/* Notes */}
                     {assembly.notes && (
                         <div className="mt-4 p-3 bg-background border rounded">
                             <div className="text-xs text-muted-foreground uppercase mb-1">Notes</div>
                             <p className="text-sm">{assembly.notes}</p>
                         </div>
                     )}
+
                 </div>
             )}
 
@@ -405,6 +418,7 @@ function AssemblyItem({
                             level={level + 1}
                             selected={selected}
                             onSelect={onSelect}
+                            onViewDetails={onViewDetails}
                         />
                     ))}
                 </div>
@@ -416,6 +430,7 @@ function AssemblyItem({
 export function AssembliesTree({ assemblies, projectId }: AssembliesTreeProps) {
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [woDialogOpen, setWoDialogOpen] = useState(false)
+    const [detailsAssembly, setDetailsAssembly] = useState<Assembly | null>(null)
 
     const rootAssemblies = assemblies.filter(a => !a.parentId)
 
@@ -481,9 +496,17 @@ export function AssembliesTree({ assemblies, projectId }: AssembliesTreeProps) {
                         assembly={assembly}
                         selected={selectedIds.includes(assembly.id)}
                         onSelect={handleSelect}
+                        onViewDetails={setDetailsAssembly}
                     />
                 ))}
             </div>
+
+            <AssemblyDetailsDialog
+                open={!!detailsAssembly}
+                onOpenChange={(open) => !open && setDetailsAssembly(null)}
+                assembly={detailsAssembly}
+                projectId={projectId}
+            />
 
             {/* Create WO Dialog */}
             <CreateAssemblyWODialog

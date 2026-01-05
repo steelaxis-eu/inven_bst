@@ -16,6 +16,7 @@ export interface CreateAssemblyInput {
     sequence?: number
     scheduledDate?: Date
     notes?: string
+    quantity?: number
 }
 
 /**
@@ -23,23 +24,39 @@ export interface CreateAssemblyInput {
  */
 export async function createAssembly(input: CreateAssemblyInput) {
     try {
-        const { projectId, assemblyNumber, name, ...rest } = input
+        const { projectId, assemblyNumber, name, quantity = 1, ...rest } = input
 
         if (!projectId || !assemblyNumber || !name) {
             return { success: false, error: 'Missing required fields' }
         }
 
-        const assembly = await prisma.assembly.create({
-            data: {
-                projectId,
-                assemblyNumber,
-                name,
-                ...rest
+        const result = await prisma.$transaction(async (tx) => {
+            // Create Assembly
+            const assembly = await tx.assembly.create({
+                data: {
+                    projectId,
+                    assemblyNumber,
+                    name,
+                    quantity,
+                    ...rest
+                }
+            })
+
+            // Create Pieces (Instances)
+            if (quantity > 0) {
+                const pieces = Array.from({ length: quantity }, (_, i) => ({
+                    assemblyId: assembly.id,
+                    pieceNumber: i + 1,
+                    status: 'PENDING'
+                }))
+                await tx.assemblyPiece.createMany({ data: pieces })
             }
+
+            return assembly
         })
 
         revalidatePath(`/projects/${projectId}`)
-        return { success: true, data: assembly }
+        return { success: true, data: result }
 
     } catch (e: any) {
         if (e.code === 'P2002') {
@@ -59,6 +76,9 @@ export async function getProjectAssemblies(projectId: string) {
         include: {
             parent: true,
             children: true,
+            pieces: {
+                orderBy: { pieceNumber: 'asc' }
+            },
             assemblyParts: {
                 include: {
                     part: {
@@ -97,6 +117,10 @@ export async function getAssembly(assemblyId: string) {
         where: { id: assemblyId },
         include: {
             parent: true,
+            pieces: {
+                orderBy: { pieceNumber: 'asc' },
+                include: { childPieces: true }
+            },
             children: {
                 include: {
                     assemblyParts: {

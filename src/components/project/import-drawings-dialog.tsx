@@ -11,19 +11,27 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Package, Scissors } from 'lucide-react'
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Package, Scissors, Layers } from 'lucide-react'
 import { toast } from 'sonner'
-import { parseDrawingsZip, ParsedPart } from '@/app/actions/drawings'
+import { parseDrawingsZip, ParsedPart, parseAssemblyZip, ParsedAssembly } from '@/app/actions/drawings'
 import { createPart } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
+import { createAssembly } from '@/app/actions/assemblies'
 
-// We extend ParsedPart to include UI state
+// Extended Helper Interfaces
 interface ReviewPart extends ParsedPart {
     include: boolean
     type: 'PROFILE' | 'PLATE'
     selectedProfileType?: string
     selectedProfileDim?: string
     selectedGradeId?: string
+    status?: 'PENDING' | 'CREATED' | 'ERROR'
+    errorMsg?: string
+    drawingRef?: string
+}
+
+interface ReviewAssembly extends ParsedAssembly {
+    include: boolean
     status?: 'PENDING' | 'CREATED' | 'ERROR'
     errorMsg?: string
 }
@@ -37,11 +45,46 @@ interface ImportDrawingsDialogProps {
 
 export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades }: ImportDrawingsDialogProps) {
     const [open, setOpen] = useState(false)
+    const [mode, setMode] = useState<'parts' | 'assemblies'>('parts')
+
     const [file, setFile] = useState<File | null>(null)
     const [parts, setParts] = useState<ReviewPart[]>([])
+    const [assemblies, setAssemblies] = useState<ReviewAssembly[]>([])
+
     const [step, setStep] = useState<'upload' | 'review'>('upload')
     const [uploading, setUploading] = useState(false)
     const [creating, setCreating] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+    }
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault()
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const droppedFile = e.dataTransfer.files[0]
+            if (droppedFile.name.endsWith('.zip')) {
+                setFile(droppedFile)
+            } else {
+                toast.error("Please upload a ZIP file")
+            }
+        }
+    }
 
     // Derived lists for Profile Selectors
     const profileTypes = Array.from(new Set(standardProfiles.map(p => p.type))).sort()
@@ -58,41 +101,55 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         try {
             const formData = new FormData()
             formData.set('file', file)
-            const result = await parseDrawingsZip(formData)
+            formData.set('projectId', projectId)
 
-            if (result.success && result.parts) {
-                const reviewParts: ReviewPart[] = result.parts.map(p => {
-                    // Smart Type Detection
-                    let type: 'PROFILE' | 'PLATE' = 'PLATE' // Default
-                    // If no thickness/width but has "HEA" or similar in filename/desc -> Profile
-                    const name = (p.filename + p.partNumber).toUpperCase()
-                    if (profileTypes.some(t => name.includes(t))) {
-                        type = 'PROFILE'
-                    } else if (p.thickness > 0 && p.width > 0) {
-                        type = 'PLATE'
-                    }
+            if (mode === 'parts') {
+                const result = await parseDrawingsZip(formData)
+                if (result.success && result.parts) {
+                    const reviewParts: ReviewPart[] = result.parts.map(p => {
+                        let type: 'PROFILE' | 'PLATE' = 'PLATE'
+                        const name = (p.filename + p.partNumber).toUpperCase()
+                        if (profileTypes.some(t => name.includes(t))) {
+                            type = 'PROFILE'
+                        } else if (p.thickness > 0 && p.width > 0) {
+                            type = 'PLATE'
+                        }
 
-                    // Try to match Grade
-                    const initialGrade = grades.find(g =>
-                        (p.material && g.name.toLowerCase().includes(p.material.toLowerCase())) ||
-                        g.name === 'S355' // Default fallback
-                    )?.id
+                        const initialGrade = grades.find(g =>
+                            (p.material && g.name.toLowerCase().includes(p.material.toLowerCase())) ||
+                            g.name === 'S355'
+                        )?.id
 
-                    return {
-                        ...p,
-                        include: true,
-                        type,
-                        selectedGradeId: initialGrade,
-                        status: 'PENDING',
-                        // Try to extract profile type from filename if PROFILE
-                        selectedProfileType: type === 'PROFILE' ? profileTypes.find(t => name.includes(t)) || '' : ''
-                    }
-                })
-                setParts(reviewParts)
-                setStep('review')
+                        return {
+                            ...p,
+                            include: true,
+                            type,
+                            selectedGradeId: initialGrade,
+                            status: 'PENDING',
+                            selectedProfileType: type === 'PROFILE' ? profileTypes.find(t => name.includes(t)) || '' : ''
+                        }
+                    })
+                    setParts(reviewParts)
+                    setStep('review')
+                } else {
+                    toast.error(result.error || "Failed to parse ZIP")
+                }
             } else {
-                toast.error(result.error || "Failed to parse ZIP")
+                // Assembly Mode
+                const result = await parseAssemblyZip(formData)
+                if (result.success && result.assemblies) {
+                    const reviewAssemblies: ReviewAssembly[] = result.assemblies.map(a => ({
+                        ...a,
+                        include: true,
+                        status: 'PENDING'
+                    }))
+                    setAssemblies(reviewAssemblies)
+                    setStep('review')
+                } else {
+                    toast.error(result.error || "Failed to parse Assembly ZIP")
+                }
             }
+
         } catch (e) {
             toast.error("Upload failed")
         } finally {
@@ -102,6 +159,10 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
         setParts(parts.map(p => p.id === id ? { ...p, ...updates } : p))
+    }
+
+    const updateAssembly = (id: string, updates: Partial<ReviewAssembly>) => {
+        setAssemblies(assemblies.map(a => a.id === id ? { ...a, ...updates } : a))
     }
 
     const handleCreateParts = async () => {
@@ -114,34 +175,22 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         for (const part of partsToCreate) {
             try {
                 if (part.type === 'PROFILE') {
-                    // Create Profile Part
-                    // Need to find profileId based on type/dims
-                    // Or if manual, create logic etc. 
-                    // For now, let's assume we REQUIRE standard profile matches
                     if (!part.selectedProfileType || !part.selectedProfileDim) {
                         throw new Error("Profile Type/Dimensions not selected")
                     }
-
-                    // Note: createPart usually expects profileId for Inventory tracking or just type/dim for definition
-                    // If we use standardProfiles, we are creating a DEFINITION.
-                    // The createPart action handles checking if defined part exists or creates new one
-                    // But it takes profileId (of existing SteelProfile?) or properties?
-                    // Looking at createPart: it takes profileType, profileDimensions etc.
-
                     await createPart({
                         projectId,
                         partNumber: part.partNumber,
                         description: part.description,
                         quantity: part.quantity,
-                        gradeId: part.selectedGradeId, // or selectedGradeId
+                        gradeId: part.selectedGradeId,
                         profileType: part.selectedProfileType,
                         profileDimensions: part.selectedProfileDim,
                         length: part.length,
+                        drawingRef: part.drawingRef,
                         notes: `Imported from ${part.filename}`
                     })
-
                 } else {
-                    // Create Plate Part
                     await createPlatePart({
                         projectId,
                         partNumber: part.partNumber,
@@ -151,31 +200,53 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         thickness: part.thickness,
                         width: part.width,
                         length: part.length,
-                        // material: part.material, // Grade handles this mostly
                         notes: `Imported from ${part.filename}`,
-                        isOutsourced: false // Default to in-house, user can toggle later
+                        isOutsourced: false
                     })
                 }
-
                 updatePart(part.id, { status: 'CREATED' })
                 successCount++
-
             } catch (e: any) {
                 console.error(e)
                 updatePart(part.id, { status: 'ERROR', errorMsg: e.message || "Failed" })
             }
         }
-
         setCreating(false)
-        if (successCount > 0) {
-            toast.success(`Successfully created ${successCount} parts`)
-            // If all done, maybe close?
-            if (parts.filter(p => p.include && p.status !== 'CREATED').length === 0) {
-                setTimeout(() => setOpen(false), 1500)
+        if (successCount > 0) toast.success(`Created ${successCount} parts`)
+    }
+
+    const handleCreateAssemblies = async () => {
+        const assembliesToCreate = assemblies.filter(a => a.include && a.status !== 'CREATED')
+        if (assembliesToCreate.length === 0) return
+
+        setCreating(true)
+        let successCount = 0
+
+        for (const assembly of assembliesToCreate) {
+            try {
+                await createAssembly({
+                    projectId,
+                    assemblyNumber: assembly.assemblyNumber,
+                    name: assembly.name,
+                    quantity: assembly.quantity,
+                    notes: `Imported from ${assembly.filename}. BOM parsed.`
+                })
+                updateAssembly(assembly.id, { status: 'CREATED' })
+                successCount++
+            } catch (e: any) {
+                console.error(e)
+                updateAssembly(assembly.id, { status: 'ERROR', errorMsg: e.message || "Failed" })
             }
-        } else {
-            toast.error("Failed to create parts")
         }
+        setCreating(false)
+        if (successCount > 0) toast.success(`Created ${successCount} assemblies`)
+    }
+
+    const reset = () => {
+        setStep('upload')
+        setFile(null)
+        setParts([])
+        setAssemblies([])
     }
 
     return (
@@ -183,198 +254,191 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
             <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
                     <Upload className="h-4 w-4" />
-                    Import Drawings (ZIP)
+                    Import Drawings
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-5xl h-[80vh] flex flex-col">
+            <DialogContent className="max-w-6xl h-[85vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>Import Parts from Drawings</DialogTitle>
+                    <DialogTitle>Import from Drawings</DialogTitle>
                     <DialogDescription>
-                        Upload a ZIP file containing PDF drawings to automatically extract part data.
+                        Automated extraction for Parts and Assemblies using AI.
                     </DialogDescription>
+                    <div className="pt-2">
+                        <Tabs value={mode} onValueChange={(v: any) => { setMode(v); reset(); }}>
+                            <TabsList>
+                                <TabsTrigger value="parts" className="gap-2"><FileText className="h-4 w-4" /> Parts (Single)</TabsTrigger>
+                                <TabsTrigger value="assemblies" className="gap-2"><Layers className="h-4 w-4" /> Assemblies</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
                 </DialogHeader>
 
-                <div className="flex-1 overflow-hidden p-1">
+                <div className="flex-1 overflow-hidden p-1 mt-2">
                     {step === 'upload' ? (
-                        <div className="h-full flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-muted/50 p-10">
-                            <Upload className="h-12 w-12 text-muted-foreground mb-4" />
-                            <h3 className="text-lg font-semibold mb-2">Upload ZIP File</h3>
-                            <p className="text-muted-foreground mb-6 text-center max-w-sm">
-                                Drag and drop your ZIP file here or click to browse.
-                                Supports PDF parsing for Part #, Dimensions, and Quantity.
-                            </p>
-                            <Input
-                                type="file"
-                                accept=".zip"
-                                className="hidden"
-                                id="zip-upload"
-                                onChange={handleFileChange}
-                            />
-                            <Label htmlFor="zip-upload">
-                                <Button variant="secondary" asChild className="cursor-pointer">
-                                    <span>Browse Files</span>
-                                </Button>
-                            </Label>
-                            {file && (
-                                <div className="mt-4 flex items-center gap-2 text-sm bg-background p-2 rounded border">
-                                    <FileText className="h-4 w-4" />
-                                    {file.name}
-                                    <Button variant="ghost" size="sm" onClick={() => setFile(null)} className="h-6 w-6 p-0 ml-2">x</Button>
+                        <div
+                            className={`h-full flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-10 transition-colors duration-200 ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 bg-muted/50'}`}
+                            onDragEnter={handleDragEnter}
+                            onDragLeave={handleDragLeave}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                        >
+                            {uploading ? (
+                                <div className="flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in zoom-in duration-500">
+                                    <Loader2 className="h-16 w-16 text-primary animate-spin" />
+                                    <div className="space-y-2">
+                                        <h3 className="text-xl font-semibold">Analyzing {mode === 'parts' ? 'Part' : 'Assembly'} Drawings</h3>
+                                        <p className="text-muted-foreground">Extracting BOM, Dimensions, and Details with Gemini AI.</p>
+                                    </div>
                                 </div>
+                            ) : (
+                                <>
+                                    <Upload className="h-12 w-12 text-muted-foreground mb-4" />
+                                    <h3 className="text-lg font-semibold mb-2">Upload {mode === 'parts' ? 'Parts' : 'Assembly'} ZIP</h3>
+                                    <p className="text-muted-foreground mb-6 text-center max-w-sm">
+                                        Drag and drop a ZIP file containing PDF drawings.
+                                    </p>
+                                    <Input type="file" accept=".zip" className="hidden" id="zip-upload" onChange={handleFileChange} />
+                                    <Label htmlFor="zip-upload">
+                                        <Button variant="secondary" asChild className="cursor-pointer"><span>Browse Files</span></Button>
+                                    </Label>
+                                    {file && (
+                                        <div className="mt-4 flex items-center gap-2 text-sm bg-background p-2 rounded border">
+                                            <FileText className="h-4 w-4" />
+                                            {file.name}
+                                            <Button variant="ghost" size="sm" onClick={() => setFile(null)} className="h-6 w-6 p-0 ml-2">x</Button>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     ) : (
                         <ScrollArea className="h-full border rounded-md">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-10"><Checkbox /></TableHead>
-                                        <TableHead className="w-40">Part Number</TableHead>
-                                        <TableHead className="w-24">Type</TableHead>
-                                        <TableHead className="w-20">Qty</TableHead>
-                                        <TableHead className="w-32">Grade</TableHead>
-                                        <TableHead className="w-64">Dimensions / Profile</TableHead>
-                                        <TableHead className="w-10"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {parts.map((part) => (
-                                        <TableRow key={part.id} className={part.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={part.include}
-                                                    onCheckedChange={(c) => updatePart(part.id, { include: c === true })}
-                                                    disabled={part.status === 'CREATED'}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="space-y-1">
-                                                    <Input
-                                                        value={part.partNumber}
-                                                        onChange={(e) => updatePart(part.id, { partNumber: e.target.value })}
-                                                        className="h-8 font-mono"
-                                                    />
-                                                    <p className="text-[10px] text-muted-foreground truncate" title={part.filename}>{part.filename}</p>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Select
-                                                    value={part.type}
-                                                    onValueChange={(v: 'PROFILE' | 'PLATE') => updatePart(part.id, { type: v })}
-                                                >
-                                                    <SelectTrigger className="h-8 w-24">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="PLATE"><div className="flex items-center gap-2"><Scissors className="h-3 w-3" /> Plate</div></SelectItem>
-                                                        <SelectItem value="PROFILE"><div className="flex items-center gap-2"><Package className="h-3 w-3" /> Profile</div></SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Input
-                                                    type="number"
-                                                    value={part.quantity}
-                                                    onChange={(e) => updatePart(part.id, { quantity: parseInt(e.target.value) || 0 })}
-                                                    className="h-8 w-16"
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <Select
-                                                    value={part.selectedGradeId}
-                                                    onValueChange={(v) => updatePart(part.id, { selectedGradeId: v })}
-                                                >
-                                                    <SelectTrigger className="h-8 w-32">
-                                                        <SelectValue placeholder="Grade" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {grades.map(g => (
-                                                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                            <TableCell>
-                                                {part.type === 'PLATE' ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <Input
-                                                            placeholder="T"
-                                                            title="Thickness"
-                                                            value={part.thickness || ''}
-                                                            onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })}
-                                                            className="h-8 w-14"
-                                                        />
-                                                        <span className="text-xs text-muted-foreground">x</span>
-                                                        <Input
-                                                            placeholder="W"
-                                                            title="Width"
-                                                            value={part.width || ''}
-                                                            onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })}
-                                                            className="h-8 w-16"
-                                                        />
-                                                        <span className="text-xs text-muted-foreground">x</span>
-                                                        <Input
-                                                            placeholder="L"
-                                                            title="Length"
-                                                            value={part.length || ''}
-                                                            onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })}
-                                                            className="h-8 w-16"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1">
-                                                        <Select
-                                                            value={part.selectedProfileType}
-                                                            onValueChange={(v) => updatePart(part.id, { selectedProfileType: v, selectedProfileDim: '' })}
-                                                        >
-                                                            <SelectTrigger className="h-8 w-24">
-                                                                <SelectValue placeholder="Type" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {profileTypes.map(t => (
-                                                                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Select
-                                                            value={part.selectedProfileDim}
-                                                            onValueChange={(v) => updatePart(part.id, { selectedProfileDim: v })}
-                                                            disabled={!part.selectedProfileType}
-                                                        >
-                                                            <SelectTrigger className="h-8 w-24">
-                                                                <SelectValue placeholder="Dim" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {standardProfiles
-                                                                    .filter(p => p.type === part.selectedProfileType)
-                                                                    .map(p => (
-                                                                        <SelectItem key={p.dimensions} value={p.dimensions}>{p.dimensions}</SelectItem>
-                                                                    ))
-                                                                }
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Input
-                                                            placeholder="Len"
-                                                            value={part.length || ''}
-                                                            onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })}
-                                                            className="h-8 w-16"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                {part.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                {part.status === 'ERROR' && <span title={part.errorMsg}><AlertCircle className="h-4 w-4 text-red-500" /></span>}
-                                            </TableCell>
+                            {mode === 'parts' ? (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-10"><Checkbox /></TableHead>
+                                            <TableHead className="w-40">Part Number</TableHead>
+                                            <TableHead className="w-24">Type</TableHead>
+                                            <TableHead className="w-20">Qty</TableHead>
+                                            <TableHead className="w-32">Grade</TableHead>
+                                            <TableHead className="w-64">Dimensions</TableHead>
+                                            <TableHead className="w-10"></TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {parts.map((part) => (
+                                            <TableRow key={part.id} className={part.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
+                                                <TableCell>
+                                                    <Checkbox checked={part.include} onCheckedChange={(c) => updatePart(part.id, { include: c === true })} disabled={part.status === 'CREATED'} />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-1">
+                                                        <Input value={part.partNumber} onChange={(e) => updatePart(part.id, { partNumber: e.target.value })} className="h-8 font-mono" />
+                                                        <p className="text-[10px] text-muted-foreground truncate" title={part.filename}>{part.filename}</p>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Select value={part.type} onValueChange={(v: any) => updatePart(part.id, { type: v })}>
+                                                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="PLATE">Plate</SelectItem>
+                                                            <SelectItem value="PROFILE">Profile</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input type="number" value={part.quantity} onChange={(e) => updatePart(part.id, { quantity: parseInt(e.target.value) || 0 })} className="h-8" />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Select value={part.selectedGradeId} onValueChange={(v) => updatePart(part.id, { selectedGradeId: v })}>
+                                                        <SelectTrigger className="h-8"><SelectValue placeholder="Grade" /></SelectTrigger>
+                                                        <SelectContent>{grades.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+                                                    </Select>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {part.type === 'PLATE' ? (
+                                                        <div className="flex items-center gap-1">
+                                                            <Input placeholder="T" value={part.thickness} onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })} className="h-8 w-14" />
+                                                            <span className="text-xs">x</span>
+                                                            <Input placeholder="W" value={part.width} onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                            <span className="text-xs">x</span>
+                                                            <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1">
+                                                            <Select value={part.selectedProfileType} onValueChange={(v) => updatePart(part.id, { selectedProfileType: v })}>
+                                                                <SelectTrigger className="h-8 w-24"><SelectValue placeholder="Type" /></SelectTrigger>
+                                                                <SelectContent>{profileTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                                            </Select>
+                                                            <Select value={part.selectedProfileDim} onValueChange={(v) => updatePart(part.id, { selectedProfileDim: v })}>
+                                                                <SelectTrigger className="h-8 w-24"><SelectValue placeholder="Dim" /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => <SelectItem key={p.dimensions} value={p.dimensions}>{p.dimensions}</SelectItem>)}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {part.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    {part.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-10"><Checkbox /></TableHead>
+                                            <TableHead className="w-40">Assembly Number</TableHead>
+                                            <TableHead className="w-48">Name</TableHead>
+                                            <TableHead className="w-20">Qty</TableHead>
+                                            <TableHead>BOM Summary</TableHead>
+                                            <TableHead className="w-10"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {assemblies.map((assembly) => (
+                                            <TableRow key={assembly.id} className={assembly.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
+                                                <TableCell>
+                                                    <Checkbox checked={assembly.include} onCheckedChange={(c) => updateAssembly(assembly.id, { include: c === true })} disabled={assembly.status === 'CREATED'} />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input value={assembly.assemblyNumber} onChange={(e) => updateAssembly(assembly.id, { assemblyNumber: e.target.value })} className="h-8 font-mono" />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input value={assembly.name} onChange={(e) => updateAssembly(assembly.id, { name: e.target.value })} className="h-8" />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Input type="number" value={assembly.quantity} onChange={(e) => updateAssembly(assembly.id, { quantity: parseInt(e.target.value) || 1 })} className="h-8" />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col text-xs text-muted-foreground">
+                                                        <span>{assembly.bom.length} items extracted</span>
+                                                        <span className="truncate max-w-[200px]" title={assembly.bom.map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}>
+                                                            {assembly.bom.slice(0, 3).map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}
+                                                            {assembly.bom.length > 3 && '...'}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {assembly.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                    {assembly.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
                         </ScrollArea>
                     )}
                 </div>
 
-                <DialogFooter className="mt-4">
+                <DialogFooter>
                     {step === 'upload' ? (
                         <Button onClick={handleUpload} disabled={!file || uploading}>
                             {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -382,10 +446,10 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         </Button>
                     ) : (
                         <>
-                            <Button variant="outline" onClick={() => setStep('upload')}>Back to Upload</Button>
-                            <Button onClick={handleCreateParts} disabled={creating}>
+                            <Button variant="outline" onClick={reset}>Cancel / Restart</Button>
+                            <Button onClick={mode === 'parts' ? handleCreateParts : handleCreateAssemblies} disabled={creating}>
                                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Create Parts
+                                Create {mode === 'parts' ? 'Parts' : 'Assemblies'}
                             </Button>
                         </>
                     )}
