@@ -38,9 +38,9 @@ if (!global.DOMMatrix) {
 }
 
 // Polyfill Globals that PDF.js expects
-if (!global.Canvas) (global as any).Canvas = Canvas;
-if (!global.Image) (global as any).Image = Image;
-if (!global.ImageData) (global as any).ImageData = ImageData;
+if (!(global as any).Canvas) (global as any).Canvas = Canvas;
+if (!(global as any).Image) (global as any).Image = Image;
+if (!(global as any).ImageData) (global as any).ImageData = ImageData;
 
 // Path2D is often needed too, but @napi-rs/canvas does not export it directly as a class in the same way sometimes?
 // Actually it does not export Path2D. PDF.js might warn but continue.
