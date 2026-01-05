@@ -4,14 +4,21 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Download, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 interface DownloadDrawingsButtonProps {
     workOrderId: string
     workOrderNumber: string
     className?: string
+    showText?: boolean
 }
 
-export function DownloadDrawingsButton({ workOrderId, workOrderNumber, className }: DownloadDrawingsButtonProps) {
+export function DownloadDrawingsButton({
+    workOrderId,
+    workOrderNumber,
+    className,
+    showText = true
+}: DownloadDrawingsButtonProps) {
     const [loading, setLoading] = useState(false)
 
     const handleDownload = async () => {
@@ -55,13 +62,14 @@ export function DownloadDrawingsButton({ workOrderId, workOrderNumber, className
             className={className}
             onClick={handleDownload}
             disabled={loading}
+            title={showText ? undefined : "Download Drawings"}
         >
             {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className={cn("h-4 w-4 animate-spin", showText && "mr-2")} />
             ) : (
-                <Download className="mr-2 h-4 w-4" />
+                <Download className={cn("h-4 w-4", showText && "mr-2")} />
             )}
-            Download Drawings
+            {showText && "Download Drawings"}
         </Button>
     )
 }

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Play, CheckCircle, Clock, RotateCw, AlertTriangle, AlertCircle, Trash2, XCircle, Ruler, Wrench, Printer, ChevronDown, ChevronRight, Layers, ClipboardList, Check } from 'lucide-react'
+import { Play, CheckCircle, Clock, RotateCw, AlertTriangle, AlertCircle, Trash2, XCircle, Ruler, Wrench, Printer, ChevronDown, ChevronRight, Layers, ClipboardList, Check, FileText } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { updateWorkOrderStatus, updateWorkOrderItemStatus, activateWorkOrder, completeWorkOrder, completeCuttingWOWithWorkflow } from '@/app/actions/workorders'
@@ -286,12 +286,22 @@ function WorkOrderTable({
                                                                 </Button>
                                                             </>
                                                         )}
-                                                        <Link href={`/projects/${projectId}/work-orders/${wo.id}/print`} target="_blank">
-                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-600" title="Print Work Order">
+                                                        <Link href={`/projects/${projectId}/work-orders/${wo.id}`} title="View Details">
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-600" type="button">
+                                                                <FileText className="h-4 w-4" />
+                                                            </Button>
+                                                        </Link>
+                                                        <Link href={`/projects/${projectId}/work-orders/${wo.id}/print`} target="_blank" title="Print Work Order">
+                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-600" type="button">
                                                                 <Printer className="h-4 w-4" />
                                                             </Button>
                                                         </Link>
-                                                        <DownloadDrawingsButton workOrderId={wo.id} workOrderNumber={wo.workOrderNumber} className="h-8 w-8 p-0 text-gray-600" />
+                                                        <DownloadDrawingsButton
+                                                            workOrderId={wo.id}
+                                                            workOrderNumber={wo.workOrderNumber}
+                                                            className="h-8 w-8 p-0 text-gray-600"
+                                                            showText={false}
+                                                        />
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
