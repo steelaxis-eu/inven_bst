@@ -6,6 +6,8 @@ import { getActiveProjects } from "@/app/actions/projects"
 
 export const dynamic = 'force-dynamic'
 
+import { APP_CONFIG } from "@/lib/config"
+
 export default async function Home() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -21,7 +23,7 @@ export default async function Home() {
       <div className="max-w-5xl w-full space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="text-center space-y-4">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent pb-2">
-            SteelSys
+            {APP_CONFIG.name}
           </h1>
           <p className="text-xl md:text-2xl text-muted-foreground font-light tracking-wide">
             Welcome back, <span className="font-medium text-foreground">{user?.email || "Guest"}</span>
@@ -113,7 +115,7 @@ export default async function Home() {
 
         <div className="mt-16 text-center">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest opacity-70">
-            System Active • v0.1 MVP
+            System Active • {APP_CONFIG.version}
           </p>
         </div>
       </div>

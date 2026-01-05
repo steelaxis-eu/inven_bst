@@ -1,5 +1,5 @@
 /**
- * SteelSys Domain Types
+ * SteelAxis Domain Types
  * Shared TypeScript interfaces for domain entities
  */
 

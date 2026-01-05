@@ -49,3 +49,6 @@ next-env.d.ts
 *.db
 *.db-journal
 prisma/*.db
+
+# local documentation
+user_manual.md

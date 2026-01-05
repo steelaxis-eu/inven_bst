@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
+import { APP_CONFIG } from "@/lib/config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,8 +17,8 @@ const geistMono = Geist_Mono({
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Steel Inventory System",
-  description: "MVP for Steel Inventory Management",
+  title: APP_CONFIG.name,
+  description: APP_CONFIG.description,
   manifest: "/manifest.json",
 };
 
@@ -55,7 +56,7 @@ export default async function RootLayout({
           <header className="border-b bg-background p-4 shadow-sm sticky top-0 z-10 transition-colors">
             <div className="container mx-auto flex justify-between items-center">
               <Link href="/" className="font-bold text-xl tracking-tight text-primary hover:text-blue-600 transition-colors">
-                SteelSys
+                {APP_CONFIG.name}
               </Link>
               <div className="flex items-center gap-6">
                 <nav className="hidden md:flex gap-6">
