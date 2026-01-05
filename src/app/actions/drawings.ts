@@ -6,6 +6,8 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import '@/lib/pdf-polyfill'
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
+// @ts-ignore
+import 'pdfjs-dist/legacy/build/pdf.worker.entry'
 import { createCanvas } from '@napi-rs/canvas'
 
 // Initialize PDF.js worker logic
@@ -57,7 +59,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: "gemini-1.5-pro",
             generationConfig: GENERATION_CONFIG
         })
 
@@ -134,6 +136,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
                 const response = result.response
                 const text = response.text()
+                console.log(`[AI] Response for ${entry.name}:`, text)
 
                 let data: any = {}
                 try {
@@ -236,7 +239,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
 
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: "gemini-1.5-pro",
             generationConfig: ASSEMBLY_GENERATION_CONFIG
         })
 
@@ -302,6 +305,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 ])
 
                 const text = result.response.text()
+                console.log(`[AI] Response for Assembly ${entry.name}:`, text)
                 let data: any = {}
                 try {
                     data = JSON.parse(text)
