@@ -119,45 +119,26 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                         if (typeof path === 'object' && path && path.ops) {
                             ctx.beginPath();
                             path.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalStroke.call(this);
-                        } else {
-                            originalStroke.apply(this, arguments);
-                        }
-                    };
+                            await page.render({
+                                canvasContext: context as any,
+                                viewport: viewport
+                            }).promise
 
-                    ctx.clip = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalClip.call(this, rule || 'nonzero');
-                        } else {
-                            originalClip.apply(this, arguments);
-                        }
-                    };
-                };
+                            const imageBuffer = canvas.toBuffer('image/png')
+                            const imageBase64 = imageBuffer.toString('base64')
 
-                patchContext(context);
+                            // Render Thumbnail (Low Res)
+                            const thumbViewport = page.getViewport({ scale: 0.3 })
+                            const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
+                            const thumbContext = thumbCanvas.getContext('2d')
+                            await page.render({
+                                canvasContext: thumbContext as any,
+                                viewport: thumbViewport
+                            }).promise
+                            const thumbBase64 = 'data:image/png;base64,' + thumbCanvas.toBuffer('image/png').toString('base64')
 
-                await page.render({
-                    canvasContext: context as any,
-                    viewport: viewport
-                }).promise
-
-                const imageBuffer = canvas.toBuffer('image/png')
-                const imageBase64 = imageBuffer.toString('base64')
-
-                // Render Thumbnail (Low Res)
-                const thumbViewport = page.getViewport({ scale: 0.3 })
-                const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
-                const thumbContext = thumbCanvas.getContext('2d')
-                await page.render({
-                    canvasContext: thumbContext as any,
-                    viewport: thumbViewport
-                }).promise
-                const thumbBase64 = 'data:image/png;base64,' + thumbCanvas.toBuffer('image/png').toString('base64')
-
-                // 2. Send to Gemini
-                const prompt = `
+                            // 2. Send to Gemini
+                            const prompt = `
           Analyze this technical drawing. Extract the following details into JSON:
           - partNumber: The main part number (often in the title block).
           - title: The part description or title.
@@ -169,217 +150,204 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
           - confidence: Your confidence (0-100) in the extraction, especially Part Number and Qty.
         `
 
-                const result = await model.generateContent([
-                    prompt,
-                    {
-                        inlineData: {
-                            data: imageBase64,
-                            mimeType: "image/png"
+                            const result = await model.generateContent([
+                                prompt,
+                                {
+                                    inlineData: {
+                                        data: imageBase64,
+                                        mimeType: "image/png"
+                                    }
+                                }
+                            ])
+
+                            const response = result.response
+                            const text = response.text()
+                            console.log(`[AI] Response for ${entry.name}:`, text)
+
+                            let data: any = {}
+                            try {
+                                data = JSON.parse(text)
+                            } catch (e) {
+                                console.error("Failed to parse Gemini JSON", text)
+                                // fallback rudimentary
+                                data = { partNumber: "PARSE_ERROR" }
+                            }
+
+                            parsedParts.push({
+                                id: uuidv4(),
+                                filename: entry.name,
+                                partNumber: data.partNumber || entry.name.replace('.pdf', ''),
+                                description: data.title || "",
+                                quantity: data.quantity || 1,
+                                material: data.material || "",
+                                thickness: data.thickness || 0,
+                                width: data.width || 0,
+                                length: data.length || 0,
+                                confidence: data.confidence || 0,
+                                thumbnail: thumbBase64
+                            })
+
+                        } catch (e) {
+                            console.error(`Failed to process ${entry.name} with Gemini:`, e)
+                            parsedParts.push({
+                                id: uuidv4(),
+                                filename: entry.name,
+                                partNumber: entry.name.replace('.pdf', ''),
+                                description: "AI PROCESSING FAILED",
+                                quantity: 0,
+                                material: "",
+                                thickness: 0,
+                                width: 0,
+                                length: 0,
+                                confidence: 0
+                            })
                         }
                     }
-                ])
 
-                const response = result.response
-                const text = response.text()
-                console.log(`[AI] Response for ${entry.name}:`, text)
+                    return { success: true, parts: parsedParts }
 
-                let data: any = {}
-                try {
-                    data = JSON.parse(text)
-                } catch (e) {
-                    console.error("Failed to parse Gemini JSON", text)
-                    // fallback rudimentary
-                    data = { partNumber: "PARSE_ERROR" }
+                } catch (error: any) {
+                    console.error("ZIP Parse Error:", error)
+                    return { success: false, error: error.message || "Failed to process ZIP file" }
                 }
-
-                parsedParts.push({
-                    id: uuidv4(),
-                    filename: entry.name,
-                    partNumber: data.partNumber || entry.name.replace('.pdf', ''),
-                    description: data.title || "",
-                    quantity: data.quantity || 1,
-                    material: data.material || "",
-                    thickness: data.thickness || 0,
-                    width: data.width || 0,
-                    length: data.length || 0,
-                    confidence: data.confidence || 0,
-                    thumbnail: thumbBase64
-                })
-
-            } catch (e) {
-                console.error(`Failed to process ${entry.name} with Gemini:`, e)
-                parsedParts.push({
-                    id: uuidv4(),
-                    filename: entry.name,
-                    partNumber: entry.name.replace('.pdf', ''),
-                    description: "AI PROCESSING FAILED",
-                    quantity: 0,
-                    material: "",
-                    thickness: 0,
-                    width: 0,
-                    length: 0,
-                    confidence: 0
-                })
             }
-        }
-
-        return { success: true, parts: parsedParts }
-
-    } catch (error: any) {
-        console.error("ZIP Parse Error:", error)
-        return { success: false, error: error.message || "Failed to process ZIP file" }
-    }
-}
 
 export interface ParsedAssembly {
-    id: string
-    filename: string
-    assemblyNumber: string
-    name: string
-    quantity: number // Quantity of this assembly itself
-    bom: {
-        partNumber: string
-        quantity: number
-        description: string
-        material: string
-    }[]
-    confidence: number
-    thumbnail?: string
-}
+                id: string
+                filename: string
+                assemblyNumber: string
+                name: string
+                quantity: number // Quantity of this assembly itself
+                bom: {
+                    partNumber: string
+                    quantity: number
+                    description: string
+                    material: string
+                }[]
+                confidence: number
+                thumbnail?: string
+            }
 
-const ASSEMBLY_GENERATION_CONFIG = {
-    responseMimeType: "application/json",
-    responseSchema: {
-        type: SchemaType.OBJECT,
-        properties: {
-            assemblyNumber: { type: SchemaType.STRING },
-            title: { type: SchemaType.STRING },
-            quantity: { type: SchemaType.NUMBER, description: "Quantity of this assembly required (default 1)" },
-            bom: {
-                type: SchemaType.ARRAY,
-                items: {
+            const ASSEMBLY_GENERATION_CONFIG = {
+                responseMimeType: "application/json",
+                responseSchema: {
                     type: SchemaType.OBJECT,
                     properties: {
-                        partNumber: { type: SchemaType.STRING },
-                        quantity: { type: SchemaType.NUMBER },
-                        description: { type: SchemaType.STRING },
-                        material: { type: SchemaType.STRING }
+                        assemblyNumber: { type: SchemaType.STRING },
+                        title: { type: SchemaType.STRING },
+                        quantity: { type: SchemaType.NUMBER, description: "Quantity of this assembly required (default 1)" },
+                        bom: {
+                            type: SchemaType.ARRAY,
+                            items: {
+                                type: SchemaType.OBJECT,
+                                properties: {
+                                    partNumber: { type: SchemaType.STRING },
+                                    quantity: { type: SchemaType.NUMBER },
+                                    description: { type: SchemaType.STRING },
+                                    material: { type: SchemaType.STRING }
+                                }
+                            }
+                        },
+                        confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" }
                     }
-                }
-            },
-            confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" }
-        }
-    } as const
-}
+                } as const
+            }
 
-export async function parseAssemblyZip(formData: FormData): Promise<{ success: boolean, assemblies?: ParsedAssembly[], error?: string }> {
-    try {
-        const file = formData.get('file') as File
-        if (!file) return { success: false, error: "No file uploaded" }
+            export async function parseAssemblyZip(formData: FormData): Promise<{ success: boolean, assemblies?: ParsedAssembly[], error?: string }> {
+                try {
+                    const file = formData.get('file') as File
+                    if (!file) return { success: false, error: "No file uploaded" }
 
-        const apiKey = process.env.GEMINI_API_KEY
-        if (!apiKey) {
-            return { success: false, error: "GEMINI_API_KEY is missing in server environment" }
-        }
+                    const apiKey = process.env.GEMINI_API_KEY
+                    if (!apiKey) {
+                        return { success: false, error: "GEMINI_API_KEY is missing in server environment" }
+                    }
 
-        const genAI = new GoogleGenerativeAI(apiKey)
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: ASSEMBLY_GENERATION_CONFIG
-        })
+                    const genAI = new GoogleGenerativeAI(apiKey)
+                    const model = genAI.getGenerativeModel({
+                        model: "gemini-2.5-flash",
+                        generationConfig: ASSEMBLY_GENERATION_CONFIG
+                    })
 
-        const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
-        const zip = new AdmZip(buffer)
-        const zipEntries = zip.getEntries()
+                    const arrayBuffer = await file.arrayBuffer()
+                    const buffer = Buffer.from(arrayBuffer)
+                    const zip = new AdmZip(buffer)
+                    const zipEntries = zip.getEntries()
 
-        const pdfEntries = zipEntries.filter(entry =>
-            entry.name.toLowerCase().endsWith('.pdf') &&
-            !entry.name.startsWith('__MACOSX') &&
-            !entry.name.split('/').pop()?.startsWith('._')
-        )
+                    const pdfEntries = zipEntries.filter(entry =>
+                        entry.name.toLowerCase().endsWith('.pdf') &&
+                        !entry.name.startsWith('__MACOSX') &&
+                        !entry.name.split('/').pop()?.startsWith('._')
+                    )
 
-        if (pdfEntries.length === 0) {
-            return { success: false, error: "No PDF files found in ZIP" }
-        }
+                    if (pdfEntries.length === 0) {
+                        return { success: false, error: "No PDF files found in ZIP" }
+                    }
 
-        const parsedAssemblies: ParsedAssembly[] = []
+                    const parsedAssemblies: ParsedAssembly[] = []
 
-        for (const entry of pdfEntries) {
-            try {
-                const pdfBuffer = entry.getData()
-                const loadingTask = pdfjsLib.getDocument({
-                    data: new Uint8Array(pdfBuffer),
-                    standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
-                    disableFontFace: true,
-                })
+                    for (const entry of pdfEntries) {
+                        try {
+                            const pdfBuffer = entry.getData()
+                            const loadingTask = pdfjsLib.getDocument({
+                                data: new Uint8Array(pdfBuffer),
+                                standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
+                                disableFontFace: true,
+                            })
 
-                const pdfDocument = await loadingTask.promise
-                const page = await pdfDocument.getPage(1)
+                            const pdfDocument = await loadingTask.promise
+                            const page = await pdfDocument.getPage(1)
 
-                // Render High Res for Gemini
-                const viewport = page.getViewport({ scale: 2.0 })
-                const canvas = createCanvas(viewport.width, viewport.height)
-                const context = canvas.getContext('2d')
+                            // Render High Res for Gemini
+                            const viewport = page.getViewport({ scale: 2.0 })
+                            const canvas = createCanvas(viewport.width, viewport.height)
+                            const context = canvas.getContext('2d')
 
-                // Patch context to support Polyfill Path2D
-                const patchContext = (ctx: any) => {
-                    const originalFill = ctx.fill;
-                    const originalStroke = ctx.stroke;
-                    const originalClip = ctx.clip;
+                            // Patch context to support Polyfill Path2D
+                            const patchContext = (ctx: any) => {
+                                const originalFill = ctx.fill;
+                                const originalStroke = ctx.stroke;
+                                const originalClip = ctx.clip;
 
-                    ctx.fill = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalFill.call(this, rule || 'nonzero');
-                        } else {
-                            originalFill.apply(this, arguments);
-                        }
-                    };
+                                ctx.fill = function (pathOrRule: any, rule?: any) {
+                                    if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                                        ctx.beginPath();
+                                        pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                                        originalFill.call(this, rule || 'nonzero');
+                                    } else {
+                                        originalFill.apply(this, arguments);
+                                    }
+                                };
 
-                    ctx.stroke = function (path: any) {
-                        if (typeof path === 'object' && path && path.ops) {
-                            ctx.beginPath();
-                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalStroke.call(this);
-                        } else {
-                            originalStroke.apply(this, arguments);
-                        }
-                    };
+                                ctx.stroke = function (path: any) {
+                                    if (typeof path === 'object' && path && path.ops) {
+                                        ctx.beginPath();
+                                        path.ops.forEach((op: any) => ctx[op.type](...op.args));
+                                        originalStroke.call(this);
+                                    } else {
+                                        originalStroke.apply(this, arguments);
+                                    }
+                                };
 
-                    ctx.clip = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalClip.call(this, rule || 'nonzero');
-                        } else {
-                            originalClip.apply(this, arguments);
-                        }
-                    };
-                };
+                                await page.render({
+                                    canvasContext: context as any,
+                                    viewport: viewport
+                                }).promise
 
-                patchContext(context);
+                                const imageBase64 = canvas.toBuffer('image/png').toString('base64')
 
-                await page.render({
-                    canvasContext: context as any,
-                    viewport: viewport
-                }).promise
+                                // Render Thumbnail
+                                const thumbViewport = page.getViewport({ scale: 0.3 })
+                                const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
+                                const thumbContext = thumbCanvas.getContext('2d')
+                                await page.render({
+                                    canvasContext: thumbContext as any,
+                                    viewport: thumbViewport
+                                }).promise
+                                const thumbBase64 = 'data:image/png;base64,' + thumbCanvas.toBuffer('image/png').toString('base64')
 
-                const imageBase64 = canvas.toBuffer('image/png').toString('base64')
-
-                // Render Thumbnail
-                const thumbViewport = page.getViewport({ scale: 0.3 })
-                const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
-                const thumbContext = thumbCanvas.getContext('2d')
-                await page.render({
-                    canvasContext: thumbContext as any,
-                    viewport: thumbViewport
-                }).promise
-                const thumbBase64 = 'data:image/png;base64,' + thumbCanvas.toBuffer('image/png').toString('base64')
-
-                // Gemini Call
-                const prompt = `
+                                // Gemini Call
+                                const prompt = `
                     Analyze this technical drawing. It is an Assembly Drawing.
                     Extract:
                     1. The Assembly Number and Title (from title block).
@@ -387,50 +355,50 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                     3. The Bill of Materials (BOM) table. Extract each row: Part Number, Quantity, Description, Material.
                 `
 
-                const result = await model.generateContent([
-                    prompt,
-                    { inlineData: { data: imageBase64, mimeType: "image/png" } }
-                ])
+                                const result = await model.generateContent([
+                                    prompt,
+                                    { inlineData: { data: imageBase64, mimeType: "image/png" } }
+                                ])
 
-                const text = result.response.text()
-                console.log(`[AI] Response for Assembly ${entry.name}:`, text)
-                let data: any = {}
-                try {
-                    data = JSON.parse(text)
-                } catch (e) {
-                    console.error("Failed to parse Assembly JSON", text)
-                    data = {}
+                                const text = result.response.text()
+                                console.log(`[AI] Response for Assembly ${entry.name}:`, text)
+                                let data: any = {}
+                                try {
+                                    data = JSON.parse(text)
+                                } catch (e) {
+                                    console.error("Failed to parse Assembly JSON", text)
+                                    data = {}
+                                }
+
+                                parsedAssemblies.push({
+                                    id: uuidv4(),
+                                    filename: entry.name,
+                                    assemblyNumber: data.assemblyNumber || entry.name.replace('.pdf', ''),
+                                    name: data.title || "Unknown Assembly",
+                                    quantity: data.quantity || 1,
+                                    bom: data.bom || [],
+                                    confidence: data.confidence || 0,
+                                    thumbnail: thumbBase64
+                                })
+
+                            } catch (e) {
+                                console.error(`Failed to process Assembly ${entry.name}:`, e)
+                                parsedAssemblies.push({
+                                    id: uuidv4(),
+                                    filename: entry.name,
+                                    assemblyNumber: entry.name.replace('.pdf', ''),
+                                    name: "PROCESSING_FAILED",
+                                    quantity: 1,
+                                    bom: [],
+                                    confidence: 0
+                                })
+                            }
+                        }
+
+                    return { success: true, assemblies: parsedAssemblies }
+
+                    } catch (error: any) {
+                        console.error("Assembly Parse Error:", error)
+                        return { success: false, error: error.message }
+                    }
                 }
-
-                parsedAssemblies.push({
-                    id: uuidv4(),
-                    filename: entry.name,
-                    assemblyNumber: data.assemblyNumber || entry.name.replace('.pdf', ''),
-                    name: data.title || "Unknown Assembly",
-                    quantity: data.quantity || 1,
-                    bom: data.bom || [],
-                    confidence: data.confidence || 0,
-                    thumbnail: thumbBase64
-                })
-
-            } catch (e) {
-                console.error(`Failed to process Assembly ${entry.name}:`, e)
-                parsedAssemblies.push({
-                    id: uuidv4(),
-                    filename: entry.name,
-                    assemblyNumber: entry.name.replace('.pdf', ''),
-                    name: "PROCESSING_FAILED",
-                    quantity: 1,
-                    bom: [],
-                    confidence: 0
-                })
-            }
-        }
-
-        return { success: true, assemblies: parsedAssemblies }
-
-    } catch (error: any) {
-        console.error("Assembly Parse Error:", error)
-        return { success: false, error: error.message }
-    }
-}
