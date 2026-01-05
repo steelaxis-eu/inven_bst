@@ -20,9 +20,10 @@ interface PartDetailsDialogProps {
     part: any // We use any here because the type is complex (Part + includes), but we technically know the shape
     projectId: string
     onUpdate?: () => void
+    onOpenAssembly?: (assemblyId: string) => void
 }
 
-export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdate }: PartDetailsDialogProps) {
+export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdate, onOpenAssembly }: PartDetailsDialogProps) {
     const [activeTab, setActiveTab] = useState('general')
     const [editing, setEditing] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -119,7 +120,7 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                                 </div>
                                                 <div>
                                                     <Label className="text-muted-foreground">Unit Weight</Label>
-                                                    <div className="font-medium text-muted-foreground">{part.unitWeight?.toFixed(2)} kg</div>
+                                                    <div className="font-medium text-muted-foreground">{(part.unitWeight || part.profile?.unitWeight || 0).toFixed(2)} kg</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -238,7 +239,12 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                                             <TableCell>{ap.assembly.name}</TableCell>
                                                             <TableCell>{ap.quantityInAssembly} pcs</TableCell>
                                                             <TableCell>
-                                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-8 w-8 p-0"
+                                                                    onClick={() => onOpenAssembly && onOpenAssembly(ap.assemblyId)}
+                                                                >
                                                                     <ArrowRight className="h-4 w-4" />
                                                                 </Button>
                                                             </TableCell>

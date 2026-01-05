@@ -16,6 +16,8 @@ import { Trash2, CheckCircle, Pencil } from 'lucide-react'
 import { PartDetailsDialog } from './part-details-dialog'
 import { PlateDetailsDialog } from './plate-details-dialog'
 import { ReceiveItemsDialog } from './receive-items-dialog'
+import { AssemblyDetailsDialog } from './assembly-details-dialog'
+import { getAssembly } from '@/app/actions/assemblies'
 
 // Union type for the table
 export type UnifiedPartItem =
@@ -38,6 +40,10 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     // Receive Dialog State
     const [receiveDialogOpen, setReceiveDialogOpen] = useState(false)
     const [itemToReceive, setItemToReceive] = useState<any>(null)
+
+    // Assembly Details State
+    const [assemblyDetailsOpen, setAssemblyDetailsOpen] = useState(false)
+    const [selectedAssembly, setSelectedAssembly] = useState<any>(null)
 
     const handleOpenDetails = (item: UnifiedPartItem) => {
         if (item.kind === 'part') {
@@ -166,6 +172,23 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
 
     const handleEdit = (item: UnifiedPartItem) => {
         handleOpenDetails(item)
+    }
+
+    const handleOpenAssembly = async (assemblyId: string) => {
+        try {
+            setLoadingId(assemblyId) // usage of loadingId might be confusing here as it disables buttons, but okay for now
+            const assembly = await getAssembly(assemblyId)
+            if (assembly) {
+                setSelectedAssembly(assembly)
+                setAssemblyDetailsOpen(true)
+            } else {
+                toast.error("Assembly not found")
+            }
+        } catch (error) {
+            toast.error("Failed to load assembly details")
+        } finally {
+            setLoadingId(null)
+        }
     }
 
     const getProgress = (pieces: any[]) => {
@@ -363,6 +386,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                         setDetailsOpen(false)
                         window.location.reload()
                     }}
+                    onOpenAssembly={handleOpenAssembly}
                 />
             )}
 
@@ -376,6 +400,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                         setPlateDetailsOpen(false)
                         window.location.reload()
                     }}
+                    onOpenAssembly={handleOpenAssembly}
                 />
             )}
 
@@ -387,6 +412,18 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                     projectId={projectId}
                     onSuccess={() => {
                         window.location.reload()
+                    }}
+                />
+            )}
+
+            {selectedAssembly && (
+                <AssemblyDetailsDialog
+                    open={assemblyDetailsOpen}
+                    onOpenChange={setAssemblyDetailsOpen}
+                    assembly={selectedAssembly}
+                    projectId={projectId}
+                    onUpdate={() => {
+                        // Optional: reload if needed
                     }}
                 />
             )}

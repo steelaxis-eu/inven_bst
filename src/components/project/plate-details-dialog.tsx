@@ -21,9 +21,10 @@ interface PlateDetailsDialogProps {
     plate: any
     projectId: string
     onUpdate?: () => void
+    onOpenAssembly?: (assemblyId: string) => void
 }
 
-export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpdate }: PlateDetailsDialogProps) {
+export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpdate, onOpenAssembly }: PlateDetailsDialogProps) {
     const [activeTab, setActiveTab] = useState('general')
     const [editing, setEditing] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -243,7 +244,12 @@ export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpd
                                                             <TableCell>{ap.assembly.name}</TableCell>
                                                             <TableCell>{ap.quantityInAssembly} pcs</TableCell>
                                                             <TableCell>
-                                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-8 w-8 p-0"
+                                                                    onClick={() => onOpenAssembly && onOpenAssembly(ap.assemblyId)}
+                                                                >
                                                                     <ArrowRight className="h-4 w-4" />
                                                                 </Button>
                                                             </TableCell>
