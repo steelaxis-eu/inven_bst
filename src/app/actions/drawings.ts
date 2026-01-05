@@ -99,6 +99,45 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 const canvas = createCanvas(viewport.width, viewport.height)
                 const context = canvas.getContext('2d')
 
+                // Patch context to support Polyfill Path2D
+                const patchContext = (ctx: any) => {
+                    const originalFill = ctx.fill;
+                    const originalStroke = ctx.stroke;
+                    const originalClip = ctx.clip;
+
+                    ctx.fill = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalFill.call(this, rule || 'nonzero');
+                        } else {
+                            originalFill.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.stroke = function (path: any) {
+                        if (typeof path === 'object' && path && path.ops) {
+                            ctx.beginPath();
+                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalStroke.call(this);
+                        } else {
+                            originalStroke.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.clip = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalClip.call(this, rule || 'nonzero');
+                        } else {
+                            originalClip.apply(this, arguments);
+                        }
+                    };
+                };
+
+                patchContext(context);
+
                 await page.render({
                     canvasContext: context as any,
                     viewport: viewport
@@ -111,6 +150,10 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 const thumbViewport = page.getViewport({ scale: 0.3 })
                 const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
                 const thumbContext = thumbCanvas.getContext('2d')
+
+                // Patch thumbnail context too just in case
+                patchContext(thumbContext);
+
                 await page.render({
                     canvasContext: thumbContext as any,
                     viewport: thumbViewport
@@ -283,6 +326,50 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 const canvas = createCanvas(viewport.width, viewport.height)
                 const context = canvas.getContext('2d')
 
+                // Render High Res for Gemini
+                const viewport = page.getViewport({ scale: 2.0 })
+                const canvas = createCanvas(viewport.width, viewport.height)
+                const context = canvas.getContext('2d')
+
+                // Patch context to support Polyfill Path2D
+                const patchContext = (ctx: any) => {
+                    const originalFill = ctx.fill;
+                    const originalStroke = ctx.stroke;
+                    const originalClip = ctx.clip;
+
+                    ctx.fill = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalFill.call(this, rule || 'nonzero');
+                        } else {
+                            originalFill.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.stroke = function (path: any) {
+                        if (typeof path === 'object' && path && path.ops) {
+                            ctx.beginPath();
+                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalStroke.call(this);
+                        } else {
+                            originalStroke.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.clip = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalClip.call(this, rule || 'nonzero');
+                        } else {
+                            originalClip.apply(this, arguments);
+                        }
+                    };
+                };
+
+                patchContext(context);
+
                 await page.render({
                     canvasContext: context as any,
                     viewport: viewport
@@ -294,6 +381,9 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 const thumbViewport = page.getViewport({ scale: 0.3 })
                 const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
                 const thumbContext = thumbCanvas.getContext('2d')
+
+                patchContext(thumbContext);
+
                 await page.render({
                     canvasContext: thumbContext as any,
                     viewport: thumbViewport
