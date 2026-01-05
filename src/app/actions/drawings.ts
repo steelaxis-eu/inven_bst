@@ -4,6 +4,7 @@ import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import '@/lib/pdf-polyfill'
+// @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 import { createCanvas } from '@napi-rs/canvas'
 
