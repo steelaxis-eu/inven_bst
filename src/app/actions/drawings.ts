@@ -3,23 +3,12 @@
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
-// @ts-ignore
+import '@/lib/pdf-polyfill'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 import { createCanvas } from '@napi-rs/canvas'
 
-// Polyfill Node environment for PDF.js
-if (!global.DOMMatrix) {
-    global.DOMMatrix = class DOMMatrix {
-        a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-        constructor(init?: any) {
-            if (init) {
-                this.a = init[0]; this.b = init[1];
-                this.c = init[2]; this.d = init[3];
-                this.e = init[4]; this.f = init[5];
-            }
-        }
-    } as any;
-}
+// Initialize PDF.js worker logic
+// Note: In a server action, simple imports often suffice for legacy build
 
 // Initialize PDF.js worker logic
 // Note: In a server action, simple imports often suffice for legacy build
