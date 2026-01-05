@@ -25,6 +25,8 @@ import { CreatePartDialog } from "@/components/project/create-part-dialog"
 import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialog"
 import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
+import { BackgroundTasksIndicator } from "@/components/project/background-tasks-indicator"
+import { RecalculateWeightsButton } from "@/components/project/recalculate-weights-button"
 import { WorkOrdersList, WorkOrderSummary } from "@/components/project/workorders-list"
 import { ProjectQualityTab } from "@/components/project/project-quality-tab"
 import { PlatePartsSummary } from "@/components/project/plate-parts-table"
@@ -124,6 +126,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                     )}
                 </div>
                 <div className="flex gap-4 items-center">
+                    <BackgroundTasksIndicator projectId={project.id} />
                     {missingCertCount > 0 ? (
                         <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive rounded-md border border-destructive/20">
                             <FileWarning className="h-4 w-4" />
@@ -256,6 +259,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                             <p className="text-sm text-muted-foreground">Items fabricated internally (Profiles & Plates)</p>
                         </div>
                         <div className="flex gap-2">
+                            <RecalculateWeightsButton projectId={cleanId} />
                             <ImportDrawingsDialog
                                 projectId={cleanId}
                                 profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}

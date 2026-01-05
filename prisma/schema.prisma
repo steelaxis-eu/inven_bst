@@ -57,6 +57,7 @@ model Project {
   workOrders        WorkOrder[]
   documents         ProjectDocument[]
   plateParts        PlatePart[]
+  optimizationJobs  OptimizationJob[]
 }
 
 
@@ -622,6 +623,8 @@ model PlatePiece {
 }
 
 // PlateAssemblyPart: Junction for plate parts in assemblies
+
+// PlateAssemblyPart: Junction for plate parts in assemblies
 model PlateAssemblyPart {
   id                  String   @id @default(uuid())
   assemblyId          String
@@ -636,4 +639,26 @@ model PlateAssemblyPart {
   @@unique([assemblyId, platePartId])
   @@index([assemblyId])
   @@index([platePartId])
+}
+
+// ============================================================================
+// OPTIMIZATION / BACKGROUND JOBS
+// ============================================================================
+
+model OptimizationJob {
+  id          String   @id @default(uuid())
+  projectId   String
+  type        String   // NESTING, WEIGHT_RECALC, IMPORT_DRAWINGS
+  status      String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  parameters  Json?    // Input params
+  result      Json?    // Output result or summary
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+
+  project     Project  @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([status])
 }

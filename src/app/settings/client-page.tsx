@@ -638,24 +638,7 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
                             </div>
                         </div>
 
-                        {/* General Settings */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="col-span-1">
-                                <Label className="font-semibold text-lg">General</Label>
-                                <p className="text-sm text-muted-foreground">Global parameters.</p>
-                            </div>
-                            <div className="col-span-1 md:col-span-2 grid gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Default Scrap Price (€/kg)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={settings.scrapPricePerKg || 0}
-                                        onChange={(e) => setSettings({ ...settings, scrapPricePerKg: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                        </div>
+
 
                         <div className="flex justify-end pt-4">
                             <Button onClick={handleSaveGlobalSettings} disabled={savingSettings}>

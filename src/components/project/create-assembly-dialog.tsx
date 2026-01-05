@@ -75,6 +75,7 @@ export function CreateAssemblyDialog({
     const [description, setDescription] = useState('')
     const [parentId, setParentId] = useState('')
     const [scheduledDate, setScheduledDate] = useState('')
+    const [assemblyQuantity, setAssemblyQuantity] = useState('1')
 
     // Parts to add
     const [partItems, setPartItems] = useState<PartItem[]>([])
@@ -256,8 +257,8 @@ export function CreateAssemblyDialog({
     }
 
     const handleSubmit = async () => {
-        if (!assemblyNumber || !name) {
-            toast.warning('Assembly number and name required')
+        if (!assemblyNumber || !name || !assemblyQuantity) {
+            toast.warning('Assembly number, name, and quantity required')
             return
         }
 
@@ -267,6 +268,7 @@ export function CreateAssemblyDialog({
                 projectId,
                 assemblyNumber,
                 name,
+                quantity: parseInt(assemblyQuantity) || 1,
                 description: description || undefined,
                 parentId: parentId || undefined,
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined
@@ -357,7 +359,9 @@ export function CreateAssemblyDialog({
         setName('')
         setDescription('')
         setParentId('')
+        setParentId('')
         setScheduledDate('')
+        setAssemblyQuantity('1')
         setPartItems([])
         setSelectedPartId('')
         setQtyInAssembly('1')
@@ -406,6 +410,16 @@ export function CreateAssemblyDialog({
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
+                                <Label className="text-xs uppercase text-muted-foreground">Quantity *</Label>
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    value={assemblyQuantity}
+                                    onChange={e => setAssemblyQuantity(e.target.value)}
+                                    placeholder="1"
+                                />
+                            </div>
+                            <div className="grid gap-2">
                                 <Label className="text-xs uppercase text-muted-foreground">Parent Assembly</Label>
                                 <Select value={parentId || '_none'} onValueChange={(v) => setParentId(v === '_none' ? '' : v)}>
                                     <SelectTrigger>
@@ -421,6 +435,8 @@ export function CreateAssemblyDialog({
                                     </SelectContent>
                                 </Select>
                             </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="grid gap-2">
                                 <Label className="text-xs uppercase text-muted-foreground">Scheduled Date</Label>
                                 <Input
@@ -465,360 +481,368 @@ export function CreateAssemblyDialog({
                         </div>
 
                         {/* Select Existing */}
-                        {partMode === 'existing' && (
-                            <div className="flex gap-3 items-end bg-muted/50 p-3 rounded">
-                                <div className="flex-1 grid gap-2">
-                                    <Label className="text-xs uppercase text-muted-foreground">Select Part</Label>
-                                    <Select value={selectedPartId} onValueChange={setSelectedPartId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Choose..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {existingParts.map(p => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.partNumber} - {p.description || `${p.profile?.type} ${p.profile?.dimensions}`}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                        {
+                            partMode === 'existing' && (
+                                <div className="flex gap-3 items-end bg-muted/50 p-3 rounded">
+                                    <div className="flex-1 grid gap-2">
+                                        <Label className="text-xs uppercase text-muted-foreground">Select Part</Label>
+                                        <Select value={selectedPartId} onValueChange={setSelectedPartId}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Choose..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {existingParts.map(p => (
+                                                    <SelectItem key={p.id} value={p.id}>
+                                                        {p.partNumber} - {p.description || `${p.profile?.type} ${p.profile?.dimensions}`}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="w-20 grid gap-2">
+                                        <Label className="text-xs uppercase text-muted-foreground">Qty</Label>
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            value={qtyInAssembly}
+                                            onChange={e => setQtyInAssembly(e.target.value)}
+                                        />
+                                    </div>
+                                    <Button onClick={handleAddExistingPart} disabled={!selectedPartId}>Add</Button>
                                 </div>
-                                <div className="w-20 grid gap-2">
-                                    <Label className="text-xs uppercase text-muted-foreground">Qty</Label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        value={qtyInAssembly}
-                                        onChange={e => setQtyInAssembly(e.target.value)}
-                                    />
-                                </div>
-                                <Button onClick={handleAddExistingPart} disabled={!selectedPartId}>Add</Button>
-                            </div>
-                        )}
+                            )
+                        }
 
                         {/* Create New */}
-                        {partMode === 'new' && (
-                            <div className="bg-muted/50 p-3 rounded space-y-4">
-                                <Tabs value={newPartType} onValueChange={(v) => setNewPartType(v as 'profile' | 'plate')}>
-                                    <TabsList className="grid w-full grid-cols-2">
-                                        <TabsTrigger value="profile" className="gap-2">
-                                            <Package className="h-4 w-4" /> Profile
-                                        </TabsTrigger>
-                                        <TabsTrigger value="plate" className="gap-2">
-                                            <Scissors className="h-4 w-4" /> Plate
-                                        </TabsTrigger>
-                                    </TabsList>
+                        {
+                            partMode === 'new' && (
+                                <div className="bg-muted/50 p-3 rounded space-y-4">
+                                    <Tabs value={newPartType} onValueChange={(v) => setNewPartType(v as 'profile' | 'plate')}>
+                                        <TabsList className="grid w-full grid-cols-2">
+                                            <TabsTrigger value="profile" className="gap-2">
+                                                <Package className="h-4 w-4" /> Profile
+                                            </TabsTrigger>
+                                            <TabsTrigger value="plate" className="gap-2">
+                                                <Scissors className="h-4 w-4" /> Plate
+                                            </TabsTrigger>
+                                        </TabsList>
 
-                                    {/* Common fields */}
-                                    <div className="grid grid-cols-4 gap-3 pt-3">
-                                        <div className="grid gap-2">
-                                            <Label className="text-xs uppercase text-muted-foreground">Part # *</Label>
-                                            <Input
-                                                value={newPartNumber}
-                                                onChange={e => setNewPartNumber(e.target.value)}
-                                                placeholder="B-101"
-                                                className="font-mono uppercase"
-                                            />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label className="text-xs uppercase text-muted-foreground">Qty *</Label>
-                                            <Input
-                                                type="number"
-                                                min="1"
-                                                value={newQuantity}
-                                                onChange={e => setNewQuantity(e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label className="text-xs uppercase text-muted-foreground">Grade</Label>
-                                            <Select value={newGradeId} onValueChange={setNewGradeId}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Grade" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {grades.map(g => (
-                                                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label className="text-xs uppercase text-muted-foreground">Description</Label>
-                                            <Input
-                                                value={newDescription}
-                                                onChange={e => setNewDescription(e.target.value)}
-                                                placeholder="Main beam"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Profile Tab */}
-                                    <TabsContent value="profile" className="space-y-3 mt-3">
-                                        <div className="grid grid-cols-3 gap-3">
+                                        {/* Common fields */}
+                                        <div className="grid grid-cols-4 gap-3 pt-3">
                                             <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Type</Label>
-                                                <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button variant="outline" className="w-full justify-between">
-                                                            {selectedType || <span className="text-muted-foreground">Select...</span>}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-[200px] p-0" align="start">
-                                                        <Command>
-                                                            <CommandInput placeholder="Search..." />
-                                                            <CommandList>
-                                                                <CommandEmpty>Not found</CommandEmpty>
-                                                                <CommandGroup heading="Standard">
-                                                                    {uniqueTypes.map(t => (
-                                                                        <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
-                                                                            <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
-                                                                            {t}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                                {shapes.length > 0 && (
-                                                                    <CommandGroup heading="Custom">
-                                                                        {shapes.map(s => (
-                                                                            <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
-                                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
-                                                                                {s.id}
-                                                                            </CommandItem>
-                                                                        ))}
-                                                                    </CommandGroup>
-                                                                )}
-                                                            </CommandList>
-                                                        </Command>
-                                                    </PopoverContent>
-                                                </Popover>
+                                                <Label className="text-xs uppercase text-muted-foreground">Part # *</Label>
+                                                <Input
+                                                    value={newPartNumber}
+                                                    onChange={e => setNewPartNumber(e.target.value)}
+                                                    placeholder="B-101"
+                                                    className="font-mono uppercase"
+                                                />
                                             </div>
                                             <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Dimensions</Label>
-                                                <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button variant="outline" className="w-full justify-between" disabled={!selectedType}>
-                                                            {customDim || selectedDim || <span className="text-muted-foreground">Select...</span>}
-                                                            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-[220px] p-0" align="start">
-                                                        <Command>
-                                                            <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search/custom..." />
-                                                            <CommandList>
-                                                                <CommandEmpty>
-                                                                    <Button onClick={() => {
-                                                                        setSelectedDim(dimSearch)
-                                                                        setCustomDim(dimSearch)
-                                                                        setOpenDimCombo(false)
-                                                                    }} variant="ghost" className="w-full text-xs">
-                                                                        Use "{dimSearch}"
-                                                                    </Button>
-                                                                </CommandEmpty>
-                                                                {activeDims.length > 0 && (
-                                                                    <CommandGroup heading="Active">
-                                                                        {activeDims.map(d => (
-                                                                            <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                                <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                                {d}
-                                                                            </CommandItem>
-                                                                        ))}
-                                                                    </CommandGroup>
-                                                                )}
-                                                                {isStandardType && catalogDims.length > 0 && (
-                                                                    <CommandGroup heading="Catalog">
-                                                                        {catalogDims.map(d => (
-                                                                            <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                                <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                                {d}
-                                                                            </CommandItem>
-                                                                        ))}
-                                                                    </CommandGroup>
-                                                                )}
-                                                            </CommandList>
-                                                        </Command>
-                                                    </PopoverContent>
-                                                </Popover>
-                                            </div>
-                                            <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
+                                                <Label className="text-xs uppercase text-muted-foreground">Qty *</Label>
                                                 <Input
                                                     type="number"
-                                                    value={newLength}
-                                                    onChange={e => setNewLength(e.target.value)}
-                                                    placeholder="6000"
+                                                    min="1"
+                                                    value={newQuantity}
+                                                    onChange={e => setNewQuantity(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Grade</Label>
+                                                <Select value={newGradeId} onValueChange={setNewGradeId}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Grade" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {grades.map(g => (
+                                                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <Label className="text-xs uppercase text-muted-foreground">Description</Label>
+                                                <Input
+                                                    value={newDescription}
+                                                    onChange={e => setNewDescription(e.target.value)}
+                                                    placeholder="Main beam"
                                                 />
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-4 p-3 border rounded bg-background">
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="checkbox"
-                                                    id="profileOutsource"
-                                                    checked={isOutsourcedCut}
-                                                    onChange={e => setIsOutsourcedCut(e.target.checked)}
-                                                    className="rounded"
-                                                />
-                                                <Label htmlFor="profileOutsource" className="cursor-pointer text-sm">
-                                                    Outsourced Cutting
-                                                </Label>
+
+                                        {/* Profile Tab */}
+                                        <TabsContent value="profile" className="space-y-3 mt-3">
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Type</Label>
+                                                    <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant="outline" className="w-full justify-between">
+                                                                {selectedType || <span className="text-muted-foreground">Select...</span>}
+                                                                <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[200px] p-0" align="start">
+                                                            <Command>
+                                                                <CommandInput placeholder="Search..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>Not found</CommandEmpty>
+                                                                    <CommandGroup heading="Standard">
+                                                                        {uniqueTypes.map(t => (
+                                                                            <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
+                                                                                <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
+                                                                                {t}
+                                                                            </CommandItem>
+                                                                        ))}
+                                                                    </CommandGroup>
+                                                                    {shapes.length > 0 && (
+                                                                        <CommandGroup heading="Custom">
+                                                                            {shapes.map(s => (
+                                                                                <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
+                                                                                    <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
+                                                                                    {s.id}
+                                                                                </CommandItem>
+                                                                            ))}
+                                                                        </CommandGroup>
+                                                                    )}
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Dimensions</Label>
+                                                    <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant="outline" className="w-full justify-between" disabled={!selectedType}>
+                                                                {customDim || selectedDim || <span className="text-muted-foreground">Select...</span>}
+                                                                <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-[220px] p-0" align="start">
+                                                            <Command>
+                                                                <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search/custom..." />
+                                                                <CommandList>
+                                                                    <CommandEmpty>
+                                                                        <Button onClick={() => {
+                                                                            setSelectedDim(dimSearch)
+                                                                            setCustomDim(dimSearch)
+                                                                            setOpenDimCombo(false)
+                                                                        }} variant="ghost" className="w-full text-xs">
+                                                                            Use "{dimSearch}"
+                                                                        </Button>
+                                                                    </CommandEmpty>
+                                                                    {activeDims.length > 0 && (
+                                                                        <CommandGroup heading="Active">
+                                                                            {activeDims.map(d => (
+                                                                                <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                                    <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                                    {d}
+                                                                                </CommandItem>
+                                                                            ))}
+                                                                        </CommandGroup>
+                                                                    )}
+                                                                    {isStandardType && catalogDims.length > 0 && (
+                                                                        <CommandGroup heading="Catalog">
+                                                                            {catalogDims.map(d => (
+                                                                                <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
+                                                                                    <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
+                                                                                    {d}
+                                                                                </CommandItem>
+                                                                            ))}
+                                                                        </CommandGroup>
+                                                                    )}
+                                                                </CommandList>
+                                                            </Command>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={newLength}
+                                                        onChange={e => setNewLength(e.target.value)}
+                                                        placeholder="6000"
+                                                    />
+                                                </div>
                                             </div>
-                                            {isOutsourcedCut && (
-                                                <Input
-                                                    value={cutVendor}
-                                                    onChange={e => setCutVendor(e.target.value)}
-                                                    placeholder="Vendor"
-                                                    className="flex-1"
-                                                />
+                                            <div className="flex items-center gap-4 p-3 border rounded bg-background">
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        id="profileOutsource"
+                                                        checked={isOutsourcedCut}
+                                                        onChange={e => setIsOutsourcedCut(e.target.checked)}
+                                                        className="rounded"
+                                                    />
+                                                    <Label htmlFor="profileOutsource" className="cursor-pointer text-sm">
+                                                        Outsourced Cutting
+                                                    </Label>
+                                                </div>
+                                                {isOutsourcedCut && (
+                                                    <Input
+                                                        value={cutVendor}
+                                                        onChange={e => setCutVendor(e.target.value)}
+                                                        placeholder="Vendor"
+                                                        className="flex-1"
+                                                    />
+                                                )}
+                                            </div>
+                                        </TabsContent>
+
+                                        {/* Plate Tab */}
+                                        <TabsContent value="plate" className="space-y-3 mt-3">
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Thickness *</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={plateThickness}
+                                                        onChange={e => setPlateThickness(e.target.value)}
+                                                        placeholder="10"
+                                                    />
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Width (mm)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={plateWidth}
+                                                        onChange={e => setPlateWidth(e.target.value)}
+                                                        placeholder="200"
+                                                    />
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
+                                                    <Input
+                                                        type="number"
+                                                        value={plateLength}
+                                                        onChange={e => setPlateLength(e.target.value)}
+                                                        placeholder="400"
+                                                    />
+                                                </div>
+                                            </div>
+                                            {/* Auto-calculated weight preview */}
+                                            {plateThickness && plateWidth && plateLength && (
+                                                <div className="flex items-center gap-2 p-2 bg-green-50 text-green-800 rounded text-xs">
+                                                    <span className="font-medium">Calculated:</span>
+                                                    <span className="font-mono">
+                                                        {((parseFloat(plateThickness) / 1000) * (parseFloat(plateWidth) / 1000) * (parseFloat(plateLength) / 1000) * 7850).toFixed(2)} kg
+                                                    </span>
+                                                </div>
                                             )}
-                                        </div>
-                                    </TabsContent>
-
-                                    {/* Plate Tab */}
-                                    <TabsContent value="plate" className="space-y-3 mt-3">
-                                        <div className="grid grid-cols-3 gap-3">
                                             <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Thickness *</Label>
+                                                <Label className="text-xs uppercase text-muted-foreground">Weight Override</Label>
                                                 <Input
                                                     type="number"
-                                                    value={plateThickness}
-                                                    onChange={e => setPlateThickness(e.target.value)}
-                                                    placeholder="10"
+                                                    value={plateWeight}
+                                                    onChange={e => setPlateWeight(e.target.value)}
+                                                    placeholder="Auto-calc if blank"
                                                 />
                                             </div>
-                                            <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Width (mm)</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={plateWidth}
-                                                    onChange={e => setPlateWidth(e.target.value)}
-                                                    placeholder="200"
-                                                />
-                                            </div>
-                                            <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Length (mm)</Label>
-                                                <Input
-                                                    type="number"
-                                                    value={plateLength}
-                                                    onChange={e => setPlateLength(e.target.value)}
-                                                    placeholder="400"
-                                                />
-                                            </div>
-                                        </div>
-                                        {/* Auto-calculated weight preview */}
-                                        {plateThickness && plateWidth && plateLength && (
-                                            <div className="flex items-center gap-2 p-2 bg-green-50 text-green-800 rounded text-xs">
-                                                <span className="font-medium">Calculated:</span>
-                                                <span className="font-mono">
-                                                    {((parseFloat(plateThickness) / 1000) * (parseFloat(plateWidth) / 1000) * (parseFloat(plateLength) / 1000) * 7850).toFixed(2)} kg
-                                                </span>
-                                            </div>
-                                        )}
-                                        <div className="grid gap-2">
-                                            <Label className="text-xs uppercase text-muted-foreground">Weight Override</Label>
-                                            <Input
-                                                type="number"
-                                                value={plateWeight}
-                                                onChange={e => setPlateWeight(e.target.value)}
-                                                placeholder="Auto-calc if blank"
-                                            />
-                                        </div>
-                                        {isPlateOutsourced && (
-                                            <div className="grid gap-2">
-                                                <Label className="text-xs uppercase text-muted-foreground">Supplier</Label>
-                                                <Input
-                                                    value={plateSupplier}
-                                                    onChange={e => setPlateSupplier(e.target.value)}
-                                                    placeholder="LaserCut Co"
-                                                />
-                                            </div>
-                                        )}
-                                        <div className="flex items-center gap-4 p-3 border rounded bg-background">
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="checkbox"
-                                                    id="plateOutsource"
-                                                    checked={isPlateOutsourced}
-                                                    onChange={e => setIsPlateOutsourced(e.target.checked)}
-                                                    className="rounded"
-                                                />
-                                                <Label htmlFor="plateOutsource" className="cursor-pointer text-sm">
-                                                    Outsourced (Laser/Plasma)
-                                                </Label>
-                                            </div>
-                                            {!isPlateOutsourced && (
-                                                <Badge variant="outline">In-house cutting</Badge>
+                                            {isPlateOutsourced && (
+                                                <div className="grid gap-2">
+                                                    <Label className="text-xs uppercase text-muted-foreground">Supplier</Label>
+                                                    <Input
+                                                        value={plateSupplier}
+                                                        onChange={e => setPlateSupplier(e.target.value)}
+                                                        placeholder="LaserCut Co"
+                                                    />
+                                                </div>
                                             )}
-                                        </div>
-                                    </TabsContent>
-                                </Tabs>
+                                            <div className="flex items-center gap-4 p-3 border rounded bg-background">
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        id="plateOutsource"
+                                                        checked={isPlateOutsourced}
+                                                        onChange={e => setIsPlateOutsourced(e.target.checked)}
+                                                        className="rounded"
+                                                    />
+                                                    <Label htmlFor="plateOutsource" className="cursor-pointer text-sm">
+                                                        Outsourced (Laser/Plasma)
+                                                    </Label>
+                                                </div>
+                                                {!isPlateOutsourced && (
+                                                    <Badge variant="outline">In-house cutting</Badge>
+                                                )}
+                                            </div>
+                                        </TabsContent>
+                                    </Tabs>
 
-                                <Button onClick={handleAddNewPart} className="w-full">
-                                    Add {newPartType === 'profile' ? 'Profile' : 'Plate'} Part
-                                </Button>
-                            </div>
-                        )}
+                                    <Button onClick={handleAddNewPart} className="w-full">
+                                        Add {newPartType === 'profile' ? 'Profile' : 'Plate'} Part
+                                    </Button>
+                                </div>
+                            )
+                        }
 
                         {/* Parts List */}
-                        {partItems.length > 0 && (
-                            <div className="border rounded overflow-hidden">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead>Part #</TableHead>
-                                            <TableHead>Type</TableHead>
-                                            <TableHead>Profile/Material</TableHead>
-                                            <TableHead>Cut</TableHead>
-                                            <TableHead className="text-center">Qty</TableHead>
-                                            <TableHead className="w-10"></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {partItems.map((item, idx) => (
-                                            <TableRow key={idx}>
-                                                <TableCell className="font-mono">
-                                                    {item.partNumber}
-                                                    {item.isNew && <Badge variant="outline" className="ml-2 text-xs">NEW</Badge>}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={item.type === 'plate' ? 'secondary' : 'default'}>
-                                                        {item.type === 'plate' ? 'Plate' : 'Profile'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {item.type === 'profile'
-                                                        ? `${item.profileType} ${item.profileDimensions}`
-                                                        : `${item.material} ${item.thickness}mm`
-                                                    }
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={item.isOutsourcedCut ? 'outline' : 'default'} className="text-xs">
-                                                        {item.isOutsourcedCut ? 'Outsource' : 'In-house'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-center">{item.quantityInAssembly}</TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        className="h-7 w-7 text-red-500"
-                                                        onClick={() => removePart(idx)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </TableCell>
+                        {
+                            partItems.length > 0 && (
+                                <div className="border rounded overflow-hidden">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-muted/50">
+                                                <TableHead>Part #</TableHead>
+                                                <TableHead>Type</TableHead>
+                                                <TableHead>Profile/Material</TableHead>
+                                                <TableHead>Cut</TableHead>
+                                                <TableHead className="text-center">Qty</TableHead>
+                                                <TableHead className="w-10"></TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        )}
+                                        </TableHeader>
+                                        <TableBody>
+                                            {partItems.map((item, idx) => (
+                                                <TableRow key={idx}>
+                                                    <TableCell className="font-mono">
+                                                        {item.partNumber}
+                                                        {item.isNew && <Badge variant="outline" className="ml-2 text-xs">NEW</Badge>}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={item.type === 'plate' ? 'secondary' : 'default'}>
+                                                            {item.type === 'plate' ? 'Plate' : 'Profile'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {item.type === 'profile'
+                                                            ? `${item.profileType} ${item.profileDimensions}`
+                                                            : `${item.material} ${item.thickness}mm`
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={item.isOutsourcedCut ? 'outline' : 'default'} className="text-xs">
+                                                            {item.isOutsourcedCut ? 'Outsource' : 'In-house'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">{item.quantityInAssembly}</TableCell>
+                                                    <TableCell>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="h-7 w-7 text-red-500"
+                                                            onClick={() => removePart(idx)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )
+                        }
 
-                        {partItems.length === 0 && (
-                            <p className="text-center text-muted-foreground py-4">
-                                No parts added. Add parts or create without.
-                            </p>
-                        )}
-                    </div>
-                </div>
+                        {
+                            partItems.length === 0 && (
+                                <p className="text-center text-muted-foreground py-4">
+                                    No parts added. Add parts or create without.
+                                </p>
+                            )
+                        }
+                    </div >
+                </div >
 
                 <DialogFooter className="mt-4">
                     <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -826,7 +850,7 @@ export function CreateAssemblyDialog({
                         {loading ? 'Creating...' : `Create Assembly${partItems.length > 0 ? ` (${partItems.length})` : ''}`}
                     </Button>
                 </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            </DialogContent >
+        </Dialog >
     )
 }

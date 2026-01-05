@@ -9,15 +9,15 @@ export async function getGlobalUsageHistory() {
     const usageLines = await prisma.usageLine.findMany({
         include: {
             usage: { include: { project: true } },
-            inventory: { include: { profile: true } },
-            remnant: { include: { profile: true } },
+            inventory: { include: { profile: true, grade: true } },
+            remnant: { include: { profile: true, grade: true } },
             project: true
         },
         orderBy: { usage: { date: 'desc' } }
     })
 
     const settings = await getSettings()
-    const scrapPrice = settings?.scrapPricePerKg || 0
+    const globalScrapPrice = settings?.scrapPricePerKg || 0
 
     // Collect Root Lot IDs to fetch potential scraps
     const rootLotIds = new Set<string>()
@@ -31,7 +31,7 @@ export async function getGlobalUsageHistory() {
         where: {
             rootLotId: { in: Array.from(rootLotIds) }
         },
-        include: { profile: true }
+        include: { profile: true, grade: true }
     })
 
     // Fetch parent inventory certificates for Remnants
@@ -71,7 +71,9 @@ export async function getGlobalUsageHistory() {
                 generatedRemnantStatus = match.status
                 if (match.status === 'SCRAP') {
                     const weight = (match.length / 1000) * match.profile.weightPerMeter
-                    scrapValue = weight * scrapPrice
+                    // Use Grade price if available, else Global
+                    const price = match.grade?.scrapPrice || globalScrapPrice
+                    scrapValue = weight * price
                 }
             }
         }

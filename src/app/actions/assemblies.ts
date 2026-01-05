@@ -163,13 +163,93 @@ export async function updateAssembly(
     data: Partial<Omit<CreateAssemblyInput, 'projectId'>>
 ) {
     try {
-        const assembly = await prisma.assembly.update({
-            where: { id: assemblyId },
-            data
+        const result = await prisma.$transaction(async (tx) => {
+            const oldAssembly = await tx.assembly.findUnique({
+                where: { id: assemblyId },
+                include: {
+                    assemblyParts: true,
+                    plateAssemblyParts: true
+                }
+            })
+            if (!oldAssembly) throw new Error('Assembly not found')
+
+            const assembly = await tx.assembly.update({
+                where: { id: assemblyId },
+                data
+            })
+
+            // If quantity changed, adjust all parts
+            if (data.quantity !== undefined && data.quantity !== oldAssembly.quantity) {
+                const diff = data.quantity - oldAssembly.quantity
+
+                // Adjust Profiles
+                for (const ap of oldAssembly.assemblyParts) {
+                    const totalDiff = diff * ap.quantityInAssembly
+                    if (totalDiff === 0) continue
+
+                    if (totalDiff > 0) {
+                        // Increment
+                        const part = await tx.part.findUnique({ where: { id: ap.partId }, include: { pieces: true } })
+                        if (part) {
+                            const maxNum = part.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                            await tx.part.update({ where: { id: ap.partId }, data: { quantity: { increment: totalDiff } } })
+                            const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
+                                partId: ap.partId,
+                                pieceNumber: maxNum + i + 1,
+                                status: 'PENDING'
+                            }))
+                            await tx.partPiece.createMany({ data: newPieces })
+                        }
+                    } else {
+                        // Decrement (totalDiff is negative)
+                        const amountToRemove = Math.abs(totalDiff)
+                        await tx.part.update({ where: { id: ap.partId }, data: { quantity: { decrement: amountToRemove } } })
+                        // Delete last N pieces (safest to delete from end? or unstarted?)
+                        // We'll delete pieces with highest pieceNumber
+                        const pieces = await tx.partPiece.findMany({
+                            where: { partId: ap.partId },
+                            orderBy: { pieceNumber: 'desc' },
+                            take: amountToRemove
+                        })
+                        await tx.partPiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+                    }
+                }
+
+                // Adjust Plates
+                for (const pap of oldAssembly.plateAssemblyParts) {
+                    const totalDiff = diff * pap.quantityInAssembly
+                    if (totalDiff === 0) continue
+
+                    if (totalDiff > 0) {
+                        const plate = await tx.platePart.findUnique({ where: { id: pap.platePartId }, include: { pieces: true } })
+                        if (plate) {
+                            const maxNum = plate.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                            await tx.platePart.update({ where: { id: pap.platePartId }, data: { quantity: { increment: totalDiff } } })
+                            const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
+                                platePartId: pap.platePartId,
+                                pieceNumber: maxNum + i + 1,
+                                status: 'PENDING'
+                            }))
+                            await tx.platePiece.createMany({ data: newPieces })
+                        }
+                    } else {
+                        const amountToRemove = Math.abs(totalDiff)
+                        await tx.platePart.update({ where: { id: pap.platePartId }, data: { quantity: { decrement: amountToRemove } } })
+                        const pieces = await tx.platePiece.findMany({
+                            where: { platePartId: pap.platePartId },
+                            orderBy: { pieceNumber: 'desc' },
+                            take: amountToRemove
+                        })
+                        await tx.platePiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+                    }
+                }
+            }
+
+            return assembly
         })
 
-        revalidatePath(`/projects/${assembly.projectId}`)
-        return { success: true, data: assembly }
+        revalidatePath(`/projects/${result.projectId}`)
+        return { success: true, data: result }
 
     } catch (e: any) {
         console.error('updateAssembly error:', e)
@@ -205,35 +285,41 @@ export async function updateAssemblyStatus(
     }
 }
 
-/**
- * Delete an assembly (only if no parts assigned and no sub-assemblies)
- */
 export async function deleteAssembly(assemblyId: string) {
     try {
-        const assembly = await prisma.assembly.findUnique({
-            where: { id: assemblyId },
-            include: {
-                children: true,
-                assemblyParts: true,
-                plateAssemblyParts: true
+        const result = await prisma.$transaction(async (tx) => {
+            const assembly = await tx.assembly.findUnique({
+                where: { id: assemblyId },
+                include: {
+                    children: true,
+                    assemblyParts: true,
+                    plateAssemblyParts: true
+                }
+            })
+
+            if (!assembly) throw new Error('Assembly not found')
+            if (assembly.children.length > 0) throw new Error('Cannot delete assembly with sub-assemblies')
+
+            // Decrement all parts
+            for (const ap of assembly.assemblyParts) {
+                const amountToRemove = assembly.quantity * ap.quantityInAssembly
+                await tx.part.update({ where: { id: ap.partId }, data: { quantity: { decrement: amountToRemove } } })
+                const pieces = await tx.partPiece.findMany({ where: { partId: ap.partId }, orderBy: { pieceNumber: 'desc' }, take: amountToRemove })
+                await tx.partPiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
             }
+
+            for (const pap of assembly.plateAssemblyParts) {
+                const amountToRemove = assembly.quantity * pap.quantityInAssembly
+                await tx.platePart.update({ where: { id: pap.platePartId }, data: { quantity: { decrement: amountToRemove } } })
+                const pieces = await tx.platePiece.findMany({ where: { platePartId: pap.platePartId }, orderBy: { pieceNumber: 'desc' }, take: amountToRemove })
+                await tx.platePiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+            }
+
+            await tx.assembly.delete({ where: { id: assemblyId } })
+            return assembly
         })
 
-        if (!assembly) {
-            return { success: false, error: 'Assembly not found' }
-        }
-
-        if (assembly.children.length > 0) {
-            return { success: false, error: 'Cannot delete assembly with sub-assemblies' }
-        }
-
-        if (assembly.assemblyParts.length > 0 || assembly.plateAssemblyParts.length > 0) {
-            return { success: false, error: 'Cannot delete assembly with parts assigned' }
-        }
-
-        await prisma.assembly.delete({ where: { id: assemblyId } })
-
-        revalidatePath(`/projects/${assembly.projectId}`)
+        revalidatePath(`/projects/${result.projectId}`)
         return { success: true }
 
     } catch (e: any) {
@@ -270,12 +356,39 @@ export async function addPartToAssembly(
             return { success: false, error: 'Part and assembly must belong to the same project' }
         }
 
-        await prisma.assemblyPart.create({
-            data: {
-                assemblyId,
-                partId,
-                quantityInAssembly,
-                notes
+        await prisma.$transaction(async (tx) => {
+            await tx.assemblyPart.create({
+                data: {
+                    assemblyId,
+                    partId,
+                    quantityInAssembly,
+                    notes
+                }
+            })
+
+            // Get assembly quantity to know how much to add to part total
+            const totalToAdd = assembly.quantity * quantityInAssembly
+
+            // Update Part Quantity and Generate Pieces
+            const partWithPieces = await tx.part.findUnique({
+                where: { id: partId },
+                include: { pieces: { select: { pieceNumber: true } } }
+            })
+
+            if (partWithPieces && totalToAdd > 0) {
+                const maxNum = partWithPieces.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+
+                await tx.part.update({
+                    where: { id: partId },
+                    data: { quantity: { increment: totalToAdd } }
+                })
+
+                const newPieces = Array.from({ length: totalToAdd }, (_, i) => ({
+                    partId: partId,
+                    pieceNumber: maxNum + i + 1,
+                    status: 'PENDING'
+                }))
+                await tx.partPiece.createMany({ data: newPieces })
             }
         })
 
@@ -314,12 +427,42 @@ export async function addPlatePartToAssembly(
             return { success: false, error: 'Part and assembly must belong to the same project' }
         }
 
-        await prisma.plateAssemblyPart.create({
-            data: {
-                assemblyId,
-                platePartId,
-                quantityInAssembly,
-                notes
+        await prisma.$transaction(async (tx) => {
+            await tx.plateAssemblyPart.create({
+                data: {
+                    assemblyId,
+                    platePartId,
+                    quantityInAssembly,
+                    notes
+                }
+            })
+
+            // Increment PlatePart quantity
+            const totalToAdd = assembly.quantity * quantityInAssembly
+
+            const platePartWithPieces = await tx.platePart.findUnique({
+                where: { id: platePartId },
+                include: { pieces: { select: { pieceNumber: true } } }
+            })
+
+            if (platePartWithPieces && totalToAdd > 0) {
+                const maxNum = platePartWithPieces.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+
+                await tx.platePart.update({
+                    where: { id: platePartId },
+                    data: {
+                        quantity: { increment: totalToAdd },
+                        // receivedQty might stay same? Yes.
+                    }
+                })
+
+                // Generate PlatePieces
+                const newPieces = Array.from({ length: totalToAdd }, (_, i) => ({
+                    platePartId: platePartId,
+                    pieceNumber: maxNum + i + 1,
+                    status: 'PENDING'
+                }))
+                await tx.platePiece.createMany({ data: newPieces })
             }
         })
 
@@ -340,17 +483,40 @@ export async function addPlatePartToAssembly(
  */
 export async function removePartFromAssembly(assemblyId: string, partId: string) {
     try {
-        const assembly = await prisma.assembly.findUnique({ where: { id: assemblyId } })
+        const result = await prisma.$transaction(async (tx) => {
+            const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
+            const junction = await tx.assemblyPart.findUnique({
+                where: { assemblyId_partId: { assemblyId, partId } }
+            })
 
-        await prisma.assemblyPart.delete({
-            where: {
-                assemblyId_partId: { assemblyId, partId }
-            }
+            if (!assembly || !junction) throw new Error('Assembly or assignment not found')
+
+            const amountToRemove = assembly.quantity * junction.quantityInAssembly
+
+            await tx.assemblyPart.delete({
+                where: { assemblyId_partId: { assemblyId, partId } }
+            })
+
+            // Decrement Part Quantity
+            const pieces = await tx.partPiece.findMany({
+                where: { partId },
+                orderBy: { pieceNumber: 'desc' },
+                take: amountToRemove
+            })
+
+            await tx.part.update({
+                where: { id: partId },
+                data: { quantity: { decrement: amountToRemove } }
+            })
+
+            await tx.partPiece.deleteMany({
+                where: { id: { in: pieces.map(p => p.id) } }
+            })
+
+            return assembly
         })
 
-        if (assembly) {
-            revalidatePath(`/projects/${assembly.projectId}`)
-        }
+        revalidatePath(`/projects/${result.projectId}`)
         return { success: true }
 
     } catch (e: any) {
@@ -364,17 +530,40 @@ export async function removePartFromAssembly(assemblyId: string, partId: string)
  */
 export async function removePlatePartFromAssembly(assemblyId: string, platePartId: string) {
     try {
-        const assembly = await prisma.assembly.findUnique({ where: { id: assemblyId } })
+        const result = await prisma.$transaction(async (tx) => {
+            const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
+            const junction = await tx.plateAssemblyPart.findUnique({
+                where: { assemblyId_platePartId: { assemblyId, platePartId } }
+            })
 
-        await prisma.plateAssemblyPart.delete({
-            where: {
-                assemblyId_platePartId: { assemblyId, platePartId }
-            }
+            if (!assembly || !junction) throw new Error('Assembly or assignment not found')
+
+            const amountToRemove = assembly.quantity * junction.quantityInAssembly
+
+            await tx.plateAssemblyPart.delete({
+                where: { assemblyId_platePartId: { assemblyId, platePartId } }
+            })
+
+            // Decrement PlatePart Quantity
+            const pieces = await tx.platePiece.findMany({
+                where: { platePartId },
+                orderBy: { pieceNumber: 'desc' },
+                take: amountToRemove
+            })
+
+            await tx.platePart.update({
+                where: { id: platePartId },
+                data: { quantity: { decrement: amountToRemove } }
+            })
+
+            await tx.platePiece.deleteMany({
+                where: { id: { in: pieces.map(p => p.id) } }
+            })
+
+            return assembly
         })
 
-        if (assembly) {
-            revalidatePath(`/projects/${assembly.projectId}`)
-        }
+        revalidatePath(`/projects/${result.projectId}`)
         return { success: true }
 
     } catch (e: any) {
@@ -389,20 +578,116 @@ export async function removePlatePartFromAssembly(assemblyId: string, platePartI
 export async function updateAssemblyPartQuantity(
     assemblyId: string,
     partId: string,
-    newQuantity: number
+    newQuantityInAssembly: number
 ) {
     try {
-        await prisma.assemblyPart.update({
-            where: {
-                assemblyId_partId: { assemblyId, partId }
-            },
-            data: { quantityInAssembly: newQuantity }
+        const result = await prisma.$transaction(async (tx) => {
+            const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
+            const junction = await tx.assemblyPart.findUnique({
+                where: { assemblyId_partId: { assemblyId, partId } }
+            })
+
+            if (!assembly || !junction) throw new Error('Assembly or assignment not found')
+
+            const diff = newQuantityInAssembly - junction.quantityInAssembly
+            const totalDiff = diff * assembly.quantity
+
+            await tx.assemblyPart.update({
+                where: { assemblyId_partId: { assemblyId, partId } },
+                data: { quantityInAssembly: newQuantityInAssembly }
+            })
+
+            if (totalDiff > 0) {
+                const part = await tx.part.findUnique({ where: { id: partId }, include: { pieces: true } })
+                if (part) {
+                    const maxNum = part.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                    await tx.part.update({ where: { id: partId }, data: { quantity: { increment: totalDiff } } })
+                    const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
+                        partId,
+                        pieceNumber: maxNum + i + 1,
+                        status: 'PENDING'
+                    }))
+                    await tx.partPiece.createMany({ data: newPieces })
+                }
+            } else if (totalDiff < 0) {
+                const amountToRemove = Math.abs(totalDiff)
+                await tx.part.update({ where: { id: partId }, data: { quantity: { decrement: amountToRemove } } })
+                const pieces = await tx.partPiece.findMany({
+                    where: { partId },
+                    orderBy: { pieceNumber: 'desc' },
+                    take: amountToRemove
+                })
+                await tx.partPiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+            }
+
+            return assembly
         })
 
+        revalidatePath(`/projects/${result.projectId}`)
         return { success: true }
 
     } catch (e: any) {
         console.error('updateAssemblyPartQuantity error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Update quantity of a PLATE part in an assembly
+ */
+export async function updatePlateAssemblyPartQuantity(
+    assemblyId: string,
+    platePartId: string,
+    newQuantityInAssembly: number
+) {
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
+            const junction = await tx.plateAssemblyPart.findUnique({
+                where: { assemblyId_platePartId: { assemblyId, platePartId } }
+            })
+
+            if (!assembly || !junction) throw new Error('Assembly or assignment not found')
+
+            const diff = newQuantityInAssembly - junction.quantityInAssembly
+            const totalDiff = diff * assembly.quantity
+
+            await tx.plateAssemblyPart.update({
+                where: { assemblyId_platePartId: { assemblyId, platePartId } },
+                data: { quantityInAssembly: newQuantityInAssembly }
+            })
+
+            if (totalDiff > 0) {
+                const plate = await tx.platePart.findUnique({ where: { id: platePartId }, include: { pieces: true } })
+                if (plate) {
+                    const maxNum = plate.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                    await tx.platePart.update({ where: { id: platePartId }, data: { quantity: { increment: totalDiff } } })
+                    const newPieces = Array.from({ length: totalDiff }, (_, i) => ({
+                        platePartId,
+                        pieceNumber: maxNum + i + 1,
+                        status: 'PENDING'
+                    }))
+                    await tx.platePiece.createMany({ data: newPieces })
+                }
+            } else if (totalDiff < 0) {
+                const amountToRemove = Math.abs(totalDiff)
+                await tx.platePart.update({ where: { id: platePartId }, data: { quantity: { decrement: amountToRemove } } })
+                const pieces = await tx.platePiece.findMany({
+                    where: { platePartId },
+                    orderBy: { pieceNumber: 'desc' },
+                    take: amountToRemove
+                })
+                await tx.platePiece.deleteMany({ where: { id: { in: pieces.map(p => p.id) } } })
+            }
+
+            return assembly
+        })
+
+        revalidatePath(`/projects/${result.projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('updatePlateAssemblyPartQuantity error:', e)
         return { success: false, error: e.message }
     }
 }

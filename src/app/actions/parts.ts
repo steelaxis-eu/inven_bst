@@ -43,15 +43,43 @@ export async function createPart(input: CreatePartInput) {
             return { success: false, error: 'Missing required fields' }
         }
 
-        // Calculate unit weight if profile is provided
+        // Calculate unit weight
         let unitWeight = 0
-        if (rest.profileId && rest.length) {
+        let weightPerMeter = 0
+
+        if (rest.profileId) {
             const profile = await prisma.steelProfile.findUnique({
                 where: { id: rest.profileId }
             })
-            if (profile) {
-                unitWeight = (rest.length / 1000) * profile.weightPerMeter
+            if (profile) weightPerMeter = profile.weightPerMeter
+        } else if (rest.profileType && rest.profileDimensions) {
+            // Try to find in Active Profiles first
+            const activeProfile = await prisma.steelProfile.findUnique({
+                where: {
+                    type_dimensions: {
+                        type: rest.profileType,
+                        dimensions: rest.profileDimensions
+                    }
+                }
+            })
+            if (activeProfile) {
+                weightPerMeter = activeProfile.weightPerMeter
+            } else {
+                // Try Standard Catalog
+                const stdProfile = await prisma.standardProfile.findUnique({
+                    where: {
+                        type_dimensions: {
+                            type: rest.profileType,
+                            dimensions: rest.profileDimensions
+                        }
+                    }
+                })
+                if (stdProfile) weightPerMeter = stdProfile.weightPerMeter
             }
+        }
+
+        if (weightPerMeter > 0 && rest.length) {
+            unitWeight = (rest.length / 1000) * weightPerMeter
         }
 
         const result = await prisma.$transaction(async (tx) => {
@@ -796,6 +824,61 @@ export async function generatePartPieces(partId: string) {
 
     } catch (e: any) {
         console.error('generatePartPieces error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+/**
+ * Recalculate weights for all parts in a project using current profiles
+ * Useful if weights were 0 due to missing profile links during import
+ */
+export async function recalculateProjectWeights(projectId: string) {
+    try {
+        const parts = await prisma.part.findMany({
+            where: { projectId },
+            include: { profile: true }
+        })
+
+        let updatedCount = 0
+
+        for (const part of parts) {
+            let weightPerMeter = 0
+
+            // Skip if already has weight? Or force update? Let's check 0 or small.
+            if (part.unitWeight > 0.01) continue
+
+            if (part.profile?.weightPerMeter) {
+                weightPerMeter = part.profile.weightPerMeter
+            } else if (part.profileType && part.profileDimensions) {
+                const active = await prisma.steelProfile.findUnique({
+                    where: { type_dimensions: { type: part.profileType, dimensions: part.profileDimensions } }
+                })
+                if (active) weightPerMeter = active.weightPerMeter
+                else {
+                    const std = await prisma.standardProfile.findUnique({
+                        where: { type_dimensions: { type: part.profileType, dimensions: part.profileDimensions } }
+                    })
+                    if (std) weightPerMeter = std.weightPerMeter
+                }
+            }
+
+            if (weightPerMeter > 0 && part.length) {
+                const newWeight = (part.length / 1000) * weightPerMeter
+                if (Math.abs(newWeight - part.unitWeight) > 0.001) {
+                    await prisma.part.update({
+                        where: { id: part.id },
+                        data: { unitWeight: newWeight }
+                    })
+                    updatedCount++
+                }
+            }
+        }
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true, updated: updatedCount }
+
+    } catch (e: any) {
+        console.error('recalculateProjectWeights error:', e)
         return { success: false, error: e.message }
     }
 }

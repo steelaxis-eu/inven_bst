@@ -19,6 +19,7 @@ import {
     type AssemblyReadiness,
     type PartReadiness
 } from '@/app/actions/workorders'
+import { startNestingJob, getJobStatus } from '@/app/actions/optimization'
 
 interface CreateAssemblyWODialogProps {
     projectId: string
@@ -78,17 +79,37 @@ export function CreateAssemblyWODialog({
     // Planning Function
     const calculatePlan = async (length: number) => {
         setCalculating(true)
-        // Dynamically import to avoid server-client issues if strictly typed? 
-        // No, standard import should work if action is 'use server'
-        const { calculateCuttingPlan } = await import('@/app/actions/planning')
-
-        const res = await calculateCuttingPlan(notReadyPieceIds, length)
-        if (res.success && res.data) {
-            setPlanningResults(res.data)
-        } else {
-            toast.error("Optimization failed")
+        try {
+            const res = await startNestingJob(projectId, notReadyPieceIds, length)
+            if (res.success && res.jobId) {
+                // Background job started
+                // We'll poll for completion
+                const pollInterval = setInterval(async () => {
+                    const statusRes = await getJobStatus(res.jobId!)
+                    if (statusRes.success && statusRes.job) {
+                        if (statusRes.job.status === 'COMPLETED') {
+                            setPlanningResults(statusRes.job.result as any[])
+                            setCalculating(false)
+                            clearInterval(pollInterval)
+                        } else if (statusRes.job.status === 'FAILED') {
+                            toast.error(`Optimization failed: ${statusRes.job.error}`)
+                            setCalculating(false)
+                            clearInterval(pollInterval)
+                        }
+                    } else {
+                        toast.error("Error polling job status")
+                        setCalculating(false)
+                        clearInterval(pollInterval)
+                    }
+                }, 2000)
+            } else {
+                toast.error(res.error || "Failed to start optimization")
+                setCalculating(false)
+            }
+        } catch (e) {
+            toast.error("Error starting background job")
+            setCalculating(false)
         }
-        setCalculating(false)
     }
 
     // Effect to recalculate when length changes
