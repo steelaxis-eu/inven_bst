@@ -70,7 +70,11 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
         const zip = new AdmZip(buffer)
         const zipEntries = zip.getEntries()
 
-        const pdfEntries = zipEntries.filter(entry => entry.name.toLowerCase().endsWith('.pdf') && !entry.name.startsWith('__MACOSX'))
+        const pdfEntries = zipEntries.filter(entry =>
+            entry.name.toLowerCase().endsWith('.pdf') &&
+            !entry.name.startsWith('__MACOSX') &&
+            !entry.name.split('/').pop()?.startsWith('._')
+        )
 
         if (pdfEntries.length === 0) {
             return { success: false, error: "No PDF files found in ZIP" }
@@ -94,6 +98,45 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 const viewport = page.getViewport({ scale: 2.0 })
                 const canvas = createCanvas(viewport.width, viewport.height)
                 const context = canvas.getContext('2d')
+
+                // Patch context to support Polyfill Path2D
+                const patchContext = (ctx: any) => {
+                    const originalFill = ctx.fill;
+                    const originalStroke = ctx.stroke;
+                    const originalClip = ctx.clip;
+
+                    ctx.fill = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalFill.call(this, rule || 'nonzero');
+                        } else {
+                            originalFill.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.stroke = function (path: any) {
+                        if (typeof path === 'object' && path && path.ops) {
+                            ctx.beginPath();
+                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalStroke.call(this);
+                        } else {
+                            originalStroke.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.clip = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalClip.call(this, rule || 'nonzero');
+                        } else {
+                            originalClip.apply(this, arguments);
+                        }
+                    };
+                };
+
+                patchContext(context);
 
                 await page.render({
                     canvasContext: context as any,
@@ -250,7 +293,11 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
         const zip = new AdmZip(buffer)
         const zipEntries = zip.getEntries()
 
-        const pdfEntries = zipEntries.filter(entry => entry.name.toLowerCase().endsWith('.pdf') && !entry.name.startsWith('__MACOSX'))
+        const pdfEntries = zipEntries.filter(entry =>
+            entry.name.toLowerCase().endsWith('.pdf') &&
+            !entry.name.startsWith('__MACOSX') &&
+            !entry.name.split('/').pop()?.startsWith('._')
+        )
 
         if (pdfEntries.length === 0) {
             return { success: false, error: "No PDF files found in ZIP" }
@@ -274,6 +321,45 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 const viewport = page.getViewport({ scale: 2.0 })
                 const canvas = createCanvas(viewport.width, viewport.height)
                 const context = canvas.getContext('2d')
+
+                // Patch context to support Polyfill Path2D
+                const patchContext = (ctx: any) => {
+                    const originalFill = ctx.fill;
+                    const originalStroke = ctx.stroke;
+                    const originalClip = ctx.clip;
+
+                    ctx.fill = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalFill.call(this, rule || 'nonzero');
+                        } else {
+                            originalFill.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.stroke = function (path: any) {
+                        if (typeof path === 'object' && path && path.ops) {
+                            ctx.beginPath();
+                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalStroke.call(this);
+                        } else {
+                            originalStroke.apply(this, arguments);
+                        }
+                    };
+
+                    ctx.clip = function (pathOrRule: any, rule?: any) {
+                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
+                            ctx.beginPath();
+                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
+                            originalClip.call(this, rule || 'nonzero');
+                        } else {
+                            originalClip.apply(this, arguments);
+                        }
+                    };
+                };
+
+                patchContext(context);
 
                 await page.render({
                     canvasContext: context as any,
