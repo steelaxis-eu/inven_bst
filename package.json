@@ -11,6 +11,8 @@
     "db:clean": "npx tsx prisma/clean.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.962.0",
+    "@aws-sdk/s3-request-presigner": "^3.962.0",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.2.2",

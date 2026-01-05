@@ -14,6 +14,8 @@ import { togglePlatePartSource, deletePlatePart, updatePlatePartStatus } from '@
 import { cn } from '@/lib/utils'
 import { Trash2, CheckCircle, Pencil } from 'lucide-react'
 import { PartDetailsDialog } from './part-details-dialog'
+import { PlateDetailsDialog } from './plate-details-dialog'
+import { ReceiveItemsDialog } from './receive-items-dialog'
 
 // Union type for the table
 export type UnifiedPartItem =
@@ -30,22 +32,25 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     const [loadingId, setLoadingId] = useState<string | null>(null)
     const [detailsOpen, setDetailsOpen] = useState(false)
     const [selectedPart, setSelectedPart] = useState<any>(null)
+    const [selectedPlate, setSelectedPlate] = useState<any>(null)
+    const [plateDetailsOpen, setPlateDetailsOpen] = useState(false)
+
+    // Receive Dialog State
+    const [receiveDialogOpen, setReceiveDialogOpen] = useState(false)
+    const [itemToReceive, setItemToReceive] = useState<any>(null)
 
     const handleOpenDetails = (item: UnifiedPartItem) => {
         if (item.kind === 'part') {
             setSelectedPart(item.data)
             setDetailsOpen(true)
         } else {
-            toast.info("Plate details coming soon")
+            setSelectedPlate(item.data)
+            setPlateDetailsOpen(true)
         }
     }
 
     const allIds = items.map(i => i.data.id)
     const allSelected = items.length > 0 && selectedIds.length === items.length
-
-    const toggleExpand = (id: string) => {
-        // ... (removed)
-    }
 
     const handleSelect = (id: string) => {
         if (selectedIds.includes(id)) {
@@ -65,12 +70,10 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
 
     const handleCreateWO = () => {
         toast.info(`Creating Work Order for ${selectedIds.length} items (Coming Soon)`)
-        // TODO: Open WO Dialog
     }
 
     const handleToggleSource = async (item: UnifiedPartItem) => {
-        // ... (keep existing)
-        const id = item.kind === 'part' ? item.data.id : item.data.id
+        const id = item.data.id
         setLoadingId(id)
 
         try {
@@ -94,7 +97,6 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     const handleDelete = async (item: UnifiedPartItem) => {
-        // ... (keep existing)
         if (!window.confirm("Are you sure you want to delete this part?")) return
 
         const id = item.data.id
@@ -121,7 +123,24 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
     }
 
     const handleFinish = async (item: UnifiedPartItem) => {
-        // ... (keep existing)
+        const data = item.data
+        const isOutsourced = item.kind === 'part' ? data.isOutsourcedCut : data.isOutsourced
+
+        if (isOutsourced) {
+            // Open Receive Dialog
+            setItemToReceive({
+                id: data.id,
+                type: item.kind,
+                partNumber: data.partNumber,
+                description: data.description,
+                quantity: data.quantity,
+                pieces: data.pieces // Assumes pieces are included in data
+            })
+            setReceiveDialogOpen(true)
+            return
+        }
+
+        // In-House Logic
         const id = item.data.id
         setLoadingId(id)
 
@@ -130,7 +149,6 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
             if (item.kind === 'part') {
                 res = await finishPart(id)
             } else {
-                // For plates, mark as RECEIVED
                 res = await updatePlatePartStatus(id, 'RECEIVED')
             }
 
@@ -343,6 +361,31 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                     projectId={projectId}
                     onUpdate={() => {
                         setDetailsOpen(false)
+                        window.location.reload()
+                    }}
+                />
+            )}
+
+            {selectedPlate && (
+                <PlateDetailsDialog
+                    open={plateDetailsOpen}
+                    onOpenChange={setPlateDetailsOpen}
+                    plate={selectedPlate}
+                    projectId={projectId}
+                    onUpdate={() => {
+                        setPlateDetailsOpen(false)
+                        window.location.reload()
+                    }}
+                />
+            )}
+
+            {itemToReceive && (
+                <ReceiveItemsDialog
+                    open={receiveDialogOpen}
+                    onOpenChange={setReceiveDialogOpen}
+                    item={itemToReceive}
+                    projectId={projectId}
+                    onSuccess={() => {
                         window.location.reload()
                     }}
                 />

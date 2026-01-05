@@ -9,34 +9,35 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { FileText, Package, Layers, History, ArrowRight, Download, Printer } from 'lucide-react'
+import { FileText, Package, Layers, History, ArrowRight, Download, Scissors } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { updatePartQuantity } from '@/app/actions/parts'
+// Note: We might need a specific action for updating plate quantity if it differs from parts
+import { updatePlatePartQuantity } from '@/app/actions/plateparts'
 
-interface PartDetailsDialogProps {
+interface PlateDetailsDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    part: any // We use any here because the type is complex (Part + includes), but we technically know the shape
+    plate: any
     projectId: string
     onUpdate?: () => void
 }
 
-export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdate }: PartDetailsDialogProps) {
+export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpdate }: PlateDetailsDialogProps) {
     const [activeTab, setActiveTab] = useState('general')
     const [editing, setEditing] = useState(false)
     const [saving, setSaving] = useState(false)
 
     // Edit states
-    const [quantity, setQuantity] = useState(part?.quantity || 0)
+    const [quantity, setQuantity] = useState(plate?.quantity || 0)
 
-    if (!part) return null
+    if (!plate) return null
 
     const handleSave = async () => {
         setSaving(true)
         try {
-            if (part.quantity !== quantity) {
-                const res = await updatePartQuantity(part.id, quantity)
+            if (plate.quantity !== quantity) {
+                const res = await updatePlatePartQuantity(plate.id, quantity)
                 if (!res.success) throw new Error(res.error)
                 toast.success("Quantity updated")
                 if (onUpdate) onUpdate()
@@ -49,9 +50,8 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
         }
     }
 
-    const isProfile = part.profileId || part.profileType
-    const drawingUrl = part.drawingRef
-        ? `/api/certificates/view?path=${encodeURIComponent(part.drawingRef)}&bucket=projects`
+    const drawingUrl = plate.dxfStoragePath
+        ? `/api/certificates/view?path=${encodeURIComponent(plate.dxfStoragePath)}&bucket=projects`
         : null
 
     return (
@@ -61,17 +61,17 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                     <div className="flex justify-between items-start">
                         <div>
                             <div className="flex items-center gap-3">
-                                <DialogTitle className="text-2xl font-mono">{part.partNumber}</DialogTitle>
-                                <Badge variant={part.isOutsourcedCut ? "secondary" : "default"}>
-                                    {part.isOutsourcedCut ? "Outsourced" : "In-House"}
+                                <DialogTitle className="text-2xl font-mono">{plate.partNumber}</DialogTitle>
+                                <Badge variant={plate.isOutsourced ? "secondary" : "default"}>
+                                    {plate.isOutsourced ? "Outsourced" : "In-House"}
                                 </Badge>
+                                <Badge variant="outline">{plate.status}</Badge>
                             </div>
                             <DialogDescription className="mt-1 text-base">
-                                {part.description || "No description"}
+                                {plate.description || "No description"}
                             </DialogDescription>
                         </div>
                         <div className="flex gap-2">
-                            {/* Actions like Print Label could go here */}
                             <Button variant="outline" size="sm" onClick={() => setEditing(!editing)}>
                                 {editing ? "Cancel" : "Edit"}
                             </Button>
@@ -80,11 +80,11 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
 
                     <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
                         <TabsList>
-                            <TabsTrigger value="general" className="gap-2"><Package className="h-4 w-4" /> General</TabsTrigger>
-                            <TabsTrigger value="production" className="gap-2"><History className="h-4 w-4" /> Production & Traceability</TabsTrigger>
-                            <TabsTrigger value="assemblies" className="gap-2"><Layers className="h-4 w-4" /> Assemblies ({part.assemblyParts?.length || 0})</TabsTrigger>
+                            <TabsTrigger value="general" className="gap-2"><Scissors className="h-4 w-4" /> General</TabsTrigger>
+                            <TabsTrigger value="production" className="gap-2"><History className="h-4 w-4" /> Traceability</TabsTrigger>
+                            <TabsTrigger value="assemblies" className="gap-2"><Layers className="h-4 w-4" /> Assemblies ({plate.assemblies?.length || 0})</TabsTrigger>
                             {drawingUrl && (
-                                <TabsTrigger value="drawing" className="gap-2"><FileText className="h-4 w-4" /> Drawing</TabsTrigger>
+                                <TabsTrigger value="drawing" className="gap-2"><FileText className="h-4 w-4" /> Drawing / DXF</TabsTrigger>
                             )}
                         </TabsList>
                     </Tabs>
@@ -101,24 +101,22 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                         <h3 className="font-semibold text-lg border-b pb-2">Dimensions & Specs</h3>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <Label className="text-muted-foreground">Type</Label>
-                                                <div className="font-medium">{part.profile?.type || part.profileType || '-'}</div>
-                                            </div>
-                                            <div>
                                                 <Label className="text-muted-foreground">Dimensions</Label>
-                                                <div className="font-medium">{part.profile?.dimensions || part.profileDimensions || '-'}</div>
+                                                <div className="font-medium">
+                                                    {plate.thickness}mm x {plate.width}mm
+                                                </div>
                                             </div>
                                             <div>
                                                 <Label className="text-muted-foreground">Length</Label>
-                                                <div className="font-medium text-lg">{part.length} mm</div>
+                                                <div className="font-medium text-lg">{plate.length} mm</div>
                                             </div>
                                             <div>
-                                                <Label className="text-muted-foreground">Grade</Label>
-                                                <div className="font-medium">{part.grade?.name || '-'}</div>
+                                                <Label className="text-muted-foreground">Material</Label>
+                                                <div className="font-medium">{plate.material || '-'}</div>
                                             </div>
                                             <div>
                                                 <Label className="text-muted-foreground">Unit Weight</Label>
-                                                <div className="font-medium text-muted-foreground">{part.unitWeight?.toFixed(2)} kg</div>
+                                                <div className="font-medium text-muted-foreground">{plate.unitWeight?.toFixed(2)} kg</div>
                                             </div>
                                         </div>
                                     </div>
@@ -136,8 +134,15 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                                         className="w-32"
                                                     />
                                                 ) : (
-                                                    <div className="text-3xl font-bold text-primary">{part.quantity} <span className="text-sm font-normal text-muted-foreground">pcs</span></div>
+                                                    <div className="text-3xl font-bold text-primary">{plate.quantity} <span className="text-sm font-normal text-muted-foreground">pcs</span></div>
                                                 )}
+                                            </div>
+
+                                            <div>
+                                                <Label className="text-muted-foreground">Received Qty</Label>
+                                                <div className="border rounded-md px-3 py-2 bg-muted/50 inline-block min-w-[3rem] text-center">
+                                                    {plate.receivedQty || 0}
+                                                </div>
                                             </div>
 
                                             {editing && (
@@ -160,17 +165,17 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                             <TableRow>
                                                 <TableHead className="w-20">Piece #</TableHead>
                                                 <TableHead>Status</TableHead>
-                                                <TableHead>Material / Lot ID<br /><span className="text-[10px] text-muted-foreground font-normal">(Heating No.)</span></TableHead>
+                                                <TableHead>Details / Traceability</TableHead>
                                                 <TableHead>Timestamps</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {part.pieces?.length > 0 ? (
-                                                part.pieces.map((piece: any) => (
+                                            {plate.pieces?.length > 0 ? (
+                                                plate.pieces.map((piece: any) => (
                                                     <TableRow key={piece.id}>
                                                         <TableCell className="font-medium">#{piece.pieceNumber}</TableCell>
                                                         <TableCell>
-                                                            <Badge variant={piece.status === 'READY' ? 'default' : 'outline'}>
+                                                            <Badge variant={piece.status === 'RECEIVED' ? 'default' : 'outline'}>
                                                                 {piece.status}
                                                             </Badge>
                                                         </TableCell>
@@ -200,8 +205,7 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-xs text-muted-foreground">
-                                                            {piece.cutAt && <div>Cut: {format(new Date(piece.cutAt), 'dd/MM HH:mm')}</div>}
-                                                            {piece.completedAt && <div className="text-green-600 font-medium">Ready: {format(new Date(piece.completedAt), 'dd/MM HH:mm')}</div>}
+                                                            {piece.receivedAt && <div className="text-green-600 font-medium">Received: {format(new Date(piece.receivedAt), 'dd/MM HH:mm')}</div>}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -217,6 +221,7 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                 </div>
                             </TabsContent>
 
+
                             {/* ASSEMBLIES TAB */}
                             <TabsContent value="assemblies" className="mt-0">
                                 <div className="rounded-md border bg-background">
@@ -230,8 +235,8 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {part.assemblyParts?.length > 0 ? (
-                                                part.assemblyParts.map((ap: any) => (
+                                            {plate.assemblies?.length > 0 ? (
+                                                plate.assemblies.map((ap: any) => (
                                                     <TableRow key={ap.id}>
                                                         <TableCell className="font-mono font-medium">{ap.assembly.assemblyNumber}</TableCell>
                                                         <TableCell>{ap.assembly.name}</TableCell>
@@ -261,12 +266,15 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                     <div className="flex justify-end mb-2">
                                         <Button variant="outline" size="sm" asChild>
                                             <a href={drawingUrl} download>
-                                                <Download className="mr-2 h-4 w-4" /> Download PDF
+                                                <Download className="mr-2 h-4 w-4" /> Download File
                                             </a>
                                         </Button>
                                     </div>
+                                    {/* DXF might not render in iframe, but if it's PDF it will. 
+                                        If it's DXF, user will likely just download. 
+                                        We could add a simple DXF viewer later. */}
                                     <iframe
-                                        src={drawingUrl + "#toolbar=0"}
+                                        src={drawingUrl}
                                         className="w-full flex-1 border rounded-md bg-white min-h-[500px]"
                                         title="Drawing Preview"
                                     />

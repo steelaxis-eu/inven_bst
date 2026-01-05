@@ -612,3 +612,140 @@ export async function finishPart(partId: string) {
         return { success: false, error: e.message }
     }
 }
+// ============================================================================
+// RECEIVING OUTSOURCED PARTS
+// ============================================================================
+
+export interface ReceiveBatchInput {
+    projectId: string
+    pieceIds: string[]
+    supplier: string // Name
+    lotId: string // Heat Number
+    certificatePath?: string
+    certificateFilename?: string
+}
+
+/**
+ * Receive a batch of outsourced parts
+ * 1. Create Inventory record (Batch) representing this Heat/Lot
+ * 2. Link Pieces to this Inventory
+ * 3. Update Pieces to RECEIVED/READY
+ */
+export async function receivePartBatch(input: ReceiveBatchInput) {
+    try {
+        const user = await getCurrentUser()
+        if (!user?.id) return { success: false, error: 'Unauthorized' }
+
+        const { projectId, pieceIds, supplier, lotId, certificatePath, certificateFilename } = input
+
+        if (pieceIds.length === 0) return { success: false, error: 'No pieces selected' }
+
+        // We need a Profile and Grade to create Inventory. 
+        // We'll infer it from the first part since they should be the same type if receiving together.
+        // For simplicity, we assume all selected pieces belong to the same Part or at least same Specs.
+        // In this implementation, we assume pieceIds come from one Part type.
+
+        const firstPiece = await prisma.partPiece.findUnique({
+            where: { id: pieceIds[0] },
+            include: { part: true }
+        })
+
+        if (!firstPiece) return { success: false, error: 'Part piece not found' }
+        const part = firstPiece.part
+
+        // Find or Create Supplier
+        let supplierId = ''
+        const existingSupplier = await prisma.supplier.findUnique({ where: { name: supplier } })
+        if (existingSupplier) {
+            supplierId = existingSupplier.id
+        } else {
+            const newSupplier = await prisma.supplier.create({ data: { name: supplier } })
+            supplierId = newSupplier.id
+        }
+
+        // Create "Virtual" Inventory Item (The Batch)
+        // This represents the "Received Batch" which holds the certificate info
+        // We won't track quantityAtHand carefully here as it's immediately "consumed" by the parts, 
+        // but it serves as the trace root.
+
+        // We need profileId/gradeId. If part doesn't have them (custom), we might need fallback or allow nulls in Inventory?
+        // Inventory requires profileId/gradeId. 
+        // If Part is "Custom", we might need to find/create a dummy profile or handle this edge case.
+        // For now, assume Part has profileId/gradeId OR create if missing?
+        // Let's rely on part.profileId and part.gradeId. 
+
+        if (!part.profileId || !part.gradeId) {
+            return { success: false, error: 'Part must have linked Profile and Grade to receive with traceability.' }
+        }
+
+        // Check if Inventory Lot already exists (e.g. receiving remaining 5 pieces of same Heat later)
+        let inventoryId = ''
+        const existingInventory = await prisma.inventory.findUnique({ where: { lotId } })
+
+        if (existingInventory) {
+            inventoryId = existingInventory.id
+            // Update quantity?
+            await prisma.inventory.update({
+                where: { id: inventoryId },
+                data: { quantityReceived: { increment: pieceIds.length } }
+            })
+        } else {
+            // Create new
+            const inv = await prisma.inventory.create({
+                data: {
+                    lotId,
+                    supplierId,
+                    profileId: part.profileId,
+                    gradeId: part.gradeId,
+                    length: part.length || 0,
+                    quantityReceived: pieceIds.length,
+                    quantityAtHand: 0, // Immediately allocated
+                    certificateFilename: certificatePath, // Storing path in filename field for now or add new field? 
+                    // Valid point: Schema has `certificateFilename`. Schema doesn't have `certificatePath` on Inventory.
+                    // But we have `documents`. 
+                    status: 'ACTIVE'
+                }
+            })
+            inventoryId = inv.id
+        }
+
+        const now = new Date()
+
+        await prisma.$transaction(async (tx) => {
+            // 1. Update Pieces
+            await tx.partPiece.updateMany({
+                where: { id: { in: pieceIds } },
+                data: {
+                    status: 'READY', // Or RECEIVED?
+                    inventoryId, // LINK TRACEABILITY
+                    completedAt: now,
+                    completedBy: user.id
+                }
+            })
+
+            // 2. Create Document Link if new Cert
+            // If we want to show the cert in "Documents" tab effectively
+            if (certificatePath) {
+                await tx.projectDocument.create({
+                    data: {
+                        projectId,
+                        type: 'CERTIFICATE',
+                        filename: certificateFilename || 'Certificate.pdf',
+                        storagePath: certificatePath,
+                        uploadedBy: user.id,
+                        description: `Batch ${lotId} Receipt`
+                    }
+                })
+                // Note: We don't link doc directly to Inventory in Schema (except filename string).
+                // We could look up doc by matching strings later.
+            }
+        })
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('receivePartBatch error:', e)
+        return { success: false, error: e.message }
+    }
+}

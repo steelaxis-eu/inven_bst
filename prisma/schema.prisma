@@ -146,6 +146,7 @@ model Inventory {
   supplier          Supplier?    @relation(fields: [supplierId], references: [id])
   usageLines        UsageLine[]
   partPieces        PartPiece[]
+  platePieces       PlatePiece[]
 
   @@index([status])
   @@index([profileId])
@@ -577,11 +578,35 @@ model PlatePart {
   assemblyParts   PlateAssemblyPart[]
   documents       ProjectDocument[]
   workOrderItems  WorkOrderItem[]
+  pieces          PlatePiece[]
 
   @@unique([projectId, partNumber])
   @@index([projectId])
   @@index([status])
   @@index([supplier])
+}
+
+// PlatePiece: Individual plate tracking (Piece 1 of 5)
+model PlatePiece {
+  id              String    @id @default(uuid())
+  platePartId     String
+  pieceNumber     Int       // 1, 2, ...
+  status          String    @default("PENDING")
+                  // PENDING → CUT → RECEIVED → QC_PASSED
+  
+  inventoryId     String?   // Virtual Inventory (Batch) ID for traceability
+  receivedAt      DateTime?
+  receivedBy      String?   // User ID
+  notes           String?
+
+  // Relations
+  platePart       PlatePart @relation(fields: [platePartId], references: [id], onDelete: Cascade)
+  inventory       Inventory? @relation(fields: [inventoryId], references: [id])
+
+  @@unique([platePartId, pieceNumber])
+  @@index([platePartId])
+  @@index([status])
+  @@index([inventoryId])
 }
 
 // PlateAssemblyPart: Junction for plate parts in assemblies

@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { getCurrentUser } from '@/lib/auth'
 
 // ============================================================================
 // PLATE PART CRUD (Outsourced Laser/Plasma Cut Parts)
@@ -51,22 +52,35 @@ export async function createPlatePart(input: CreatePlatePartInput) {
             calculatedWeight = (thickness / 1000) * (width / 1000) * (length / 1000) * density
         }
 
-        const part = await prisma.platePart.create({
-            data: {
-                projectId,
-                partNumber,
-                quantity,
-                thickness,
-                width,
-                length,
-                gradeId,
-                unitWeight: calculatedWeight,
-                ...rest
-            }
+        const result = await prisma.$transaction(async (tx) => {
+            const part = await tx.platePart.create({
+                data: {
+                    projectId,
+                    partNumber,
+                    quantity,
+                    thickness,
+                    width,
+                    length,
+                    gradeId,
+                    unitWeight: calculatedWeight,
+                    ...rest
+                }
+            })
+
+            // Auto-generate PlatePiece records
+            const pieces = Array.from({ length: quantity }, (_, i) => ({
+                platePartId: part.id,
+                pieceNumber: i + 1,
+                status: 'PENDING'
+            }))
+
+            await tx.platePiece.createMany({ data: pieces })
+
+            return part
         })
 
         revalidatePath(`/projects/${projectId}`)
-        return { success: true, data: part }
+        return { success: true, data: result }
 
     } catch (e: any) {
         if (e.code === 'P2002') {
@@ -112,6 +126,10 @@ export async function getProjectPlateParts(projectId: string) {
             documents: true,
             assemblyParts: {
                 include: { assembly: true }
+            },
+            pieces: {
+                orderBy: { pieceNumber: 'asc' },
+                include: { inventory: true }
             }
         },
         orderBy: { partNumber: 'asc' }
@@ -129,9 +147,36 @@ export async function getPlatePart(platePartId: string) {
             documents: true,
             assemblyParts: {
                 include: { assembly: true }
+            },
+            pieces: {
+                orderBy: { pieceNumber: 'asc' },
+                include: { inventory: true }
             }
         }
     })
+}
+
+/**
+ * Update plate part quantity
+ */
+export async function updatePlatePartQuantity(id: string, quantity: number) {
+    try {
+        if (quantity < 0) {
+            return { success: false, error: 'Quantity must be positive' }
+        }
+
+        const part = await prisma.platePart.update({
+            where: { id },
+            data: { quantity }
+        })
+
+        revalidatePath(`/projects/${part.projectId}`)
+        return { success: true, data: part }
+
+    } catch (e: any) {
+        console.error('updatePlatePartQuantity error:', e)
+        return { success: false, error: e.message }
+    }
 }
 
 /**
@@ -302,6 +347,168 @@ export async function getPlatePartsSummary(projectId: string) {
 
     return summary
 }
+// ============================================================================
+// PLATE PIECE STATUS & RECEIVING
+// ============================================================================
+
+export async function bulkUpdatePlatePieceStatus(pieceIds: string[], newStatus: string) {
+    try {
+        const user = await getCurrentUser()
+        const now = new Date()
+
+        // Map status to timestamp field
+        const updateData: any = { status: newStatus }
+        if (newStatus === 'RECEIVED') {
+            updateData.receivedAt = now
+            updateData.receivedBy = user?.id
+        }
+
+        await prisma.platePiece.updateMany({
+            where: { id: { in: pieceIds } },
+            data: updateData
+        })
+
+        revalidatePath('/projects')
+        return { success: true }
+    } catch (e: any) {
+        console.error('bulkUpdatePlatePieceStatus error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+export interface ReceivePlateBatchInput {
+    projectId: string
+    pieceIds: string[]
+    supplier: string
+    lotId: string
+    certificatePath?: string
+    certificateFilename?: string
+}
+
+export async function receivePlateBatch(input: ReceivePlateBatchInput) {
+    try {
+        const user = await getCurrentUser()
+        if (!user?.id) return { success: false, error: 'Unauthorized' }
+
+        const { projectId, pieceIds, supplier, lotId, certificatePath, certificateFilename } = input
+
+        if (pieceIds.length === 0) return { success: false, error: 'No pieces selected' }
+
+        const firstPiece = await prisma.platePiece.findUnique({
+            where: { id: pieceIds[0] },
+            include: { platePart: true }
+        })
+
+        if (!firstPiece) return { success: false, error: 'Plate piece not found' }
+        const part = firstPiece.platePart
+
+        // Find/Create Supplier
+        let supplierId = ''
+        const existingSupplier = await prisma.supplier.findUnique({ where: { name: supplier } })
+        if (existingSupplier) {
+            supplierId = existingSupplier.id
+        } else {
+            const newSupplier = await prisma.supplier.create({ data: { name: supplier } })
+            supplierId = newSupplier.id
+        }
+
+        // Create "Virtual" Inventory for Traceability
+        // For plates, we might not have a "Profile" record.
+        // We need to handle this. If gradeId is present, we rely on that.
+        // For profileId, we might explicitly look for a "Plate" profile or leave it if schema allows (it doesn't, Inventory.profileId is required).
+        // Strategy: Ensure a "PLATE" profile exists or create one dynamically?
+        // Better Strategy: Look for specific Plate Profile "PL-{thickness}"
+
+        if (!part.gradeId) {
+            return { success: false, error: 'Plate Part must have a grade to receive.' }
+        }
+
+        // Find/Create Profile for this Plate Thickness
+        const profileName = `PL ${part.thickness}mm`
+        let profileId = ''
+        const existingProfile = await prisma.steelProfile.findFirst({
+            where: { type: 'PLATE', dimensions: `${part.thickness}` }
+        })
+
+        if (existingProfile) {
+            profileId = existingProfile.id
+        } else {
+            // Create On-the-fly? Or fail?
+            // Let's create it to be safe and robust
+            const newProfile = await prisma.steelProfile.create({
+                data: {
+                    type: 'PLATE',
+                    dimensions: `${part.thickness}`,
+                    weightPerMeter: 0 // Calc logic is different for plates
+                }
+            })
+            profileId = newProfile.id
+        }
+
+        // Check for existing Batch
+        let inventoryId = ''
+        const existingInventory = await prisma.inventory.findUnique({ where: { lotId } })
+
+        if (existingInventory) {
+            inventoryId = existingInventory.id
+            await prisma.inventory.update({
+                where: { id: inventoryId },
+                data: { quantityReceived: { increment: pieceIds.length } }
+            })
+        } else {
+            const inv = await prisma.inventory.create({
+                data: {
+                    lotId,
+                    supplierId,
+                    profileId,
+                    gradeId: part.gradeId,
+                    length: part.length || 0,
+                    quantityReceived: pieceIds.length,
+                    quantityAtHand: 0,
+                    certificateFilename: certificatePath,
+                    status: 'ACTIVE'
+                }
+            })
+            inventoryId = inv.id
+        }
+
+        const now = new Date()
+
+        await prisma.$transaction(async (tx) => {
+            // 1. Update Pieces
+            await tx.platePiece.updateMany({
+                where: { id: { in: pieceIds } },
+                data: {
+                    status: 'RECEIVED',
+                    inventoryId,
+                    receivedAt: now,
+                    receivedBy: user.id
+                }
+            })
+
+            // 2. Doc Link
+            if (certificatePath) {
+                await tx.projectDocument.create({
+                    data: {
+                        projectId,
+                        type: 'CERTIFICATE',
+                        filename: certificateFilename || 'Certificate.pdf',
+                        storagePath: certificatePath,
+                        uploadedBy: user.id,
+                        description: `Batch ${lotId} Receipt (Plates)`
+                    }
+                })
+            }
+        })
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('receivePlateBatch error:', e)
+        return { success: false, error: e.message }
+    }
+}
 
 /**
  * Toggle plate part outsourcing status
@@ -329,6 +536,92 @@ export async function togglePlatePartSource(platePartId: string) {
 
     } catch (e: any) {
         console.error('togglePlatePartSource error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+// ============================================================================
+// IN-HOUSE PLATE PROCESSING (CUTTING FROM STOCK)
+// ============================================================================
+
+/**
+ * Cut a plate piece from Inventory/Remnant (In-House Production)
+ */
+export async function cutPlatePieceWithMaterial(
+    pieceId: string,
+    materialType: 'INVENTORY' | 'REMNANT',
+    materialId: string,
+    quantityUsed: number = 1
+) {
+    try {
+        const user = await getCurrentUser()
+        if (!user?.id) return { success: false, error: 'Unauthorized' }
+
+        const piece = await prisma.platePiece.findUnique({
+            where: { id: pieceId },
+            include: { platePart: { include: { project: true } } }
+        })
+
+        if (!piece) return { success: false, error: 'Piece not found' }
+        if (piece.status !== 'PENDING') return { success: false, error: 'Piece already processed' }
+
+        const projectId = piece.platePart.projectId
+
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Consume Material
+            if (materialType === 'INVENTORY') {
+                const inv = await tx.inventory.findUnique({ where: { id: materialId } })
+                if (!inv || inv.quantityAtHand < quantityUsed) throw new Error('Insufficient inventory')
+
+                await tx.inventory.update({
+                    where: { id: materialId },
+                    data: { quantityAtHand: { decrement: quantityUsed } }
+                })
+            } else {
+                await tx.remnant.update({
+                    where: { id: materialId },
+                    data: { status: 'USED' }
+                })
+            }
+
+            // 2. Create Usage Record
+            const usage = await tx.usage.create({
+                data: {
+                    projectId,
+                    userId: user.id,
+                    createdBy: user.id
+                }
+            })
+
+            await tx.usageLine.create({
+                data: {
+                    usageId: usage.id,
+                    inventoryId: materialType === 'INVENTORY' ? materialId : undefined,
+                    remnantId: materialType === 'REMNANT' ? materialId : undefined,
+                    quantityUsed,
+                    projectId,
+                    cost: 0
+                }
+            })
+
+            // 3. Update Piece
+            await tx.platePiece.update({
+                where: { id: pieceId },
+                data: {
+                    status: 'CUT',
+                    inventoryId: materialType === 'INVENTORY' ? materialId : undefined,
+                    notes: `Cut from ${materialType} ${materialId}`
+                }
+            })
+
+            return usage
+        })
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true }
+
+    } catch (e: any) {
+        console.error('cutPlatePieceWithMaterial error:', e)
         return { success: false, error: e.message }
     }
 }
