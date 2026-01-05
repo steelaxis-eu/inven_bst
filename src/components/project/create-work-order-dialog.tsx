@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { toast } from "sonner"
-import { CalendarIcon, Loader2, Scissors, Truck, Hammer, PaintBucket, ScanEye } from "lucide-react"
+import { CalendarIcon, Loader2, Scissors, Truck, Hammer, PaintBucket, ScanEye, Package } from "lucide-react"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
@@ -50,12 +50,12 @@ import { createSmartWorkOrder, getOptimizationPreview } from "@/app/actions/work
 const formSchema = z.object({
     title: z.string().min(1, "Title is required"),
     type: z.string().min(1, "Type is required"),
-    priority: z.string().default("MEDIUM"),
+    priority: z.string(),
     scheduledDate: z.date().optional(),
     vendor: z.string().optional(), // For Outsourced
     notes: z.string().optional(),
-    isOutsourced: z.boolean().default(false),
-    supplyMaterial: z.boolean().default(false), // For Outsourced
+    isOutsourced: z.boolean(),
+    supplyMaterial: z.boolean(), // For Outsourced
 })
 
 interface CreateWorkOrderDialogProps {

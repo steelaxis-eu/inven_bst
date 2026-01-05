@@ -115,8 +115,8 @@ export async function calculateCuttingPlan(
                 partsCount: n.parts.length
             }))
 
-            const partsFromStock = plan.stockUsed.flatMap(s => s.parts.map(p => p.id))
-            const partsFromNew = plan.newStockNeeded.flatMap(n => n.parts.flatMap(p => p.id))
+            const partsFromStock = plan.stockUsed.flatMap(s => s.parts.map(p => p.partId))
+            const partsFromNew = plan.newStockNeeded.flatMap(n => n.parts.flatMap(p => p.partId))
 
             results.push({
                 profileType: group.profile.type,

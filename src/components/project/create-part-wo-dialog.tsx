@@ -53,13 +53,19 @@ export function CreatePartWODialog({
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined
             })
 
-            if (!res.success) {
-                toast.error(res.error || 'Failed to create work order')
+            if (res.error) {
+                toast.error(res.error)
                 setLoading(false)
                 return
             }
 
-            toast.success(`Work order created: ${res.data?.mainWO?.workOrderNumber}`)
+            // Handles both simple creation and split/outsourced scenarios
+            const woNum = (res as any).data?.mainWO?.workOrderNumber
+                || (res as any).data?.workOrderNumber
+                || (res as any).message
+                || "created"
+
+            toast.success(`Work Order(s) ${woNum}`)
             onOpenChange(false)
             router.refresh()
 
