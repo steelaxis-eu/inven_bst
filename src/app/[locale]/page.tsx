@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button"
 import { CreateUsageDialog } from "@/components/create-usage-dialog"
 import { createClient } from "@/lib/supabase-server"
 import { getActiveProjects } from "@/app/actions/projects"
-import { useTranslations } from 'next-intl';
+import { getTranslations } from 'next-intl/server';
 
 export const dynamic = 'force-dynamic'
 
 import { APP_CONFIG } from "@/lib/config"
 
 export default async function Home() {
-  const t = useTranslations('Dashboard');
+  const t = await getTranslations('Dashboard');
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
