@@ -14,11 +14,11 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 const nextConfig: NextConfig = {
   /* config options here */
   serverExternalPackages: ["@napi-rs/canvas", "canvas"],
+  outputFileTracingIncludes: {
+    '/**': ['./node_modules/@napi-rs/canvas/**/*'],
+  },
   experimental: {
     // serverActions: true, // Next 14 has this by default
-    outputFileTracingIncludes: {
-      '/**': ['./node_modules/@napi-rs/canvas/**/*'],
-    }
   }
 };
 
