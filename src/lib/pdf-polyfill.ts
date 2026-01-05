@@ -42,6 +42,19 @@ if (!(global as any).Canvas) (global as any).Canvas = Canvas;
 if (!(global as any).Image) (global as any).Image = Image;
 if (!(global as any).ImageData) (global as any).ImageData = ImageData;
 
-// Path2D is often needed too, but @napi-rs/canvas does not export it directly as a class in the same way sometimes?
-// Actually it does not export Path2D. PDF.js might warn but continue.
-// Let's at least provide a dummy if needed, but the error was DOMMatrix.
+// Polyfill Path2D
+if (!(global as any).Path2D) {
+    (global as any).Path2D = class Path2D {
+        constructor(path?: Path2D | string) { }
+        addPath(path: Path2D, transform?: any) { }
+        closePath() { }
+        moveTo(x: number, y: number) { }
+        lineTo(x: number, y: number) { }
+        bezierCurveTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number) { }
+        quadraticCurveTo(cpx: number, cpy: number, x: number, y: number) { }
+        arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, counterclockwise?: boolean) { }
+        arcTo(x1: number, y1: number, x2: number, y2: number, radius: number) { }
+        ellipse(x: number, y: number, radiusX: number, radiusY: number, rotation: number, startAngle: number, endAngle: number, counterclockwise?: boolean) { }
+        rect(x: number, y: number, w: number, h: number) { }
+    };
+}
