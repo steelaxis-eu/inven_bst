@@ -14,7 +14,7 @@ export async function getActiveProjects() {
 
 
 export interface CreateProjectInput {
-    number: string
+    number?: string
     name: string
     customerId?: string
     coatingType?: string
@@ -26,13 +26,17 @@ export interface CreateProjectInput {
     deliveryDate?: Date
 }
 
+import { generateNextId } from './settings'
+
 export async function createProject(data: CreateProjectInput) {
-    if (!data.number || !data.name) return { success: false, error: 'Missing fields' }
+    if (!data.name) return { success: false, error: 'Project name is required' }
 
     try {
+        const projectNumber = data.number || await generateNextId('PROJECT')
+
         await prisma.project.create({
             data: {
-                projectNumber: data.number,
+                projectNumber: projectNumber,
                 name: data.name,
                 customerId: data.customerId || null,
                 coatingType: data.coatingType,

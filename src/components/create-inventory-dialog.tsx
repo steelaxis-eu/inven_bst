@@ -225,8 +225,8 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     }
 
     const handleAddItem = async () => {
-        if (!current.lotId || !selectedType || !(selectedDim || customDim) || !selectedGrade || !current.length || !current.quantity) {
-            toast.warning("Please fill required fields (Lot ID, Type, Dim, Grade, Length, Qty)")
+        if (!selectedType || !(selectedDim || customDim) || !selectedGrade || !current.length || !current.quantity) {
+            toast.warning("Please fill required fields (Type, Dim, Grade, Length, Qty)")
             return
         }
 
@@ -326,7 +326,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     <div className="space-y-2 w-full xl:w-36 shrink-0 xl:shrink">
                                         <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Lot ID</Label>
                                         <Input
-                                            placeholder="L-500"
+                                            placeholder="[Auto]"
                                             value={current.lotId}
                                             onChange={e => setCurrent({ ...current, lotId: e.target.value })}
                                             className="font-mono uppercase bg-card h-9"
@@ -562,7 +562,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                         <TableBody>
                                             {items.map((item, idx) => (
                                                 <TableRow key={item._id}>
-                                                    <TableCell className="font-mono">{item.lotId}</TableCell>
+                                                    <TableCell className="font-mono">{item.lotId || <span className="text-muted-foreground">[Auto]</span>}</TableCell>
                                                     <TableCell>{item.profileName?.split(' ')[0]}</TableCell>
                                                     <TableCell>{item.profileName?.split('(')[0].split(' ').slice(1).join(' ')}</TableCell>
                                                     <TableCell>{item.length}</TableCell>

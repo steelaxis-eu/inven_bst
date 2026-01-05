@@ -39,8 +39,8 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
     const router = useRouter()
 
     const handleSubmit = async () => {
-        if (!projectNumber || !name) {
-            toast.error("Project Number and Name are required")
+        if (!name) {
+            toast.error("Project Name is required")
             return
         }
 
@@ -99,11 +99,11 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                     {/* Basic Info */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
-                            <Label>Project Number *</Label>
+                            <Label>Project Number</Label>
                             <Input
                                 value={projectNumber}
                                 onChange={e => setProjectNumber(e.target.value)}
-                                placeholder="e.g. P-1002"
+                                placeholder="(Auto-generated if empty)"
                             />
                         </div>
                         <div className="grid gap-2">
