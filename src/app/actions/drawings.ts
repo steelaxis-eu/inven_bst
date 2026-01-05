@@ -7,7 +7,9 @@ import '@/lib/pdf-polyfill'
 // @ts-ignore
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 // @ts-ignore
-import 'pdfjs-dist/legacy/build/pdf.worker.entry'
+import 'pdfjs-dist/legacy/build/pdf.worker.mjs'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = ''
 import { createCanvas } from '@napi-rs/canvas'
 
 // Initialize PDF.js worker logic
