@@ -326,10 +326,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 const canvas = createCanvas(viewport.width, viewport.height)
                 const context = canvas.getContext('2d')
 
-                // Render High Res for Gemini
-                const viewport = page.getViewport({ scale: 2.0 })
-                const canvas = createCanvas(viewport.width, viewport.height)
-                const context = canvas.getContext('2d')
+
 
                 // Patch context to support Polyfill Path2D
                 const patchContext = (ctx: any) => {
