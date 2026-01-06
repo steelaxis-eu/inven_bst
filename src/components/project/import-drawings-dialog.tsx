@@ -286,7 +286,52 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                 </DialogHeader>
 
                 <div className="flex-1 overflow-hidden p-1 mt-2">
-                    {/* ... (Upload / ScrollArea logic) ... */}
+                    {step === 'upload' && (
+                        <div
+                            className={`
+                                h-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-6 text-center transition-colors
+                                ${isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"}
+                            `}
+                            onDragEnter={handleDragEnter}
+                            onDragLeave={handleDragLeave}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                        >
+                            <div className="flex flex-col items-center justify-center space-y-4 max-w-md">
+                                <div className={`p-4 rounded-full ${isDragging ? "bg-primary/10" : "bg-muted"}`}>
+                                    <Upload className="h-8 w-8 text-muted-foreground" />
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-lg">
+                                        {isDragging ? "Drop ZIP file here" : "Upload Drawings ZIP"}
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        Drag and drop a ZIP file containing your PDF drawings, or click below to browse.
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Input
+                                        type="file"
+                                        className="hidden"
+                                        id="file-upload"
+                                        accept=".zip"
+                                        onChange={handleFileChange}
+                                    />
+                                    <Button variant={file ? "secondary" : "default"} asChild>
+                                        <label htmlFor="file-upload" className="cursor-pointer">
+                                            {file ? "Change File" : "Select File"}
+                                        </label>
+                                    </Button>
+                                    {file && (
+                                        <Badge variant="outline" className="h-9 px-3 flex items-center gap-1 font-mono text-sm">
+                                            <Package className="h-3 w-3" />
+                                            {file.name}
+                                        </Badge>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {step === 'review' && (
                         <ScrollArea className="h-full border rounded-md">
                             <div className="min-w-max p-2">
