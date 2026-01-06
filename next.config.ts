@@ -14,6 +14,7 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 const nextConfig: NextConfig = {
   /* config options here */
   serverExternalPackages: ["canvas"],
+  transpilePackages: ["pdfjs-dist"],
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
