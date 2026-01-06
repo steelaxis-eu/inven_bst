@@ -94,6 +94,9 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
              - Keywords to look for: RHS, SHS, IPE, HEA, HEB, UNP, UPE, L-Profile, Angle, Tube, Pipe, Beam.
              - Example Descriptions: "HEA 200", "RHS 100x100x5", "L 50x50x5".
              - If the part is defined by a Profile Name (e.g. "IPE200") it is a PROFILE.
+             - **RHS vs SHS Rule**: 
+                - If a tube is SQUARE (e.g. 60x60x4 or Side=60, Wall=4), classify as **SHS**.
+                - If a tube is RECTANGULAR (e.g. 100x50x5), classify as **RHS**.
           
           2. **PLATE**: Any part that is a flat sheet of material defined by Thickness x Width x Length.
              - Typically designated as "PL", "FL", "Flat Bar" (sometimes), or just dimensions like "10x200x500".
@@ -101,8 +104,10 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
           EXTRACTION INSTRUCTIONS:
           - **type**: MUST be "PROFILE" or "PLATE" based on the rules above.
-          - **profileType**: If type is PROFILE, extract the designation (e.g. "RHS").
-          - **profileDimensions**: If type is PROFILE, extract the dimensions string (e.g. "100x100x5").
+          - **profileType**: If type is PROFILE, extract the designation (e.g. "RHS", "SHS", "IPE"). Use standard abbreviations.
+          - **profileDimensions**: If type is PROFILE, extract the dimensions string. 
+             - **FORMAT**: Use 'x' as separator (e.g. "100x100x5"). DO NOT use '*'.
+             - For SHS/RHS, strictly use format: Side x Side x Thickness (e.g. "60x60x4") or Width x Height x Thickness.
           - **thickness**: Critical for PLATE. Extract in mm.
           - **width**: Critical for PLATE. Extract in mm.
           - **length**: Extract in mm for all parts.
@@ -128,6 +133,43 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 let data: any = {}
                 try {
                     data = JSON.parse(text)
+
+                    // --- Post-Processing & Cleaning ---
+
+                    // 1. Clean Profile Dimensions (replace * with x)
+                    if (data.profileDimensions) {
+                        data.profileDimensions = data.profileDimensions.replace(/\*/g, 'x').toLowerCase()
+                    }
+
+                    // 2. Fix SHS/RHS Confusion
+                    // Logic: If identified as RHS but dims are like "60x4" (WxT), convert to SHS 60x60x4
+                    if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('RHS')) {
+                        const dims = data.profileDimensions?.split('x') || []
+                        // Case: "60x4" -> [60, 4]
+                        if (dims.length === 2) {
+                            const side = dims[0]
+                            const wall = dims[1]
+                            // Assume it implies a square tube
+                            data.profileType = "SHS"
+                            data.profileDimensions = `${side}x${side}x${wall}`
+                        }
+                    }
+
+                    // 2.1 Ensure SHS has 3 dims "60x60x4" if only 2 provided "60x4" even if AI called it SHS
+                    if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('SHS')) {
+                        const dims = data.profileDimensions?.split('x') || []
+                        if (dims.length === 2) {
+                            const side = dims[0]
+                            const wall = dims[1]
+                            data.profileDimensions = `${side}x${side}x${wall}`
+                        }
+                    }
+
+                    // 3. Normalize Profile Type (Uppercase)
+                    if (data.profileType) {
+                        data.profileType = data.profileType.toUpperCase()
+                    }
+
                 } catch (e) {
                     console.error("Failed to parse Gemini JSON", text)
                     data = { partNumber: "PARSE_ERROR" }
@@ -137,7 +179,8 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     id: uuidv4(),
                     filename: entry.name,
                     partNumber: data.partNumber || entry.name.replace('.pdf', ''),
-                    description: data.title || "",
+                    description: data.title || "", // data.title corresponds to description in ParsedPart based on context
+
                     quantity: data.quantity || 1,
                     material: data.material || "",
                     thickness: data.thickness || 0,
