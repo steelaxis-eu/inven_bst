@@ -15,13 +15,6 @@ const nextConfig: NextConfig = {
   /* config options here */
   serverExternalPackages: ["@napi-rs/canvas", "canvas"],
   transpilePackages: ["pdfjs-dist"],
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      canvas: '@napi-rs/canvas',
-    }
-    return config
-  },
   experimental: {
     // serverActions: true, // Next 14 has this by default
   }
