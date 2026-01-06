@@ -289,7 +289,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     Import Drawings
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[98vw] w-full h-[98vh] flex flex-col p-4">
+            <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] flex flex-col p-4 md:max-w-screen-2xl lg:max-w-none">
                 <DialogHeader>
                     <DialogTitle>Import from Drawings</DialogTitle>
                     <DialogDescription>

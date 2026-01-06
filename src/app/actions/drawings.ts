@@ -84,13 +84,18 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
           - title: The part description or title.
           - quantity: The required quantity (QTY). If not found, default to 1.
           - material: The material grade (e.g., S355, 304, AlMg3). Standardize if possible.
-          - type: "PLATE" or "PROFILE" (if it looks like a beam, tube, or section).
-          - profileType: If it is a profile, specify the type (e.g., RHS, SHS, CHS, IPE, HEA, HEB, UNP, L-Profile, Flat Bar).
-          - profileDimensions: If it is a profile, specify the dimensions string (e.g., "100x100x5", "IPE200").
-          - thickness: The thickness of the plate in mm (if Plate).
+          - type: "PROFILE" if the part is a beam, tube, angle, or channel (e.g. HEA, IPE, RHS, SHS, UNP, L-profile). "PLATE" ONLY if it is a flat sheet defined by Thickness x Width x Length.
+          - profileType: REQUIRED if type is "PROFILE". Specify the designation (e.g. "RHS", "SHS", "IPE", "HEA", "FLAT BAR").
+          - profileDimensions: REQUIRED if type is "PROFILE". The standard dimension string (e.g. "100x100x5", "IPE200", "50x5").
+          - thickness: The thickness in mm (CRITICAL for Plate).
           - width: The width in mm (if Plate).
           - length: The length in mm.
-          - confidence: Your confidence (0-100) in the extraction, especially Part Number and Qty.
+          - confidence: Your confidence (0-100) in the extraction.
+          
+          GUIDANCE:
+          - If the description says "HEA", "IPE", "UNP" or similar, it IS A PROFILE.
+          - If the description looks like "PL 10x200" it is a PLATE.
+          - If the part is a tube (rectangular or square), it is a PROFILE (RHS/SHS).
         `
 
                 const result = await model.generateContent([
