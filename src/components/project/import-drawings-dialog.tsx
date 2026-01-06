@@ -289,7 +289,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     Import Drawings
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] w-full h-[95vh] flex flex-col">
+            <DialogContent className="max-w-[98vw] w-full h-[98vh] flex flex-col p-4">
                 <DialogHeader>
                     <DialogTitle>Import from Drawings</DialogTitle>
                     <DialogDescription>
@@ -346,17 +346,17 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         </div>
                     ) : (
                         <ScrollArea className="h-full border rounded-md">
-                            {mode === 'parts' ? (
-                                <div className="min-w-[1000px]">
+                            <div className="min-w-max p-2">
+                                {mode === 'parts' ? (
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-12"><Checkbox /></TableHead>
-                                                <TableHead className="w-56">Part Number</TableHead>
-                                                <TableHead className="w-32">Type</TableHead>
-                                                <TableHead className="w-20">Qty</TableHead>
-                                                <TableHead className="w-32">Grade</TableHead>
-                                                <TableHead className="w-[300px]">Dimensions</TableHead>
+                                                <TableHead className="min-w-[200px]">Part Number</TableHead>
+                                                <TableHead className="min-w-[140px]">Type</TableHead>
+                                                <TableHead className="min-w-[80px]">Qty</TableHead>
+                                                <TableHead className="min-w-[140px]">Grade</TableHead>
+                                                <TableHead className="min-w-[350px]">Dimensions</TableHead>
                                                 <TableHead className="w-12"></TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -368,13 +368,13 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="space-y-1">
-                                                            <Input value={part.partNumber} onChange={(e) => updatePart(part.id, { partNumber: e.target.value })} className="h-8 font-mono" />
+                                                            <Input value={part.partNumber} onChange={(e) => updatePart(part.id, { partNumber: e.target.value })} className="h-8 font-mono w-full" />
                                                             <p className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={part.filename}>{part.filename}</p>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <Select value={part.type} onValueChange={(v: any) => updatePart(part.id, { type: v })}>
-                                                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                                            <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
                                                             <SelectContent>
                                                                 <SelectItem value="PLATE">Plate</SelectItem>
                                                                 <SelectItem value="PROFILE">Profile</SelectItem>
@@ -386,32 +386,31 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                     </TableCell>
                                                     <TableCell>
                                                         <Select value={part.selectedGradeId} onValueChange={(v) => updatePart(part.id, { selectedGradeId: v })}>
-                                                            <SelectTrigger className="h-8"><SelectValue placeholder="Grade" /></SelectTrigger>
+                                                            <SelectTrigger className="h-8 w-full"><SelectValue placeholder="Grade" /></SelectTrigger>
                                                             <SelectContent>{grades.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                                         </Select>
                                                     </TableCell>
                                                     <TableCell>
                                                         {part.type === 'PLATE' ? (
                                                             <div className="flex items-center gap-1">
-                                                                <Input placeholder="T" value={part.thickness} onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                                <Input placeholder="T" value={part.thickness} onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
                                                                 <span className="text-xs">x</span>
-                                                                <Input placeholder="W" value={part.width} onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                                <Input placeholder="W" value={part.width} onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
                                                                 <span className="text-xs">x</span>
-                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
                                                             </div>
                                                         ) : (
                                                             <div className="flex items-center gap-1">
                                                                 <Select value={part.selectedProfileType} onValueChange={(v) => updatePart(part.id, { selectedProfileType: v })}>
-                                                                    <SelectTrigger className="h-8 w-28"><SelectValue placeholder="Type" /></SelectTrigger>
+                                                                    <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Type" /></SelectTrigger>
                                                                     <SelectContent>{profileTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                                                                 </Select>
-                                                                {/* Allow manual input if select options are insufficient or AI guessed something new, but for now stick to Select for stability or Combobox later */}
                                                                 <div className="relative">
                                                                     <Input
                                                                         placeholder="Dim"
                                                                         value={part.selectedProfileDim}
                                                                         onChange={(e) => updatePart(part.id, { selectedProfileDim: e.target.value })}
-                                                                        className="h-8 w-32"
+                                                                        className="h-8 w-36"
                                                                         list={`dims-${part.id}`}
                                                                     />
                                                                     <datalist id={`dims-${part.id}`}>
@@ -419,7 +418,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                                     </datalist>
                                                                 </div>
 
-                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
+                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-24" />
                                                             </div>
                                                         )}
                                                     </TableCell>
@@ -431,53 +430,53 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                             ))}
                                         </TableBody>
                                     </Table>
-                                </div>
-                            ) : (
-                                <Table>
-                                    {/* ... (Assembluy table - unchanged) ... */}
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-10"><Checkbox /></TableHead>
-                                            <TableHead className="w-40">Assembly Number</TableHead>
-                                            <TableHead className="w-48">Name</TableHead>
-                                            <TableHead className="w-20">Qty</TableHead>
-                                            <TableHead>BOM Summary</TableHead>
-                                            <TableHead className="w-10"></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {assemblies.map((assembly) => (
-                                            <TableRow key={assembly.id} className={assembly.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
-                                                <TableCell>
-                                                    <Checkbox checked={assembly.include} onCheckedChange={(c) => updateAssembly(assembly.id, { include: c === true })} disabled={assembly.status === 'CREATED'} />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input value={assembly.assemblyNumber} onChange={(e) => updateAssembly(assembly.id, { assemblyNumber: e.target.value })} className="h-8 font-mono" />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input value={assembly.name} onChange={(e) => updateAssembly(assembly.id, { name: e.target.value })} className="h-8" />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input type="number" value={assembly.quantity} onChange={(e) => updateAssembly(assembly.id, { quantity: parseInt(e.target.value) || 1 })} className="h-8" />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col text-xs text-muted-foreground">
-                                                        <span>{assembly.bom.length} items extracted</span>
-                                                        <span className="truncate max-w-[200px]" title={assembly.bom.map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}>
-                                                            {assembly.bom.slice(0, 3).map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}
-                                                            {assembly.bom.length > 3 && '...'}
-                                                        </span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {assembly.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                    {assembly.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
-                                                </TableCell>
+                                ) : (
+                                    <Table>
+                                        {/* ... (Assembluy table - unchanged) ... */}
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-10"><Checkbox /></TableHead>
+                                                <TableHead className="w-40">Assembly Number</TableHead>
+                                                <TableHead className="w-48">Name</TableHead>
+                                                <TableHead className="w-20">Qty</TableHead>
+                                                <TableHead>BOM Summary</TableHead>
+                                                <TableHead className="w-10"></TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
+                                        </TableHeader>
+                                        <TableBody>
+                                            {assemblies.map((assembly) => (
+                                                <TableRow key={assembly.id} className={assembly.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
+                                                    <TableCell>
+                                                        <Checkbox checked={assembly.include} onCheckedChange={(c) => updateAssembly(assembly.id, { include: c === true })} disabled={assembly.status === 'CREATED'} />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Input value={assembly.assemblyNumber} onChange={(e) => updateAssembly(assembly.id, { assemblyNumber: e.target.value })} className="h-8 font-mono" />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Input value={assembly.name} onChange={(e) => updateAssembly(assembly.id, { name: e.target.value })} className="h-8" />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Input type="number" value={assembly.quantity} onChange={(e) => updateAssembly(assembly.id, { quantity: parseInt(e.target.value) || 1 })} className="h-8" />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col text-xs text-muted-foreground">
+                                                            <span>{assembly.bom.length} items extracted</span>
+                                                            <span className="truncate max-w-[200px]" title={assembly.bom.map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}>
+                                                                {assembly.bom.slice(0, 3).map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}
+                                                                {assembly.bom.length > 3 && '...'}
+                                                            </span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {assembly.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                        {assembly.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                )}
+                            </div>
                         </ScrollArea>
                     )}
                 </div>
