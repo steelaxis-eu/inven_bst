@@ -10,7 +10,7 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
 import 'pdfjs-dist/legacy/build/pdf.worker.mjs'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = ''
-import { createCanvas } from '@napi-rs/canvas'
+import { createCanvas } from 'canvas'
 
 // Initialize PDF.js worker logic
 // Note: In a server action, simple imports often suffice for legacy build

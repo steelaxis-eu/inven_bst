@@ -13,10 +13,13 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ["canvas", "@napi-rs/canvas"],
-  outputFileTracingIncludes: {
-    "/api/**/*": ["./node_modules/@napi-rs/canvas/**/*.node"],
-    "/**/*": ["./node_modules/@napi-rs/canvas/**/*.node"],
+  serverExternalPackages: ["canvas"],
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@napi-rs/canvas': 'canvas',
+    }
+    return config
   },
   experimental: {
     // serverActions: true, // Next 14 has this by default

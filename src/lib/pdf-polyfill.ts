@@ -1,5 +1,5 @@
 // This file must be imported before pdfjs-dist
-import { Canvas, Image, ImageData, DOMMatrix } from '@napi-rs/canvas'
+import { Canvas, Image, ImageData, DOMMatrix } from 'canvas'
 
 // Polyfill Globals that PDF.js expects
 if (!(global as any).Canvas) (global as any).Canvas = Canvas;
