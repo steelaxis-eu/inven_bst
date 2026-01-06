@@ -16,6 +16,7 @@ export interface ParsedPart {
     length: number
     profileType?: string // e.g. RHS, SHS, IPE
     profileDimensions?: string // e.g. 100x100x5
+    type?: string // 'PROFILE' | 'PLATE'
     confidence: number
     thumbnail?: string
 }
@@ -33,6 +34,7 @@ const GENERATION_CONFIG = {
             width: { type: SchemaType.NUMBER },
             length: { type: SchemaType.NUMBER },
             confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" },
+            type: { type: SchemaType.STRING, description: "Type of part: 'PROFILE' or 'PLATE'" },
             profileType: { type: SchemaType.STRING, description: "Type of profile if applicable (RHS, SHS, IPE, etc.)" },
             profileDimensions: { type: SchemaType.STRING, description: "Dimensions string for profile (e.g. 100x100x5)" }
         }
