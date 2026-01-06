@@ -110,19 +110,16 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         let type: 'PROFILE' | 'PLATE' = 'PLATE'
 
                         // Enhanced Profile Detection Logic
-                        // 1. Check if AI explicitly found a profile type
-                        if (p.profileType) {
-                            // Try to match AI profile type to our standard types (fuzzy match or direct)
-                            const normalizedAiType = p.profileType.toUpperCase().replace(/[^A-Z]/g, '')
-                            if (profileTypes.some(t => t.includes(normalizedAiType) || normalizedAiType.includes(t))) {
-                                type = 'PROFILE'
-                            }
+                        // 1. Trust AI: If AI identifies a profile type or explicitly says PROFILE, it is a profile.
+                        if (p.profileType || p.type === 'PROFILE') {
+                            type = 'PROFILE'
                         }
 
                         // 2. Fallback to name/filename matching if not already found
                         if (type === 'PLATE') {
                             const name = (p.filename + p.partNumber).toUpperCase()
-                            if (profileTypes.some(t => name.includes(t))) {
+                            // If name contains common profile indicators
+                            if (profileTypes.some(t => name.includes(t)) || /RHS|SHS|IPE|HEA|HEB|UNP|TUB|BEAM/i.test(name)) {
                                 type = 'PROFILE'
                             }
                         }
