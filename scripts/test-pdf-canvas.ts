@@ -8,23 +8,31 @@ console.log('Testing alias configuration...');
 const fs = require('fs');
 
 function findModulePath(moduleName: string): string | null {
+    // 1. Search from process.cwd()
     let currentDir = process.cwd();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 8; i++) { // Check deeper/higher
         const candidate = path.join(currentDir, 'node_modules', moduleName);
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
+        if (fs.existsSync(candidate)) return candidate;
         currentDir = path.dirname(currentDir);
     }
 
-    // Fallback for Vercel Serverless environment where process.cwd() might be different
-    const vercelPaths = [
-        path.join(process.cwd(), 'node_modules', moduleName),
-        path.join(process.cwd(), '.next', 'server', 'node_modules', moduleName),
-        '/var/task/node_modules/' + moduleName
+    // 2. Search from __dirname (useful if CWD is weird)
+    currentDir = __dirname;
+    for (let i = 0; i < 8; i++) {
+        const candidate = path.join(currentDir, 'node_modules', moduleName);
+        if (fs.existsSync(candidate)) return candidate;
+        currentDir = path.dirname(currentDir);
+    }
+
+    // 3. Fallback for specific Vercel/Next.js known paths
+    const commonPaths = [
+        path.join(process.cwd(), '.next/server/node_modules', moduleName),
+        path.join(process.cwd(), '.next/server/app/node_modules', moduleName),
+        '/var/task/node_modules/' + moduleName,
+        '/vercel/path0/node_modules/' + moduleName
     ];
 
-    for (const p of vercelPaths) {
+    for (const p of commonPaths) {
         if (fs.existsSync(p)) return p;
     }
 
@@ -32,6 +40,9 @@ function findModulePath(moduleName: string): string | null {
 }
 
 try {
+    console.log('[Test Debug] CWD:', process.cwd());
+    console.log('[Test Debug] __dirname:', __dirname);
+
     // Simulate the logic in alias-config.ts
     const canvasPath = findModulePath('@napi-rs/canvas');
     console.log(`Resolved @napi-rs/canvas path: ${canvasPath}`);

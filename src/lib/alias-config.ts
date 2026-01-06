@@ -4,26 +4,31 @@ const path = require('path');
 const fs = require('fs');
 
 function findModulePath(moduleName: string): string | null {
-    // Try to find node_modules in current or parent directories
+    // 1. Search from process.cwd()
     let currentDir = process.cwd();
-    // Check up to 5 levels up
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 8; i++) { // Check deeper/higher
         const candidate = path.join(currentDir, 'node_modules', moduleName);
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
+        if (fs.existsSync(candidate)) return candidate;
         currentDir = path.dirname(currentDir);
     }
 
-    // Fallback for Vercel Serverless environment where process.cwd() might be different
-    // Vercel typical paths: /var/task/node_modules
-    const vercelPaths = [
-        path.join(process.cwd(), 'node_modules', moduleName),
-        path.join(process.cwd(), '.next', 'server', 'node_modules', moduleName),
-        '/var/task/node_modules/' + moduleName
+    // 2. Search from __dirname (useful if CWD is weird)
+    currentDir = __dirname;
+    for (let i = 0; i < 8; i++) {
+        const candidate = path.join(currentDir, 'node_modules', moduleName);
+        if (fs.existsSync(candidate)) return candidate;
+        currentDir = path.dirname(currentDir);
+    }
+
+    // 3. Fallback for specific Vercel/Next.js known paths
+    const commonPaths = [
+        path.join(process.cwd(), '.next/server/node_modules', moduleName),
+        path.join(process.cwd(), '.next/server/app/node_modules', moduleName), // Sometimes here in app router
+        '/var/task/node_modules/' + moduleName,
+        '/vercel/path0/node_modules/' + moduleName
     ];
 
-    for (const p of vercelPaths) {
+    for (const p of commonPaths) {
         if (fs.existsSync(p)) return p;
     }
 
@@ -31,13 +36,31 @@ function findModulePath(moduleName: string): string | null {
 }
 
 try {
+    console.log('[Alias Debug] CWD:', process.cwd());
+    console.log('[Alias Debug] __dirname:', __dirname);
+
+    // Try to list convenient directories to debug
+    try {
+        if (fs.existsSync(path.join(process.cwd(), 'node_modules'))) {
+            // Check if @napi-rs exists there
+            const napiPath = path.join(process.cwd(), 'node_modules/@napi-rs');
+            if (fs.existsSync(napiPath)) {
+                console.log('[Alias Debug] @napi-rs contents:', fs.readdirSync(napiPath));
+            } else {
+                console.log('[Alias Debug] node_modules/@napi-rs DOES NOT EXIST at CWD');
+            }
+        } else {
+            console.log('[Alias Debug] node_modules DOES NOT EXIST at CWD');
+        }
+    } catch (e) { console.error('[Alias Debug] Listing Error:', e); }
+
     const canvasPath = findModulePath('@napi-rs/canvas');
     if (canvasPath) {
         moduleAlias.addAlias('canvas', canvasPath);
         console.log('[Alias] Registered canvas -> ' + canvasPath);
     } else {
-        console.warn('[Alias] Could not find @napi-rs/canvas in node_modules, falling back to package name');
-        // Fallback to string just in case
+        console.warn('[Alias] CRITICAL: Could not find @napi-rs/canvas in node_modules! Falling back to package name.');
+        // Fallback is likely to fail if file system search failed, but we try.
         moduleAlias.addAlias('canvas', '@napi-rs/canvas');
     }
 } catch (e) {
