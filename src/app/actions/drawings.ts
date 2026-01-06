@@ -2,7 +2,7 @@
 
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
+import { GoogleGenerativeAI, SchemaType, GenerationConfig } from '@google/generative-ai'
 
 export interface ParsedPart {
     id: string
@@ -21,7 +21,7 @@ export interface ParsedPart {
     thumbnail?: string
 }
 
-const GENERATION_CONFIG = {
+const GENERATION_CONFIG: GenerationConfig = {
     responseMimeType: "application/json",
     responseSchema: {
         type: SchemaType.OBJECT,
@@ -36,6 +36,7 @@ const GENERATION_CONFIG = {
             confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" },
             type: {
                 type: SchemaType.STRING,
+                format: "enum",
                 description: "Type of part: 'PROFILE' or 'PLATE' only.",
                 enum: ["PROFILE", "PLATE"]
             },
