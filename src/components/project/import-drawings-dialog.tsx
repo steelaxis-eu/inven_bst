@@ -68,33 +68,54 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     }, [grades])
 
     // Sync context status with dialog open state
+    // Sync context status with dialog open state and initialize data
     useEffect(() => {
         if (status === 'reviewing') {
             setOpen(true)
-            if (resultParts.length > 0) {
+
+            // Only initialize if we haven't already populate the table
+            // This prevents overwriting user edits if this effect re-runs due to other dependency changes
+            if (resultParts.length > 0 && parts.length === 0) {
                 // Map ParsedParts to ReviewParts carefully
-                const mappedParts = resultParts.map(p => ({
-                    ...p,
-                    include: true,
-                    // Ensure type is uppercase and valid, default to PLATE if ambiguous
-                    type: (p.type?.toUpperCase() === 'PROFILE' ? 'PROFILE' : 'PLATE') as 'PROFILE' | 'PLATE',
-                    // Map extracted profile data to the input fields
-                    selectedProfileType: p.profileType ? p.profileType.toUpperCase() : undefined,
-                    selectedProfileDim: p.profileDimensions,
-                    // Try to match grade if possible (later enhancement), default undefined
-                    selectedGradeId: undefined,
-                    status: 'PENDING'
-                }))
+                const mappedParts: ReviewPart[] = resultParts.map(p => {
+                    // Normalize type
+                    // The AI is instructed to return PROFILE or PLATE, but we handle safe fallbacks
+                    const rawType = p.type?.toUpperCase() || 'PLATE'
+                    const isProfile = rawType === 'PROFILE' || !!p.profileType
+
+                    // Try to match grade
+                    const matchedGrade = availableGrades.find(g =>
+                        g.name.toLowerCase() === p.material?.toLowerCase() ||
+                        // Check for common variations like leaving out spaces "S235JR" vs "S235 JR"
+                        g.name.replace(/\s+/g, '').toLowerCase() === p.material?.replace(/\s+/g, '').toLowerCase()
+                    )
+
+                    return {
+                        ...p,
+                        include: true,
+                        // If profileType is present, force PROFILE even if type says PLATE (AI inconsistency fix)
+                        type: isProfile ? 'PROFILE' : 'PLATE',
+
+                        // Map extracted profile data
+                        selectedProfileType: p.profileType ? p.profileType.toUpperCase() : undefined,
+                        selectedProfileDim: p.profileDimensions,
+
+                        // Map Grade
+                        selectedGradeId: matchedGrade?.id,
+
+                        status: 'PENDING' as const
+                    }
+                })
                 setParts(mappedParts)
                 setStep('review')
                 setMode('parts')
-            } else if (resultAssemblies.length > 0) {
-                setAssemblies(resultAssemblies)
+            } else if (resultAssemblies.length > 0 && assemblies.length === 0) {
+                setAssemblies(resultAssemblies.map(a => ({ ...a, include: true, status: 'PENDING' })))
                 setStep('review')
                 setMode('assemblies')
             }
         }
-    }, [status, resultParts, resultAssemblies])
+    }, [status, resultParts, resultAssemblies, availableGrades])
 
     // Derived lists for Profile Selectors
     const profileTypes = Array.from(new Set([
