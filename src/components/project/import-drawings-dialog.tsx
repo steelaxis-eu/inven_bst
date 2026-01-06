@@ -246,14 +246,22 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
         const res = await createGrade(newGradeName)
         if (res.success && res.grade) {
-            toast.success("Grade created")
-            const newGrade = { id: res.grade.id, name: res.grade.name }
-            setAvailableGrades(prev => [...prev, newGrade])
+            toast.success(`Grade ${res.grade.name} created`)
+            const newGradeItem = { id: res.grade.id, name: res.grade.name }
+
+            setAvailableGrades(prev => [...prev, newGradeItem])
+
+            // AUTO-LINKING: Update all parts that match this new grade name
+            setParts(prevParts => prevParts.map(p => {
+                // Check if part has no grade selected AND its parsed material matches the new grade
+                if (!p.selectedGradeId && p.material && p.material.toLowerCase() === newGradeName.toLowerCase()) {
+                    return { ...p, selectedGradeId: res.grade.id }
+                }
+                return p
+            }))
+
             setNewGradeName("")
             setIsAddingGrade(false)
-
-            // If we have a pending part waiting for this grade, we could auto-select it
-            // For now, the user just selects it from the list which now contains it
         } else {
             toast.error(res.error || "Failed to create grade")
         }
@@ -378,16 +386,37 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                             value={part.selectedGradeId}
                                                             onValueChange={(v) => {
                                                                 if (v === 'new') {
+                                                                    setNewGradeName("")
+                                                                    setIsAddingGrade(true)
+                                                                } else if (v.startsWith('create:')) {
+                                                                    const nameToCreate = v.split(':')[1]
+                                                                    setNewGradeName(nameToCreate)
                                                                     setIsAddingGrade(true)
                                                                 } else {
                                                                     updatePart(part.id, { selectedGradeId: v })
                                                                 }
                                                             }}
                                                         >
-                                                            <SelectTrigger className="h-8 w-full"><SelectValue placeholder="Grade" /></SelectTrigger>
+                                                            <SelectTrigger
+                                                                className={`h-8 w-full ${!part.selectedGradeId && part.material ? "border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30" : ""}`}
+                                                            >
+                                                                <SelectValue
+                                                                    placeholder={(!part.selectedGradeId && part.material) ? `Add ${part.material}?` : "Grade"}
+                                                                />
+                                                            </SelectTrigger>
                                                             <SelectContent>
+                                                                {/* Helper Option: If we have a parsed material but no ID, offer to create it */}
+                                                                {(!part.selectedGradeId && part.material) && (
+                                                                    <SelectItem value={`create:${part.material}`} className="text-amber-600 font-semibold focus:text-amber-700 focus:bg-amber-50">
+                                                                        ✨ Create "{part.material}"
+                                                                    </SelectItem>
+                                                                )}
+
                                                                 {availableGrades.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-                                                                <SelectItem value="new" className="text-primary font-medium">+ Add New Grade</SelectItem>
+
+                                                                <SelectItem value="new" className="text-primary font-medium border-t mt-1">
+                                                                    + Add New Grade
+                                                                </SelectItem>
                                                             </SelectContent>
                                                         </Select>
                                                     </TableCell>
