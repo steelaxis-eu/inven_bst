@@ -1,6 +1,26 @@
-
+import moduleAlias from 'module-alias';
+import path from 'path';
 import { createCanvas } from '@napi-rs/canvas';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+console.log('Testing alias configuration...');
+
+try {
+    // Simulate the logic in alias-config.ts
+    const canvasPath = path.dirname(require.resolve('@napi-rs/canvas/package.json'));
+    console.log(`Resolved @napi-rs/canvas path: ${canvasPath}`);
+
+    moduleAlias.addAlias('canvas', canvasPath);
+    console.log('Alias registered successfully.');
+
+    const { createCanvas } = require('canvas'); // Should resolve to @napi-rs/canvas now
+    const canvas = createCanvas(200, 200);
+    console.log('Canvas created via alias successfully.');
+
+} catch (error) {
+    console.error('FAILURE:', error);
+    process.exit(1);
+}
 
 console.log('Testing @napi-rs/canvas and pdfjs-dist integration...');
 
