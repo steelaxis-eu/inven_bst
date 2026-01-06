@@ -27,7 +27,7 @@ export interface CreateAssemblyInput {
  */
 export async function createAssembly(input: CreateAssemblyInput) {
     try {
-        const { projectId, assemblyNumber, name, quantity = 1, bom, ...rest } = input
+        const { projectId, assemblyNumber, name, quantity = 1, bom, drawingRef, ...rest } = input
 
         if (!projectId || !assemblyNumber || !name) {
             return { success: false, error: 'Missing required fields' }
@@ -44,6 +44,22 @@ export async function createAssembly(input: CreateAssemblyInput) {
                     ...rest
                 }
             })
+
+            // Link Drawing if provided
+            if (drawingRef) {
+                const filename = drawingRef.split('/').pop() || 'drawing.pdf'
+                await tx.projectDocument.create({
+                    data: {
+                        projectId,
+                        assemblyId: assembly.id,
+                        type: 'DRAWING',
+                        filename,
+                        storagePath: drawingRef,
+                        uploadedBy: 'System',
+                        description: 'Imported Assembly Drawing'
+                    }
+                })
+            }
 
             // Create Pieces (Instances)
             if (quantity > 0) {

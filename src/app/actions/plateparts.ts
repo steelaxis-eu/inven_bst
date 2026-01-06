@@ -35,7 +35,7 @@ export interface CreatePlatePartInput {
  */
 export async function createPlatePart(input: CreatePlatePartInput) {
     try {
-        const { projectId, partNumber, quantity, unitWeight, thickness, width, length, gradeId, ...rest } = input
+        const { projectId, partNumber, quantity, unitWeight, thickness, width, length, gradeId, drawingRef, ...rest } = input
 
         if (!projectId || !partNumber || !quantity) {
             return { success: false, error: 'Missing required fields' }
@@ -68,6 +68,22 @@ export async function createPlatePart(input: CreatePlatePartInput) {
                     ...rest
                 }
             })
+
+            // Link Drawing if provided
+            if (drawingRef) {
+                const filename = drawingRef.split('/').pop() || 'drawing.pdf'
+                await tx.projectDocument.create({
+                    data: {
+                        projectId,
+                        platePartId: part.id,
+                        type: 'DRAWING',
+                        filename,
+                        storagePath: drawingRef,
+                        uploadedBy: 'System',
+                        description: 'Imported Plate Drawing'
+                    }
+                })
+            }
 
             // Auto-generate PlatePiece records
             const pieces = Array.from({ length: quantity }, (_, i) => ({
