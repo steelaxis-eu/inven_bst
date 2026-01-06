@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useImport } from "@/context/import-context"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -45,18 +46,37 @@ interface ImportDrawingsDialogProps {
 }
 
 export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades, shapes }: ImportDrawingsDialogProps) {
-    const [open, setOpen] = useState(false)
-    const [mode, setMode] = useState<'parts' | 'assemblies'>('parts')
+    const { startImport, resultParts, resultAssemblies, status, dismiss, reset } = useImport()
 
+    // Local state for the dialog open/close, BUT we want it to auto-open if reviewing
+    const [open, setOpen] = useState(false)
+
+    // Sync context status with dialog open state
+    // If status becomes 'reviewing', open dialog
+    useEffect(() => {
+        if (status === 'reviewing') {
+            setOpen(true)
+            if (resultParts.length > 0) {
+                setParts(resultParts)
+                setStep('review')
+                setMode('parts')
+            } else if (resultAssemblies.length > 0) {
+                setAssemblies(resultAssemblies)
+                setStep('review')
+                setMode('assemblies')
+            }
+        }
+    }, [status, resultParts, resultAssemblies])
+
+    const [mode, setMode] = useState<'parts' | 'assemblies'>('parts')
     const [file, setFile] = useState<File | null>(null)
     const [parts, setParts] = useState<ReviewPart[]>([])
     const [assemblies, setAssemblies] = useState<ReviewAssembly[]>([])
-
     const [step, setStep] = useState<'upload' | 'review'>('upload')
-    const [uploading, setUploading] = useState(false)
     const [creating, setCreating] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
 
+    // ... (drag handlers same as before) ...
     const handleDragEnter = (e: React.DragEvent) => {
         e.preventDefault()
         e.stopPropagation()
@@ -87,12 +107,16 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         }
     }
 
+
     // Derived lists for Profile Selectors
     const profileTypes = Array.from(new Set([
         ...standardProfiles.map(p => p.type),
         ...shapes.map(s => s.id),
         "RHS", "SHS", "CHS"
     ])).sort()
+
+    // ... (drag handlers same as before) ...
+    // Note: Kept drag handlers above since they are fine.
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -102,94 +126,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
     const handleUpload = async () => {
         if (!file) return
-        setUploading(true)
-        try {
-            const formData = new FormData()
-            formData.set('file', file)
-            formData.set('projectId', projectId)
-
-            if (mode === 'parts') {
-                const result = await parseDrawingsZip(formData)
-                if (result.success && result.parts) {
-                    const reviewParts: ReviewPart[] = result.parts.map(p => {
-                        let type: 'PROFILE' | 'PLATE' = 'PLATE'
-
-                        // Enhanced Profile Detection Logic
-                        // 1. Trust AI: If AI identifies a profile type or explicitly says PROFILE, it is a profile.
-                        if (p.profileType || p.type === 'PROFILE') {
-                            type = 'PROFILE'
-                        }
-
-                        // 2. Fallback to name/filename matching if not already found
-                        if (type === 'PLATE') {
-                            const name = (p.filename + p.partNumber).toUpperCase()
-                            // If name contains common profile indicators
-                            if (profileTypes.some(t => name.includes(t)) || /RHS|SHS|IPE|HEA|HEB|UNP|TUB|BEAM/i.test(name)) {
-                                type = 'PROFILE'
-                            }
-                        }
-
-                        // 3. Fallback to checking dimensions (if thickness is 0/missing but profile dim exists)
-                        if (type === 'PLATE' && (p.thickness === 0 || !p.thickness) && p.profileDimensions) {
-                            type = 'PROFILE'
-                        }
-
-                        // Determine initial grade
-                        const initialGrade = grades.find(g =>
-                            (p.material && g.name.toLowerCase().includes(p.material.toLowerCase())) ||
-                            g.name === 'S355'
-                        )?.id
-
-                        // Determine initial profile type selection
-                        let selectedProfileType = ''
-                        if (type === 'PROFILE') {
-                            if (p.profileType) {
-                                const exact = profileTypes.find(t => t === p.profileType?.toUpperCase())
-                                if (exact) selectedProfileType = exact
-                                else selectedProfileType = profileTypes.find(t => p.profileType?.toUpperCase().includes(t)) || ''
-                            }
-                            if (!selectedProfileType) {
-                                const name = (p.filename + p.partNumber).toUpperCase()
-                                selectedProfileType = profileTypes.find(t => name.includes(t)) || ''
-                            }
-                        }
-
-                        return {
-                            ...p,
-                            include: true,
-                            type,
-                            selectedGradeId: initialGrade,
-                            status: 'PENDING',
-                            selectedProfileType,
-                            selectedProfileDim: p.profileDimensions || '' // Use AI extracted dim if available
-                        }
-                    })
-                    setParts(reviewParts)
-                    setStep('review')
-                } else {
-                    toast.error(result.error || "Failed to parse ZIP")
-                }
-            } else {
-                // Assembly Mode
-                const result = await parseAssemblyZip(formData)
-                if (result.success && result.assemblies) {
-                    const reviewAssemblies: ReviewAssembly[] = result.assemblies.map(a => ({
-                        ...a,
-                        include: true,
-                        status: 'PENDING'
-                    }))
-                    setAssemblies(reviewAssemblies)
-                    setStep('review')
-                } else {
-                    toast.error(result.error || "Failed to parse Assembly ZIP")
-                }
-            }
-
-        } catch (e) {
-            toast.error("Upload failed")
-        } finally {
-            setUploading(false)
-        }
+        setOpen(false) // Close dialog immediately
+        await startImport(file, mode) // Start background process
     }
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
@@ -254,7 +192,6 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     }
 
     const handleCreateAssemblies = async () => {
-        // ... (Assembly creation logic - unchanged) ...
         const assembliesToCreate = assemblies.filter(a => a.include && a.status !== 'CREATED')
         if (assembliesToCreate.length === 0) return
 
@@ -285,15 +222,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         }
     }
 
-    const reset = () => {
-        setStep('upload')
-        setFile(null)
-        setParts([])
-        setAssemblies([])
-    }
-
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={setOpen} >
             <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
                     <Upload className="h-4 w-4" />
@@ -325,8 +255,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                             onDragOver={handleDragOver}
                             onDrop={handleDrop}
                         >
-                            {/* ... (Upload UI - unchanged, just omitted for brevity in replace block if possible, but safely included here) ... */}
-                            {uploading ? (
+                            {(status === 'processing' || status === 'uploading') ? (
                                 <div className="flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in zoom-in duration-500">
                                     <Loader2 className="h-16 w-16 text-primary animate-spin" />
                                     <div className="space-y-2">
@@ -443,7 +372,6 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                     </Table>
                                 ) : (
                                     <Table>
-                                        {/* ... (Assembluy table - unchanged) ... */}
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="w-10"><Checkbox /></TableHead>
@@ -507,8 +435,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
                 <DialogFooter>
                     {step === 'upload' ? (
-                        <Button onClick={handleUpload} disabled={!file || uploading}>
-                            {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Button onClick={handleUpload} disabled={!file || status === 'processing'}>
+                            {status === 'processing' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Upload & Parse
                         </Button>
                     ) : (
@@ -522,6 +450,6 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     )}
                 </DialogFooter>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     )
 }

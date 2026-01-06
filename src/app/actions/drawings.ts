@@ -47,6 +47,31 @@ const GENERATION_CONFIG: GenerationConfig = {
     }
 }
 
+// Utility for retrying AI calls
+async function retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    initialDelay: number = 2000
+): Promise<T> {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error: any) {
+            lastError = error;
+            // Retry on 503 (Service Unavailable) or 429 (Too Many Requests)
+            if (error?.status === 503 || error?.status === 429 || error?.message?.includes('503') || error?.message?.includes('overloaded')) {
+                const delay = initialDelay * Math.pow(2, i);
+                console.log(`Gemini API busy (Attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+            }
+            throw error; // Other errors: throw immediately
+        }
+    }
+    throw lastError;
+}
+
 export async function parseDrawingsZip(formData: FormData): Promise<{ success: boolean, parts?: ParsedPart[], error?: string }> {
     try {
         const file = formData.get('file') as File
@@ -58,10 +83,13 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
         }
 
         const genAI = new GoogleGenerativeAI(apiKey)
-        const model = genAI.getGenerativeModel({
-            model: "gemini-3-flash-preview", // Using latest Flash model which handles PDFs well
-            generationConfig: GENERATION_CONFIG
-        })
+
+        // Model Candidates in order of preference
+        const modelCandidates = [
+            { id: "gemini-3-flash-preview", retries: 3 },
+            { id: "gemini-2.5-flash", retries: 3 },
+            { id: "gemini-2.5-pro", retries: 2 }
+        ]
 
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
@@ -115,16 +143,42 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
           
           Return JSON strictly adhering to the schema.`
 
+                let result;
+                let lastError;
 
-                const result = await model.generateContent([
-                    {
-                        inlineData: {
-                            data: base64Pdf,
-                            mimeType: "application/pdf"
-                        }
-                    },
-                    prompt
-                ])
+                // Loop through models with retry logic
+                for (const candidate of modelCandidates) {
+                    try {
+                        const model = genAI.getGenerativeModel({
+                            model: candidate.id,
+                            generationConfig: GENERATION_CONFIG
+                        })
+
+                        result = await retryWithBackoff(() => model.generateContent([
+                            {
+                                inlineData: {
+                                    data: base64Pdf,
+                                    mimeType: "application/pdf"
+                                }
+                            },
+                            prompt
+                        ]), candidate.retries) // Use configured retries
+
+                        // If successful, break and use this result
+                        break;
+                    } catch (error: any) {
+                        console.warn(`Model ${candidate.id} failed for ${entry.name}: ${error.message || error}. Trying next model...`);
+                        lastError = error;
+                        // Continue to next model
+                    }
+                }
+
+                if (!result) {
+                    console.error(`All models failed for ${entry.name}. Last error:`, lastError);
+                    throw lastError || new Error("All models failed to generate content.");
+                }
+
+                // ... rest of processing ...
 
                 const response = result.response
                 const text = response.text()
@@ -275,10 +329,13 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
         }
 
         const genAI = new GoogleGenerativeAI(apiKey)
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
-            generationConfig: ASSEMBLY_GENERATION_CONFIG
-        })
+
+        // Model Candidates in order of preference
+        const modelCandidates = [
+            { id: "gemini-3-flash-preview", retries: 3 },
+            { id: "gemini-2.5-flash", retries: 3 },
+            { id: "gemini-2.5-pro", retries: 2 }
+        ]
 
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
@@ -311,10 +368,35 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 3. The Bill of Materials(BOM) table.Extract each row: Part Number, Quantity, Description, Material.
                 `
 
-                const result = await model.generateContent([
-                    { inlineData: { data: base64Pdf, mimeType: "application/pdf" } },
-                    prompt
-                ])
+                let result;
+                let lastError;
+
+                // Loop through models with retry logic
+                for (const candidate of modelCandidates) {
+                    try {
+                        const model = genAI.getGenerativeModel({
+                            model: candidate.id,
+                            generationConfig: ASSEMBLY_GENERATION_CONFIG
+                        })
+
+                        result = await retryWithBackoff(() => model.generateContent([
+                            { inlineData: { data: base64Pdf, mimeType: "application/pdf" } },
+                            prompt
+                        ]), candidate.retries) // Use configured retries
+
+                        // If successful, break and use this result
+                        break;
+                    } catch (error: any) {
+                        console.warn(`Model ${candidate.id} failed for Assembly ${entry.name}: ${error.message || error}. Trying next model...`);
+                        lastError = error;
+                        // Continue to next model
+                    }
+                }
+
+                if (!result) {
+                    console.error(`All models failed for Assembly ${entry.name}. Last error:`, lastError);
+                    throw lastError || new Error("All models failed to generate content.");
+                }
 
                 const text = result.response.text()
                 console.log(`[AI] Response for Assembly ${entry.name}: `, text)

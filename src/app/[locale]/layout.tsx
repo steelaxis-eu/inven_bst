@@ -34,6 +34,8 @@ import { getCurrentUser } from "@/lib/auth"
 import { UserNav } from "@/components/user-nav"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { useTranslations } from 'next-intl';
+import { ImportProvider } from "@/context/import-context";
+import { ImportStatus } from "@/components/layout/import-status";
 
 function Navigation() {
   const t = useTranslations('Navigation');
@@ -67,34 +69,37 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
         <NextIntlClientProvider messages={messages} locale={locale}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <header className="border-b bg-background p-4 shadow-sm sticky top-0 z-10 transition-colors">
-              <div className="container mx-auto flex justify-between items-center">
-                <Link href="/" className="font-bold text-xl tracking-tight text-primary hover:text-blue-600 transition-colors">
-                  {APP_CONFIG.name}
-                </Link>
-                <div className="flex items-center gap-6">
-                  <Navigation />
-                  <div className="flex items-center gap-2">
-                    <LanguageSwitcher />
-                    <ModeToggle />
-                    <UserNav userEmail={user?.email} />
+          <ImportProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <header className="border-b bg-background p-4 shadow-sm sticky top-0 z-10 transition-colors">
+                <div className="container mx-auto flex justify-between items-center">
+                  <Link href="/" className="font-bold text-xl tracking-tight text-primary hover:text-blue-600 transition-colors">
+                    {APP_CONFIG.name}
+                  </Link>
+                  <div className="flex items-center gap-6">
+                    <Navigation />
+                    <div className="flex items-center gap-2">
+                      <LanguageSwitcher />
+                      <ModeToggle />
+                      <UserNav userEmail={user?.email} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </header>
-            <main className="flex-1 bg-gradient-to-br from-background to-muted/50">
-              {children}
-            </main>
-            <Toaster />
-            <Analytics />
-            <SpeedInsights />
-          </ThemeProvider>
+              </header>
+              <ImportStatus />
+              <main className="flex-1 bg-gradient-to-br from-background to-muted/50">
+                {children}
+              </main>
+              <Toaster />
+              <Analytics />
+              <SpeedInsights />
+            </ThemeProvider>
+          </ImportProvider>
         </NextIntlClientProvider>
       </body>
     </html>

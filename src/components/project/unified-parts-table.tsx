@@ -283,7 +283,11 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
 
                             // Derived values
                             const dimensions = isPart
-                                ? (data.profile ? `${data.profile.type} ${data.profile.dimensions} (${data.length}mm)` : '-')
+                                ? (data.profile
+                                    ? `${data.profile.type} - ${data.profile.dimensions} - ${data.length}mm`
+                                    : (data.profileType && data.profileDimensions
+                                        ? `${data.profileType} - ${data.profileDimensions} - ${data.length}mm`
+                                        : '-'))
                                 : `${data.thickness}mm x ${data.width}mm x ${data.length}mm`
 
                             const weight = isPart
