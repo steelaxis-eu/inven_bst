@@ -108,17 +108,47 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                 if (result.success && result.parts) {
                     const reviewParts: ReviewPart[] = result.parts.map(p => {
                         let type: 'PROFILE' | 'PLATE' = 'PLATE'
-                        const name = (p.filename + p.partNumber).toUpperCase()
-                        if (profileTypes.some(t => name.includes(t))) {
-                            type = 'PROFILE'
-                        } else if (p.thickness > 0 && p.width > 0) {
-                            type = 'PLATE'
+
+                        // Enhanced Profile Detection Logic
+                        // 1. Check if AI explicitly found a profile type
+                        if (p.profileType) {
+                            // Try to match AI profile type to our standard types (fuzzy match or direct)
+                            const normalizedAiType = p.profileType.toUpperCase().replace(/[^A-Z]/g, '')
+                            if (profileTypes.some(t => t.includes(normalizedAiType) || normalizedAiType.includes(t))) {
+                                type = 'PROFILE'
+                            }
                         }
 
+                        // 2. Fallback to name/filename matching if not already found
+                        if (type === 'PLATE') {
+                            const name = (p.filename + p.partNumber).toUpperCase()
+                            if (profileTypes.some(t => name.includes(t))) {
+                                type = 'PROFILE'
+                            }
+                        }
+
+                        // 3. Fallback to checking dimensions (if thickness is 0/missing but profile dim exists)
+                        if (type === 'PLATE' && (p.thickness === 0 || !p.thickness) && p.profileDimensions) {
+                            type = 'PROFILE'
+                        }
+
+                        // Determine initial grade
                         const initialGrade = grades.find(g =>
                             (p.material && g.name.toLowerCase().includes(p.material.toLowerCase())) ||
                             g.name === 'S355'
                         )?.id
+
+                        // Determine initial profile type selection
+                        let selectedProfileType = ''
+                        if (type === 'PROFILE') {
+                            if (p.profileType) {
+                                selectedProfileType = profileTypes.find(t => p.profileType?.toUpperCase().includes(t)) || ''
+                            }
+                            if (!selectedProfileType) {
+                                const name = (p.filename + p.partNumber).toUpperCase()
+                                selectedProfileType = profileTypes.find(t => name.includes(t)) || ''
+                            }
+                        }
 
                         return {
                             ...p,
@@ -126,7 +156,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                             type,
                             selectedGradeId: initialGrade,
                             status: 'PENDING',
-                            selectedProfileType: type === 'PROFILE' ? profileTypes.find(t => name.includes(t)) || '' : ''
+                            selectedProfileType,
+                            selectedProfileDim: p.profileDimensions || '' // Use AI extracted dim if available
                         }
                     })
                     setParts(reviewParts)
@@ -216,6 +247,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     }
 
     const handleCreateAssemblies = async () => {
+        // ... (Assembly creation logic - unchanged) ...
         const assembliesToCreate = assemblies.filter(a => a.include && a.status !== 'CREATED')
         if (assembliesToCreate.length === 0) return
 
@@ -257,7 +289,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     Import Drawings
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-6xl h-[85vh] flex flex-col">
+            <DialogContent className="max-w-[90vw] h-[90vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle>Import from Drawings</DialogTitle>
                     <DialogDescription>
@@ -282,6 +314,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                             onDragOver={handleDragOver}
                             onDrop={handleDrop}
                         >
+                            {/* ... (Upload UI - unchanged, just omitted for brevity in replace block if possible, but safely included here) ... */}
                             {uploading ? (
                                 <div className="flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in zoom-in duration-500">
                                     <Loader2 className="h-16 w-16 text-primary animate-spin" />
@@ -314,83 +347,94 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     ) : (
                         <ScrollArea className="h-full border rounded-md">
                             {mode === 'parts' ? (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-10"><Checkbox /></TableHead>
-                                            <TableHead className="w-40">Part Number</TableHead>
-                                            <TableHead className="w-24">Type</TableHead>
-                                            <TableHead className="w-20">Qty</TableHead>
-                                            <TableHead className="w-32">Grade</TableHead>
-                                            <TableHead className="w-64">Dimensions</TableHead>
-                                            <TableHead className="w-10"></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {parts.map((part) => (
-                                            <TableRow key={part.id} className={part.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
-                                                <TableCell>
-                                                    <Checkbox checked={part.include} onCheckedChange={(c) => updatePart(part.id, { include: c === true })} disabled={part.status === 'CREATED'} />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="space-y-1">
-                                                        <Input value={part.partNumber} onChange={(e) => updatePart(part.id, { partNumber: e.target.value })} className="h-8 font-mono" />
-                                                        <p className="text-[10px] text-muted-foreground truncate" title={part.filename}>{part.filename}</p>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Select value={part.type} onValueChange={(v: any) => updatePart(part.id, { type: v })}>
-                                                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="PLATE">Plate</SelectItem>
-                                                            <SelectItem value="PROFILE">Profile</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Input type="number" value={part.quantity} onChange={(e) => updatePart(part.id, { quantity: parseInt(e.target.value) || 0 })} className="h-8" />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Select value={part.selectedGradeId} onValueChange={(v) => updatePart(part.id, { selectedGradeId: v })}>
-                                                        <SelectTrigger className="h-8"><SelectValue placeholder="Grade" /></SelectTrigger>
-                                                        <SelectContent>{grades.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
-                                                    </Select>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {part.type === 'PLATE' ? (
-                                                        <div className="flex items-center gap-1">
-                                                            <Input placeholder="T" value={part.thickness} onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })} className="h-8 w-14" />
-                                                            <span className="text-xs">x</span>
-                                                            <Input placeholder="W" value={part.width} onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
-                                                            <span className="text-xs">x</span>
-                                                            <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-1">
-                                                            <Select value={part.selectedProfileType} onValueChange={(v) => updatePart(part.id, { selectedProfileType: v })}>
-                                                                <SelectTrigger className="h-8 w-24"><SelectValue placeholder="Type" /></SelectTrigger>
-                                                                <SelectContent>{profileTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                                                            </Select>
-                                                            <Select value={part.selectedProfileDim} onValueChange={(v) => updatePart(part.id, { selectedProfileDim: v })}>
-                                                                <SelectTrigger className="h-8 w-24"><SelectValue placeholder="Dim" /></SelectTrigger>
-                                                                <SelectContent>
-                                                                    {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => <SelectItem key={p.dimensions} value={p.dimensions}>{p.dimensions}</SelectItem>)}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
-                                                        </div>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {part.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                    {part.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
-                                                </TableCell>
+                                <div className="min-w-[1000px]">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-12"><Checkbox /></TableHead>
+                                                <TableHead className="w-56">Part Number</TableHead>
+                                                <TableHead className="w-32">Type</TableHead>
+                                                <TableHead className="w-20">Qty</TableHead>
+                                                <TableHead className="w-32">Grade</TableHead>
+                                                <TableHead className="w-[300px]">Dimensions</TableHead>
+                                                <TableHead className="w-12"></TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {parts.map((part) => (
+                                                <TableRow key={part.id} className={part.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
+                                                    <TableCell>
+                                                        <Checkbox checked={part.include} onCheckedChange={(c) => updatePart(part.id, { include: c === true })} disabled={part.status === 'CREATED'} />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="space-y-1">
+                                                            <Input value={part.partNumber} onChange={(e) => updatePart(part.id, { partNumber: e.target.value })} className="h-8 font-mono" />
+                                                            <p className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={part.filename}>{part.filename}</p>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Select value={part.type} onValueChange={(v: any) => updatePart(part.id, { type: v })}>
+                                                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="PLATE">Plate</SelectItem>
+                                                                <SelectItem value="PROFILE">Profile</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Input type="number" value={part.quantity} onChange={(e) => updatePart(part.id, { quantity: parseInt(e.target.value) || 0 })} className="h-8 w-16" />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Select value={part.selectedGradeId} onValueChange={(v) => updatePart(part.id, { selectedGradeId: v })}>
+                                                            <SelectTrigger className="h-8"><SelectValue placeholder="Grade" /></SelectTrigger>
+                                                            <SelectContent>{grades.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {part.type === 'PLATE' ? (
+                                                            <div className="flex items-center gap-1">
+                                                                <Input placeholder="T" value={part.thickness} onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                                <span className="text-xs">x</span>
+                                                                <Input placeholder="W" value={part.width} onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                                <span className="text-xs">x</span>
+                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-16" />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-1">
+                                                                <Select value={part.selectedProfileType} onValueChange={(v) => updatePart(part.id, { selectedProfileType: v })}>
+                                                                    <SelectTrigger className="h-8 w-28"><SelectValue placeholder="Type" /></SelectTrigger>
+                                                                    <SelectContent>{profileTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                                                </Select>
+                                                                {/* Allow manual input if select options are insufficient or AI guessed something new, but for now stick to Select for stability or Combobox later */}
+                                                                <div className="relative">
+                                                                    <Input
+                                                                        placeholder="Dim"
+                                                                        value={part.selectedProfileDim}
+                                                                        onChange={(e) => updatePart(part.id, { selectedProfileDim: e.target.value })}
+                                                                        className="h-8 w-32"
+                                                                        list={`dims-${part.id}`}
+                                                                    />
+                                                                    <datalist id={`dims-${part.id}`}>
+                                                                        {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => <option key={p.dimensions} value={p.dimensions} />)}
+                                                                    </datalist>
+                                                                </div>
+
+                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {part.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                                        {part.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             ) : (
                                 <Table>
+                                    {/* ... (Assembluy table - unchanged) ... */}
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead className="w-10"><Checkbox /></TableHead>

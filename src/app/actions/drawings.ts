@@ -25,9 +25,11 @@ export interface ParsedPart {
     description: string
     quantity: number
     material: string
-    thickness: number
-    width: number
+    thickness: number // For Plate
+    width: number     // For Plate
     length: number
+    profileType?: string // e.g. RHS, SHS, IPE
+    profileDimensions?: string // e.g. 100x100x5
     confidence: number
     thumbnail?: string
 }
@@ -167,8 +169,11 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
           - title: The part description or title.
           - quantity: The required quantity (QTY). If not found, default to 1.
           - material: The material grade (e.g., S355, 304, AlMg3). Standardize if possible.
-          - thickness: The thickness of the plate/sheet in mm.
-          - width: The width in mm.
+          - type: "PLATE" or "PROFILE" (if it looks like a beam, tube, or section).
+          - profileType: If it is a profile, specify the type (e.g., RHS, SHS, CHS, IPE, HEA, HEB, UNP, L-Profile, Flat Bar).
+          - profileDimensions: If it is a profile, specify the dimensions string (e.g., "100x100x5", "IPE200").
+          - thickness: The thickness of the plate in mm (if Plate).
+          - width: The width in mm (if Plate).
           - length: The length in mm.
           - confidence: Your confidence (0-100) in the extraction, especially Part Number and Qty.
         `
@@ -206,6 +211,8 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     thickness: data.thickness || 0,
                     width: data.width || 0,
                     length: data.length || 0,
+                    profileType: data.profileType || "",
+                    profileDimensions: data.profileDimensions || "",
                     confidence: data.confidence || 0,
                     thumbnail: thumbBase64
                 })
