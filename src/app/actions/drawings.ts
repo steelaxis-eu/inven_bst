@@ -1,12 +1,7 @@
 'use server'
 
-// Runtime alias for pdfjs-dist dependency
-import moduleAlias from 'module-alias';
-try {
-    moduleAlias.addAlias('@napi-rs/canvas', 'canvas');
-} catch (e) {
-    // ignore if already registered
-}
+// Must be imported first to register aliases before pdfjs-dist loads
+import '@/lib/alias-config'
 
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
