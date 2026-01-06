@@ -158,38 +158,7 @@ export async function createPart(input: CreatePartInput) {
                 }
             })
 
-            // Link Drawing if provided (Also save to Docs for consistency)
-            if (rest.drawingRef) {
-                const filename = rest.drawingRef.split('/').pop() || 'drawing.pdf'
-                await tx.projectDocument.create({
-                    data: {
-                        projectId,
-                        pieceId: undefined, // Linked to part directly? Model has pieceId, but typically we want to link to PART concept.
-                        // Wait, ProjectDocument has pieceId, assemblyId, platePartId... but NO partId?
-                        // Let's check schema.
-                        // Schema: ProjectDocument has: assemblyId, pieceId, platePartId, qualityCheckId.
-                        // It does NOT have `partId`. It has `pieceId`.
-                        // This is a schema limitation. We usually link drawings to the Part Definition, not a specific Piece.
-                        // If schema doesn't have partId, we can't link it easily to the Part definition in ProjectDocument.
-                        // However, Part model has `drawingRef` column.
-                        // If we want it to appear in "Documents" list, we usually query ProjectDocument.
-                        // Users might expect "Part Drawings" to show up.
-                        // Since I can't link to `partId` in ProjectDocument (field missing), I will SKIP creating ProjectDocument for Part for now to avoid mess.
-                        // The user asked "and profile parts?", implying "will it crash?".
-                        // It won't crash because `Part` has the column.
-                        // So I will NOT make changes here unless I migrate schema.
-                        // BUT, to be safe, I should ensure `drawingRef` is actually passed to `create` (it is, via `...rest`).
 
-                        // Wait, if I am not creating ProjectDocument, then I don't need to change strictly.
-                        // BUT if I want to be "premium", I should probably add `partId` to ProjectDocument in the future.
-                        // For now, I will NOT change `parts.ts` logic significantly regarding ProjectDocument, as it might violate schema.
-
-                        // ... actually, looking at `Part` model, it DOES have `drawingRef`.
-                        // So `...rest` covers it.
-                        // So `createPart` is safe from the crash.
-                    }
-                })
-            }
 
             // Auto-generate PartPiece records
             const pieces = Array.from({ length: quantity }, (_, i) => ({
