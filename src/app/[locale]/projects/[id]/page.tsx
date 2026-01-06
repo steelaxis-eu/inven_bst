@@ -265,6 +265,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
                                 profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
                                 standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
                                 grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
+                                shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [] }))}
                             />
                             <CreatePartDialog
                                 projectId={cleanId}
