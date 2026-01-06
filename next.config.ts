@@ -13,8 +13,6 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ["@napi-rs/canvas", "canvas"],
-  transpilePackages: ["pdfjs-dist"],
   experimental: {
     // serverActions: true, // Next 14 has this by default
   }

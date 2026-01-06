@@ -1,25 +1,8 @@
 'use server'
 
-// Must be imported first to register aliases before pdfjs-dist loads
-import '@/lib/alias-config'
-
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
-import '@/lib/pdf-polyfill'
-// @ts-ignore
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
-// @ts-ignore
-import 'pdfjs-dist/legacy/build/pdf.worker.mjs'
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = ''
-import { createCanvas } from '@napi-rs/canvas'
-
-// Initialize PDF.js worker logic
-// Note: In a server action, simple imports often suffice for legacy build
-
-// Initialize PDF.js worker logic
-// Note: In a server action, simple imports often suffice for legacy build
 
 export interface ParsedPart {
     id: string
@@ -29,7 +12,7 @@ export interface ParsedPart {
     quantity: number
     material: string
     thickness: number // For Plate
-    width: number     // For Plate
+    width: number // For Plate
     length: number
     profileType?: string // e.g. RHS, SHS, IPE
     profileDimensions?: string // e.g. 100x100x5
@@ -49,7 +32,9 @@ const GENERATION_CONFIG = {
             thickness: { type: SchemaType.NUMBER },
             width: { type: SchemaType.NUMBER },
             length: { type: SchemaType.NUMBER },
-            confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" }
+            confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" },
+            profileType: { type: SchemaType.STRING, description: "Type of profile if applicable (RHS, SHS, IPE, etc.)" },
+            profileDimensions: { type: SchemaType.STRING, description: "Dimensions string for profile (e.g. 100x100x5)" }
         }
     } as const
 }
@@ -66,7 +51,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash-exp", // Using latest Flash model which handles PDFs well
             generationConfig: GENERATION_CONFIG
         })
 
@@ -90,84 +75,11 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
         for (const entry of pdfEntries) {
             try {
                 const pdfBuffer = entry.getData()
-                const loadingTask = pdfjsLib.getDocument({
-                    data: new Uint8Array(pdfBuffer),
-                    standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
-                    disableFontFace: true,
-                })
+                const base64Pdf = pdfBuffer.toString('base64')
 
-                const pdfDocument = await loadingTask.promise
-                const page = await pdfDocument.getPage(1)
-
-                // Render for Gemini (High Res)
-                const viewport = page.getViewport({ scale: 2.0 })
-                const canvas = createCanvas(viewport.width, viewport.height)
-                const context = canvas.getContext('2d')
-
-                // Patch context to support Polyfill Path2D
-                const patchContext = (ctx: any) => {
-                    const originalFill = ctx.fill;
-                    const originalStroke = ctx.stroke;
-                    const originalClip = ctx.clip;
-
-                    ctx.fill = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalFill.call(this, rule || 'nonzero');
-                        } else {
-                            originalFill.apply(this, arguments);
-                        }
-                    };
-
-                    ctx.stroke = function (path: any) {
-                        if (typeof path === 'object' && path && path.ops) {
-                            ctx.beginPath();
-                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalStroke.call(this);
-                        } else {
-                            originalStroke.apply(this, arguments);
-                        }
-                    };
-
-                    ctx.clip = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalClip.call(this, rule || 'nonzero');
-                        } else {
-                            originalClip.apply(this, arguments);
-                        }
-                    };
-                };
-
-                patchContext(context);
-
-                await page.render({
-                    canvasContext: context as any,
-                    viewport: viewport
-                }).promise
-
-                const imageBuffer = canvas.toBuffer('image/png')
-                const imageBase64 = imageBuffer.toString('base64')
-
-                // Render Thumbnail (Low Res)
-                const thumbViewport = page.getViewport({ scale: 0.3 })
-                const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
-                const thumbContext = thumbCanvas.getContext('2d')
-
-                // Patch thumbnail context too just in case
-                patchContext(thumbContext);
-
-                await page.render({
-                    canvasContext: thumbContext as any,
-                    viewport: thumbViewport
-                }).promise
-                const thumbBase64 = 'data:image/png;base64,' + thumbCanvas.toBuffer('image/png').toString('base64')
-
-                // 2. Send to Gemini
+                // Send PDF directly to Gemini
                 const prompt = `
-          Analyze this technical drawing. Extract the following details into JSON:
+          Analyze this technical drawing (PDF). Extract the following details into JSON:
           - partNumber: The main part number (often in the title block).
           - title: The part description or title.
           - quantity: The required quantity (QTY). If not found, default to 1.
@@ -182,13 +94,13 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
         `
 
                 const result = await model.generateContent([
-                    prompt,
                     {
                         inlineData: {
-                            data: imageBase64,
-                            mimeType: "image/png"
+                            data: base64Pdf,
+                            mimeType: "application/pdf"
                         }
-                    }
+                    },
+                    prompt
                 ])
 
                 const response = result.response
@@ -200,7 +112,6 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     data = JSON.parse(text)
                 } catch (e) {
                     console.error("Failed to parse Gemini JSON", text)
-                    // fallback rudimentary
                     data = { partNumber: "PARSE_ERROR" }
                 }
 
@@ -217,7 +128,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     profileType: data.profileType || "",
                     profileDimensions: data.profileDimensions || "",
                     confidence: data.confidence || 0,
-                    thumbnail: thumbBase64
+                    thumbnail: undefined // Thumbnail generation disabled to remove canvas dependency
                 })
 
             } catch (e) {
@@ -298,7 +209,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
 
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash-exp",
             generationConfig: ASSEMBLY_GENERATION_CONFIG
         })
 
@@ -322,84 +233,11 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
         for (const entry of pdfEntries) {
             try {
                 const pdfBuffer = entry.getData()
-                const loadingTask = pdfjsLib.getDocument({
-                    data: new Uint8Array(pdfBuffer),
-                    standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/',
-                    disableFontFace: true,
-                })
+                const base64Pdf = pdfBuffer.toString('base64')
 
-                const pdfDocument = await loadingTask.promise
-                const page = await pdfDocument.getPage(1)
-
-                // Render High Res for Gemini
-                const viewport = page.getViewport({ scale: 2.0 })
-                const canvas = createCanvas(viewport.width, viewport.height)
-                const context = canvas.getContext('2d')
-
-
-
-                // Patch context to support Polyfill Path2D
-                const patchContext = (ctx: any) => {
-                    const originalFill = ctx.fill;
-                    const originalStroke = ctx.stroke;
-                    const originalClip = ctx.clip;
-
-                    ctx.fill = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalFill.call(this, rule || 'nonzero');
-                        } else {
-                            originalFill.apply(this, arguments);
-                        }
-                    };
-
-                    ctx.stroke = function (path: any) {
-                        if (typeof path === 'object' && path && path.ops) {
-                            ctx.beginPath();
-                            path.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalStroke.call(this);
-                        } else {
-                            originalStroke.apply(this, arguments);
-                        }
-                    };
-
-                    ctx.clip = function (pathOrRule: any, rule?: any) {
-                        if (typeof pathOrRule === 'object' && pathOrRule && pathOrRule.ops) {
-                            ctx.beginPath();
-                            pathOrRule.ops.forEach((op: any) => ctx[op.type](...op.args));
-                            originalClip.call(this, rule || 'nonzero');
-                        } else {
-                            originalClip.apply(this, arguments);
-                        }
-                    };
-                };
-
-                patchContext(context);
-
-                await page.render({
-                    canvasContext: context as any,
-                    viewport: viewport
-                }).promise
-
-                const imageBase64 = canvas.toBuffer('image/png').toString('base64')
-
-                // Render Thumbnail
-                const thumbViewport = page.getViewport({ scale: 0.3 })
-                const thumbCanvas = createCanvas(thumbViewport.width, thumbViewport.height)
-                const thumbContext = thumbCanvas.getContext('2d')
-
-                patchContext(thumbContext);
-
-                await page.render({
-                    canvasContext: thumbContext as any,
-                    viewport: thumbViewport
-                }).promise
-                const thumbBase64 = 'data:image/png;base64,' + thumbCanvas.toBuffer('image/png').toString('base64')
-
-                // Gemini Call
+                // Gemini Call with PDF
                 const prompt = `
-                    Analyze this technical drawing. It is an Assembly Drawing.
+                    Analyze this technical drawing (PDF). It is an Assembly Drawing.
                     Extract:
                     1. The Assembly Number and Title (from title block).
                     2. The overall Quantity of this assembly required (if specified, e.g. "MAKE 2", otherwise 1).
@@ -407,8 +245,8 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 `
 
                 const result = await model.generateContent([
-                    prompt,
-                    { inlineData: { data: imageBase64, mimeType: "image/png" } }
+                    { inlineData: { data: base64Pdf, mimeType: "application/pdf" } },
+                    prompt
                 ])
 
                 const text = result.response.text()
@@ -429,7 +267,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                     quantity: data.quantity || 1,
                     bom: data.bom || [],
                     confidence: data.confidence || 0,
-                    thumbnail: thumbBase64
+                    thumbnail: undefined
                 })
 
             } catch (e) {
@@ -450,6 +288,6 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
 
     } catch (error: any) {
         console.error("Assembly Parse Error:", error)
-        return { success: false, error: error.message }
+        return { success: false, error: error.message || "Failed to process ZIP file" }
     }
 }
