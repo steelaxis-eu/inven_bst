@@ -247,7 +247,10 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
             }
         }
         setCreating(false)
-        if (successCount > 0) toast.success(`Created ${successCount} parts`)
+        if (successCount > 0) {
+            toast.success(`Created ${successCount} parts`)
+            window.location.reload()
+        }
     }
 
     const handleCreateAssemblies = async () => {
@@ -276,7 +279,10 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
             }
         }
         setCreating(false)
-        if (successCount > 0) toast.success(`Created ${successCount} assemblies`)
+        if (successCount > 0) {
+            toast.success(`Created ${successCount} assemblies`)
+            window.location.reload()
+        }
     }
 
     const reset = () => {

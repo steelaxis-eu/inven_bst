@@ -35,6 +35,8 @@ interface Assembly {
             length: number | null
             unitWeight: number | null
             profile: { type: string; dimensions: string } | null
+            profileType?: string | null
+            profileDimensions?: string | null
             pieces: { status: string }[]
         }
         quantityInAssembly: number
@@ -136,7 +138,11 @@ function AssemblyItem({
             kind: 'PROFILE',
             partNumber: ap.part.partNumber,
             description: ap.part.description,
-            detail: ap.part.profile ? `${ap.part.profile.type} ${ap.part.profile.dimensions}` : '-',
+            detail: ap.part.profile
+                ? `${ap.part.profile.type} ${ap.part.profile.dimensions}`
+                : (ap.part.profileType && ap.part.profileDimensions)
+                    ? `${ap.part.profileType} ${ap.part.profileDimensions}`
+                    : '-',
             quantity: ap.quantityInAssembly,
             ready: ap.part.pieces.filter(p => p.status === 'READY').length,
             unitWeight: ap.part.unitWeight || 0
