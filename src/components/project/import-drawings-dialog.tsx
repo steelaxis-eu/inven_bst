@@ -144,7 +144,9 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         let selectedProfileType = ''
                         if (type === 'PROFILE') {
                             if (p.profileType) {
-                                selectedProfileType = profileTypes.find(t => p.profileType?.toUpperCase().includes(t)) || ''
+                                const exact = profileTypes.find(t => t === p.profileType?.toUpperCase())
+                                if (exact) selectedProfileType = exact
+                                else selectedProfileType = profileTypes.find(t => p.profileType?.toUpperCase().includes(t)) || ''
                             }
                             if (!selectedProfileType) {
                                 const name = (p.filename + p.partNumber).toUpperCase()
