@@ -5,13 +5,31 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 console.log('Testing alias configuration...');
 
+const fs = require('fs');
+
+function findModulePath(moduleName: string): string | null {
+    let currentDir = process.cwd();
+    for (let i = 0; i < 5; i++) {
+        const candidate = path.join(currentDir, 'node_modules', moduleName);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+        currentDir = path.dirname(currentDir);
+    }
+    return null;
+}
+
 try {
     // Simulate the logic in alias-config.ts
-    const canvasPath = path.dirname(require.resolve('@napi-rs/canvas/package.json'));
+    const canvasPath = findModulePath('@napi-rs/canvas');
     console.log(`Resolved @napi-rs/canvas path: ${canvasPath}`);
 
-    moduleAlias.addAlias('canvas', canvasPath);
-    console.log('Alias registered successfully.');
+    if (canvasPath) {
+        moduleAlias.addAlias('canvas', canvasPath);
+        console.log('Alias registered successfully.');
+    } else {
+        throw new Error('Could not find @napi-rs/canvas');
+    }
 
     const { createCanvas } = require('canvas'); // Should resolve to @napi-rs/canvas now
     const canvas = createCanvas(200, 200);
