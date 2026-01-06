@@ -53,7 +53,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
         const genAI = new GoogleGenerativeAI(apiKey)
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.5-flash", // Using latest Flash model which handles PDFs well
+            model: "gemini-3-flash-preview", // Using latest Flash model which handles PDFs well
             generationConfig: GENERATION_CONFIG
         })
 
