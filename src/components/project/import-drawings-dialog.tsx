@@ -263,9 +263,27 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
     return (
         <Dialog open={open} onOpenChange={setOpen} >
-            {/* ... (DialogTrigger) ... */}
+            <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                    <Upload className="h-4 w-4" />
+                    Import Drawings
+                </Button>
+            </DialogTrigger>
             <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] flex flex-col p-4 md:max-w-screen-2xl lg:max-w-none">
-                {/* ... (DialogHeader) ... */}
+                <DialogHeader>
+                    <DialogTitle>Import from Drawings</DialogTitle>
+                    <DialogDescription>
+                        Automated extraction for Parts and Assemblies using AI.
+                    </DialogDescription>
+                    <div className="pt-2">
+                        <Tabs value={mode} onValueChange={(v: any) => { setMode(v); reset(); }}>
+                            <TabsList>
+                                <TabsTrigger value="parts" className="gap-2"><FileText className="h-4 w-4" /> Parts (Single)</TabsTrigger>
+                                <TabsTrigger value="assemblies" className="gap-2"><Layers className="h-4 w-4" /> Assemblies</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
+                </DialogHeader>
 
                 <div className="flex-1 overflow-hidden p-1 mt-2">
                     {/* ... (Upload / ScrollArea logic) ... */}
