@@ -56,12 +56,15 @@ try {
 
     const canvasPath = findModulePath('@napi-rs/canvas');
     if (canvasPath) {
+        // Alias both 'canvas' (legacy) and '@napi-rs/canvas' (direct import)
         moduleAlias.addAlias('canvas', canvasPath);
-        console.log('[Alias] Registered canvas -> ' + canvasPath);
+        moduleAlias.addAlias('@napi-rs/canvas', canvasPath);
+        console.log('[Alias] Registered canvas & @napi-rs/canvas -> ' + canvasPath);
     } else {
         console.warn('[Alias] CRITICAL: Could not find @napi-rs/canvas in node_modules! Falling back to package name.');
         // Fallback is likely to fail if file system search failed, but we try.
         moduleAlias.addAlias('canvas', '@napi-rs/canvas');
+        moduleAlias.addAlias('@napi-rs/canvas', '@napi-rs/canvas');
     }
 } catch (e) {
     console.error('[Alias] Failed to register alias:', e);

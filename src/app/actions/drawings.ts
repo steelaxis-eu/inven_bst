@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
 import '@/lib/pdf-polyfill'
 // @ts-ignore
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 // @ts-ignore
 import 'pdfjs-dist/legacy/build/pdf.worker.mjs'
 
