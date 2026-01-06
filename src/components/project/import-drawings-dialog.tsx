@@ -41,9 +41,10 @@ interface ImportDrawingsDialogProps {
     profiles: { id: string; type: string; dimensions: string; weightPerMeter: number }[]
     standardProfiles: { type: string; dimensions: string; weightPerMeter: number }[]
     grades: { id: string; name: string }[]
+    shapes: { id: string; params: string[] }[]
 }
 
-export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades }: ImportDrawingsDialogProps) {
+export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades, shapes }: ImportDrawingsDialogProps) {
     const [open, setOpen] = useState(false)
     const [mode, setMode] = useState<'parts' | 'assemblies'>('parts')
 
@@ -89,6 +90,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     // Derived lists for Profile Selectors
     const profileTypes = Array.from(new Set([
         ...standardProfiles.map(p => p.type),
+        ...shapes.map(s => s.id),
         "RHS", "SHS", "CHS"
     ])).sort()
 
@@ -459,12 +461,25 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                         <Input type="number" value={assembly.quantity} onChange={(e) => updateAssembly(assembly.id, { quantity: parseInt(e.target.value) || 1 })} className="h-8" />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="flex flex-col text-xs text-muted-foreground">
-                                                            <span>{assembly.bom.length} items extracted</span>
-                                                            <span className="truncate max-w-[200px]" title={assembly.bom.map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}>
-                                                                {assembly.bom.slice(0, 3).map(b => `${b.quantity}x ${b.partNumber}`).join(', ')}
-                                                                {assembly.bom.length > 3 && '...'}
-                                                            </span>
+                                                        <div className="flex flex-col text-xs text-muted-foreground space-y-1">
+                                                            <div className="font-semibold">{assembly.bom.length} items extracted</div>
+                                                            <div className="max-h-[100px] overflow-y-auto pr-2 space-y-1">
+                                                                {assembly.bom.map((b, i) => (
+                                                                    <div key={i} className="flex gap-2 whitespace-nowrap">
+                                                                        <span className="w-6 font-mono text-foreground/70">{b.quantity}x</span>
+                                                                        <span className="w-20 font-mono text-foreground/70">{b.partNumber}</span>
+                                                                        <span>
+                                                                            {b.profileType ? (
+                                                                                <span className="text-foreground">
+                                                                                    {b.profileType} - {b.profileDimensions} - {b.length}mm
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span>{b.description}</span>
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>

@@ -150,7 +150,7 @@ async function processRecalculateJob(jobId: string) {
             }
         })
 
-        revalidatePath(`/projects/${job.projectId}`)
+        // revalidatePath(`/projects/${job.projectId}`)
 
     } catch (e: any) {
         console.error('processRecalculateJob error:', e)

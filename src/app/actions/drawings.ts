@@ -228,6 +228,9 @@ export interface ParsedAssembly {
         quantity: number
         description: string
         material: string
+        profileType?: string
+        profileDimensions?: string
+        length?: number
     }[]
     confidence: number
     thumbnail?: string
@@ -249,7 +252,10 @@ const ASSEMBLY_GENERATION_CONFIG = {
                         partNumber: { type: SchemaType.STRING },
                         quantity: { type: SchemaType.NUMBER },
                         description: { type: SchemaType.STRING },
-                        material: { type: SchemaType.STRING }
+                        material: { type: SchemaType.STRING },
+                        profileType: { type: SchemaType.STRING, description: "e.g. SHS, RHS, MB, IPE, PL" },
+                        profileDimensions: { type: SchemaType.STRING, description: "e.g. 100x100x5, 20x5" },
+                        length: { type: SchemaType.NUMBER, description: "Length in mm" }
                     }
                 }
             },
