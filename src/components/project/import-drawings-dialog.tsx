@@ -263,7 +263,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     assemblyNumber: assembly.assemblyNumber,
                     name: assembly.name,
                     quantity: assembly.quantity,
-                    notes: `Imported from ${assembly.filename}. BOM parsed.`
+                    notes: `Imported from ${assembly.filename}. BOM parsed.`,
+                    bom: assembly.bom
                 })
                 updateAssembly(assembly.id, { status: 'CREATED' })
                 successCount++

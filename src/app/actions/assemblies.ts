@@ -18,6 +18,7 @@ export interface CreateAssemblyInput {
     scheduledDate?: Date
     notes?: string
     quantity?: number
+    bom?: { partNumber: string; quantity: number }[]
 }
 
 /**
@@ -25,7 +26,7 @@ export interface CreateAssemblyInput {
  */
 export async function createAssembly(input: CreateAssemblyInput) {
     try {
-        const { projectId, assemblyNumber, name, quantity = 1, ...rest } = input
+        const { projectId, assemblyNumber, name, quantity = 1, bom, ...rest } = input
 
         if (!projectId || !assemblyNumber || !name) {
             return { success: false, error: 'Missing required fields' }
@@ -51,6 +52,89 @@ export async function createAssembly(input: CreateAssemblyInput) {
                     status: AssemblyStatus.PENDING
                 }))
                 await tx.assemblyPiece.createMany({ data: pieces })
+            }
+
+            // LINK BOM PARTS
+            if (bom && bom.length > 0) {
+                // Pre-fetch all project parts for matching to avoid N queries
+                const projectParts = await tx.part.findMany({
+                    where: { projectId },
+                    select: { id: true, partNumber: true }
+                })
+
+                const projectPlates = await (tx as any).platePart.findMany({
+                    where: { projectId },
+                    select: { id: true, partNumber: true }
+                })
+
+                for (const item of bom) {
+                    const normalizedItemNum = item.partNumber.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+                    // 1. Try finding in Parts
+                    const matchedPart = projectParts.find(p => p.partNumber.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedItemNum)
+
+                    if (matchedPart) {
+                        await tx.assemblyPart.create({
+                            data: {
+                                assemblyId: assembly.id,
+                                partId: matchedPart.id,
+                                quantityInAssembly: item.quantity
+                            }
+                        })
+                        // Increment part quantity
+                        const totalNeeded = item.quantity * quantity
+                        if (totalNeeded > 0) {
+                            await tx.part.update({
+                                where: { id: matchedPart.id },
+                                data: { quantity: { increment: totalNeeded } }
+                            })
+                            // ... and create pieces logic (simplified here or reuse addPartToAssembly logic?)
+                            // To keep it simple and robust, we just inc qty here. Pieces generation ideally should happen too.
+                            // Let's copy the pieces generation logic from addPartToAssembly to be correct.
+                            const partData = await tx.part.findUnique({ where: { id: matchedPart.id }, include: { pieces: { select: { pieceNumber: true } } } })
+                            if (partData) {
+                                const maxNum = partData.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                                const newPieces = Array.from({ length: totalNeeded }, (_, i) => ({
+                                    partId: matchedPart.id,
+                                    pieceNumber: maxNum + i + 1,
+                                    status: PartPieceStatus.PENDING
+                                }))
+                                await tx.partPiece.createMany({ data: newPieces })
+                            }
+                        }
+                        continue;
+                    }
+
+                    // 2. Try finding in PlateParts
+                    const matchedPlate = projectPlates.find((p: any) => p.partNumber.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedItemNum)
+                    if (matchedPlate) {
+                        await tx.plateAssemblyPart.create({
+                            data: {
+                                assemblyId: assembly.id,
+                                platePartId: matchedPlate.id,
+                                quantityInAssembly: item.quantity
+                            }
+                        })
+                        // Increment plate quantity
+                        const totalNeeded = item.quantity * quantity
+                        if (totalNeeded > 0) {
+                            await tx.platePart.update({
+                                where: { id: matchedPlate.id },
+                                data: { quantity: { increment: totalNeeded } }
+                            })
+                            const plateData = await (tx as any).platePart.findUnique({ where: { id: matchedPlate.id }, include: { pieces: { select: { pieceNumber: true } } } })
+                            if (plateData) {
+                                const maxNum = (plateData.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                                const newPieces = Array.from({ length: totalNeeded }, (_, i) => ({
+                                    platePartId: matchedPlate.id,
+                                    pieceNumber: maxNum + i + 1,
+                                    status: PlatePieceStatus.PENDING
+                                }))
+                                await (tx as any).platePiece.createMany({ data: newPieces })
+                            }
+                        }
+                    }
+                }
             }
 
             return assembly
