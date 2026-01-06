@@ -18,6 +18,17 @@ function findModulePath(moduleName: string): string | null {
 }
 
 try {
+    console.log('[Alias Debug] CWD:', process.cwd());
+    try {
+        console.log('[Alias Debug] Root contents:', fs.readdirSync(process.cwd()));
+        console.log('[Alias Debug] node_modules exists:', fs.existsSync(path.join(process.cwd(), 'node_modules')));
+        if (fs.existsSync(path.join(process.cwd(), 'node_modules'))) {
+            console.log('[Alias Debug] node_modules top-level:', fs.readdirSync(path.join(process.cwd(), 'node_modules')).slice(0, 50));
+        }
+    } catch (e) {
+        console.error('[Alias Debug] FS Error:', e);
+    }
+
     const canvasPath = findModulePath('@napi-rs/canvas');
     if (canvasPath) {
         moduleAlias.addAlias('canvas', canvasPath);
