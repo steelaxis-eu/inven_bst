@@ -23,6 +23,7 @@ export interface CreatePlatePartInput {
     isOutsourced?: boolean
     dxfFilename?: string
     dxfStoragePath?: string
+    drawingRef?: string
     nestingSheet?: string
     supplier?: string
     notes?: string

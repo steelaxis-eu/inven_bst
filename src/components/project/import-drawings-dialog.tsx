@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Package, Scissors, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import { parseDrawingsZip, ParsedPart, parseAssemblyZip, ParsedAssembly } from '@/app/actions/drawings'
-import { createPart } from '@/app/actions/parts'
+import { createPart, getProjectPartsCount } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
 import { createAssembly } from '@/app/actions/assemblies'
 
@@ -57,11 +57,20 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     const [step, setStep] = useState<'upload' | 'review'>('upload')
     const [creating, setCreating] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
+    const [hasExistingParts, setHasExistingParts] = useState(false)
 
     // New states for dynamic grade creation
     const [availableGrades, setAvailableGrades] = useState(grades)
     const [isAddingGrade, setIsAddingGrade] = useState(false)
     const [newGradeName, setNewGradeName] = useState("")
+
+    useEffect(() => {
+        const checkParts = async () => {
+            const res = await getProjectPartsCount(projectId)
+            setHasExistingParts(!!(res.success && res.count && res.count > 0))
+        }
+        checkParts()
+    }, [projectId])
 
     useEffect(() => {
         setAvailableGrades(grades)
@@ -76,41 +85,45 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
             // Only initialize if we haven't already populate the table
             // This prevents overwriting user edits if this effect re-runs due to other dependency changes
             if (resultParts.length > 0 && parts.length === 0) {
-                // Map ParsedParts to ReviewParts carefully
-                const mappedParts: ReviewPart[] = resultParts.map(p => {
-                    // Normalize type
-                    // The AI is instructed to return PROFILE or PLATE, but we handle safe fallbacks
-                    const rawType = p.type?.toUpperCase() || 'PLATE'
-                    const isProfile = rawType === 'PROFILE' || !!p.profileType
+                // Filter confidence > 90
+                const mappedParts: ReviewPart[] = resultParts
+                    .filter(p => p.confidence > 90)
+                    .map(p => {
+                        // Normalize type
+                        // The AI is instructed to return PROFILE or PLATE, but we handle safe fallbacks
+                        const rawType = p.type?.toUpperCase() || 'PLATE'
+                        const isProfile = rawType === 'PROFILE' || !!p.profileType
 
-                    // Try to match grade
-                    const matchedGrade = availableGrades.find(g =>
-                        g.name.toLowerCase() === p.material?.toLowerCase() ||
-                        // Check for common variations like leaving out spaces "S235JR" vs "S235 JR"
-                        g.name.replace(/\s+/g, '').toLowerCase() === p.material?.replace(/\s+/g, '').toLowerCase()
-                    )
+                        // Try to match grade
+                        const matchedGrade = availableGrades.find(g =>
+                            g.name.toLowerCase() === p.material?.toLowerCase() ||
+                            // Check for common variations like leaving out spaces "S235JR" vs "S235 JR"
+                            g.name.replace(/\s+/g, '').toLowerCase() === p.material?.replace(/\s+/g, '').toLowerCase()
+                        )
 
-                    return {
-                        ...p,
-                        include: true,
-                        // If profileType is present, force PROFILE even if type says PLATE (AI inconsistency fix)
-                        type: isProfile ? 'PROFILE' : 'PLATE',
+                        return {
+                            ...p,
+                            include: true,
+                            // If profileType is present, force PROFILE even if type says PLATE (AI inconsistency fix)
+                            type: isProfile ? 'PROFILE' : 'PLATE',
 
-                        // Map extracted profile data
-                        selectedProfileType: p.profileType ? p.profileType.toUpperCase() : undefined,
-                        selectedProfileDim: p.profileDimensions,
+                            // Map extracted profile data
+                            selectedProfileType: p.profileType ? p.profileType.toUpperCase() : undefined,
+                            selectedProfileDim: p.profileDimensions,
 
-                        // Map Grade
-                        selectedGradeId: matchedGrade?.id,
+                            // Map Grade
+                            selectedGradeId: matchedGrade?.id,
 
-                        status: 'PENDING' as const
-                    }
-                })
+                            status: 'PENDING' as const
+                        }
+                    })
                 setParts(mappedParts)
                 setStep('review')
                 setMode('parts')
             } else if (resultAssemblies.length > 0 && assemblies.length === 0) {
-                setAssemblies(resultAssemblies.map(a => ({ ...a, include: true, status: 'PENDING' })))
+                setAssemblies(resultAssemblies
+                    .filter(a => a.confidence > 90)
+                    .map(a => ({ ...a, include: true, status: 'PENDING' })))
                 setStep('review')
                 setMode('assemblies')
             }
@@ -164,7 +177,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     const handleUpload = async () => {
         if (!file) return
         setOpen(false) // Close dialog immediately
-        await startImport(file, mode) // Start background process
+        await startImport(file, mode, projectId) // Start background process
     }
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
@@ -244,7 +257,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     name: assembly.name,
                     quantity: assembly.quantity,
                     notes: `Imported from ${assembly.filename}. BOM parsed.`,
-                    bom: assembly.bom
+                    bom: assembly.bom,
+                    drawingRef: assembly.drawingRef
                 })
                 updateAssembly(assembly.id, { status: 'CREATED' })
                 successCount++
@@ -321,7 +335,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         <Tabs value={mode} onValueChange={(v: any) => { setMode(v); handleReset(); }}>
                             <TabsList>
                                 <TabsTrigger value="parts" className="gap-2"><FileText className="h-4 w-4" /> Parts (Single)</TabsTrigger>
-                                <TabsTrigger value="assemblies" className="gap-2"><Layers className="h-4 w-4" /> Assemblies</TabsTrigger>
+                                <TabsTrigger value="assemblies" disabled={!hasExistingParts} title={!hasExistingParts ? "Upload Parts first" : ""} className="gap-2"><Layers className="h-4 w-4" /> Assemblies</TabsTrigger>
                             </TabsList>
                         </Tabs>
                     </div>

@@ -19,6 +19,7 @@ export interface CreateAssemblyInput {
     notes?: string
     quantity?: number
     bom?: { partNumber: string; quantity: number }[]
+    drawingRef?: string
 }
 
 /**

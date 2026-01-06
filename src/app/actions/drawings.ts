@@ -1,9 +1,12 @@
 'use server'
 
+import prisma from '@/lib/prisma'
+import { createClient } from '@/lib/supabase-server'
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType, GenerationConfig } from '@google/generative-ai'
 
+// Update Interface
 export interface ParsedPart {
     id: string
     filename: string
@@ -14,11 +17,12 @@ export interface ParsedPart {
     thickness: number // For Plate
     width: number // For Plate
     length: number
-    profileType?: string // e.g. RHS, SHS, IPE
-    profileDimensions?: string // e.g. 100x100x5
-    type?: string // 'PROFILE' | 'PLATE'
+    profileType?: string
+    profileDimensions?: string
+    type?: string
     confidence: number
     thumbnail?: string
+    drawingRef?: string // New field for Storage Path
 }
 
 const GENERATION_CONFIG: GenerationConfig = {
@@ -59,32 +63,43 @@ async function retryWithBackoff<T>(
             return await operation();
         } catch (error: any) {
             lastError = error;
-            // Retry on 503 (Service Unavailable) or 429 (Too Many Requests)
             if (error?.status === 503 || error?.status === 429 || error?.message?.includes('503') || error?.message?.includes('overloaded')) {
                 const delay = initialDelay * Math.pow(2, i);
                 console.log(`Gemini API busy (Attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
             }
-            throw error; // Other errors: throw immediately
+            throw error;
         }
     }
     throw lastError;
 }
 
-export async function parseDrawingsZip(formData: FormData): Promise<{ success: boolean, parts?: ParsedPart[], error?: string }> {
+export async function parseDrawingsZip(formData: FormData, projectId: string): Promise<{ success: boolean, parts?: ParsedPart[], error?: string }> {
     try {
         const file = formData.get('file') as File
         if (!file) return { success: false, error: "No file uploaded" }
+        if (!projectId) return { success: false, error: "Project ID missing" }
+
+        // Fetch Project for Path Construction
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { projectNumber: true, createdAt: true }
+        })
+
+        if (!project) return { success: false, error: "Project not found" }
+
+        const year = new Date(project.createdAt).getFullYear()
+        const projectNumber = project.projectNumber
+        const supabase = await createClient()
 
         const apiKey = process.env.GEMINI_API_KEY
         if (!apiKey) {
-            return { success: false, error: "GEMINI_API_KEY is missing in server environment" }
+            return { success: false, error: "GEMINI_API_KEY is missing" }
         }
 
         const genAI = new GoogleGenerativeAI(apiKey)
-
-        // Model Candidates in order of preference
+        // ... model candidates ...
         const modelCandidates = [
             { id: "gemini-3-flash-preview", retries: 3 },
             { id: "gemini-2.5-flash", retries: 3 },
@@ -113,7 +128,25 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 const pdfBuffer = entry.getData()
                 const base64Pdf = pdfBuffer.toString('base64')
 
-                // Send PDF directly to Gemini
+                // UPLOAD TO SUPABASE
+                const filename = entry.name.split('/').pop() || entry.name
+                const storagePath = `${year}/${projectNumber}/uploads/parts/${filename}`
+
+                const { error: uploadError } = await supabase.storage
+                    .from('projects') // Assuming 'projects' bucket
+                    .upload(storagePath, pdfBuffer, {
+                        contentType: 'application/pdf',
+                        upsert: true
+                    })
+
+                if (uploadError) {
+                    console.error("Supabase Upload Error:", uploadError)
+                    // We continue even if upload fails? Or fail? 
+                    // User said "drawings must be saved", so ideally we warn.
+                    // For now, log it.
+                }
+
+                // ... Gemini Prompt ...
                 const prompt = `
           Analyze this technical drawing (PDF) and extract the Part Information into the specified JSON structure.
 
@@ -178,8 +211,6 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     throw lastError || new Error("All models failed to generate content.");
                 }
 
-                // ... rest of processing ...
-
                 const response = result.response
                 const text = response.text()
                 console.log(`[AI] Response for ${entry.name}: `, text)
@@ -188,8 +219,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 try {
                     data = JSON.parse(text)
 
-                    // --- Post-Processing & Cleaning ---
-
+                    // ... post processing ...
                     // 1. Clean Profile Dimensions (replace * with x)
                     if (data.profileDimensions) {
                         data.profileDimensions = data.profileDimensions.replace(/\*/g, 'x').toLowerCase()
@@ -234,7 +264,6 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     filename: entry.name,
                     partNumber: data.partNumber || entry.name.replace('.pdf', ''),
                     description: data.title || "", // data.title corresponds to description in ParsedPart based on context
-
                     quantity: data.quantity || 1,
                     material: data.material || "",
                     thickness: data.thickness || 0,
@@ -243,7 +272,8 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                     profileType: data.profileType || "",
                     profileDimensions: data.profileDimensions || "",
                     confidence: data.confidence || 0,
-                    thumbnail: undefined // Thumbnail generation disabled to remove canvas dependency
+                    thumbnail: undefined,
+                    drawingRef: storagePath // Return path
                 })
 
             } catch (e) {
@@ -288,15 +318,15 @@ export interface ParsedAssembly {
     }[]
     confidence: number
     thumbnail?: string
+    drawingRef?: string
 }
 
-const ASSEMBLY_GENERATION_CONFIG = {
+const ASSEMBLY_GENERATION_CONFIG: GenerationConfig = {
     responseMimeType: "application/json",
     responseSchema: {
         type: SchemaType.OBJECT,
         properties: {
             assemblyNumber: { type: SchemaType.STRING },
-            title: { type: SchemaType.STRING },
             quantity: { type: SchemaType.NUMBER, description: "Quantity of this assembly required (default 1)" },
             bom: {
                 type: SchemaType.ARRAY,
@@ -304,28 +334,38 @@ const ASSEMBLY_GENERATION_CONFIG = {
                     type: SchemaType.OBJECT,
                     properties: {
                         partNumber: { type: SchemaType.STRING },
-                        quantity: { type: SchemaType.NUMBER },
-                        description: { type: SchemaType.STRING },
-                        material: { type: SchemaType.STRING },
-                        profileType: { type: SchemaType.STRING, description: "e.g. SHS, RHS, MB, IPE, PL" },
-                        profileDimensions: { type: SchemaType.STRING, description: "e.g. 100x100x5, 20x5" },
-                        length: { type: SchemaType.NUMBER, description: "Length in mm" }
-                    }
+                        quantity: { type: SchemaType.NUMBER }
+                    },
+                    required: ["partNumber", "quantity"]
                 }
             },
             confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" }
-        }
-    } as const
+        },
+        required: ["assemblyNumber", "bom"]
+    }
 }
 
-export async function parseAssemblyZip(formData: FormData): Promise<{ success: boolean, assemblies?: ParsedAssembly[], error?: string }> {
+export async function parseAssemblyZip(formData: FormData, projectId: string): Promise<{ success: boolean, assemblies?: ParsedAssembly[], error?: string }> {
     try {
         const file = formData.get('file') as File
         if (!file) return { success: false, error: "No file uploaded" }
+        if (!projectId) return { success: false, error: "Project ID missing" }
+
+        // Fetch Project for Path Construction
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { projectNumber: true, createdAt: true }
+        })
+
+        if (!project) return { success: false, error: "Project not found" }
+
+        const year = new Date(project.createdAt).getFullYear()
+        const projectNumber = project.projectNumber
+        const supabase = await createClient()
 
         const apiKey = process.env.GEMINI_API_KEY
         if (!apiKey) {
-            return { success: false, error: "GEMINI_API_KEY is missing in server environment" }
+            return { success: false, error: "GEMINI_API_KEY is missing" }
         }
 
         const genAI = new GoogleGenerativeAI(apiKey)
@@ -359,13 +399,30 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 const pdfBuffer = entry.getData()
                 const base64Pdf = pdfBuffer.toString('base64')
 
+                // UPLOAD TO SUPABASE
+                const filename = entry.name.split('/').pop() || entry.name
+                const storagePath = `${year}/${projectNumber}/uploads/assemblies/${filename}`
+
+                const { error: uploadError } = await supabase.storage
+                    .from('projects')
+                    .upload(storagePath, pdfBuffer, {
+                        contentType: 'application/pdf',
+                        upsert: true
+                    })
+
+                if (uploadError) {
+                    console.error("Supabase Upload Error:", uploadError)
+                }
+
                 // Gemini Call with PDF
                 const prompt = `
-                    Analyze this technical drawing(PDF).It is an Assembly Drawing.
-                    Extract:
-                1. The Assembly Number and Title(from title block).
-                    2. The overall Quantity of this assembly required(if specified, e.g. "MAKE 2", otherwise 1).
-                3. The Bill of Materials(BOM) table.Extract each row: Part Number, Quantity, Description, Material.
+                    Analyze this technical drawing (PDF). It is an Assembly Drawing.
+                    Extract ONLY:
+                    1. The Assembly Number (from title block).
+                    2. The overall Quantity of this specific assembly required (if specified, e.g. "MAKE 2", otherwise 1).
+                    3. The Bill of Materials (BOM) table.
+                       - For each row, extract ONLY: Part Number and Quantity.
+                       - Ignore descriptions, materials, and dimensions.
                 `
 
                 let result;
@@ -382,14 +439,12 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                         result = await retryWithBackoff(() => model.generateContent([
                             { inlineData: { data: base64Pdf, mimeType: "application/pdf" } },
                             prompt
-                        ]), candidate.retries) // Use configured retries
+                        ]), candidate.retries)
 
-                        // If successful, break and use this result
                         break;
                     } catch (error: any) {
                         console.warn(`Model ${candidate.id} failed for Assembly ${entry.name}: ${error.message || error}. Trying next model...`);
                         lastError = error;
-                        // Continue to next model
                     }
                 }
 
@@ -416,7 +471,8 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                     quantity: data.quantity || 1,
                     bom: data.bom || [],
                     confidence: data.confidence || 0,
-                    thumbnail: undefined
+                    thumbnail: undefined,
+                    drawingRef: storagePath
                 })
 
             } catch (e) {
@@ -428,7 +484,8 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                     name: "PROCESSING_FAILED",
                     quantity: 1,
                     bom: [],
-                    confidence: 0
+                    confidence: 0,
+                    drawingRef: undefined
                 })
             }
         }

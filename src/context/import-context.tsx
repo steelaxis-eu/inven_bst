@@ -16,7 +16,7 @@ interface ImportState {
 }
 
 interface ImportContextType extends ImportState {
-    startImport: (file: File, mode: 'parts' | 'assemblies') => Promise<void>
+    startImport: (file: File, mode: 'parts' | 'assemblies', projectId: string) => Promise<void>
     reset: () => void
     setReviewing: () => void
     dismiss: () => void
@@ -57,7 +57,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         }
     }, [state])
 
-    const startImport = async (file: File, mode: 'parts' | 'assemblies') => {
+    const startImport = async (file: File, mode: 'parts' | 'assemblies', projectId: string) => {
         setState(prev => ({
             ...prev,
             isProcessing: true,
@@ -87,7 +87,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
 
         try {
             if (mode === 'parts') {
-                const res = await parseDrawingsZip(formData)
+                const res = await parseDrawingsZip(formData, projectId)
                 clearInterval(progressInterval)
                 if (res.success && res.parts) {
                     setState(prev => ({
@@ -107,7 +107,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                     throw new Error(res.error)
                 }
             } else {
-                const res = await parseAssemblyZip(formData)
+                const res = await parseAssemblyZip(formData, projectId)
                 clearInterval(progressInterval)
                 if (res.success && res.assemblies) {
                     setState(prev => ({
