@@ -16,6 +16,18 @@ function findModulePath(moduleName: string): string | null {
         }
         currentDir = path.dirname(currentDir);
     }
+
+    // Fallback for Vercel Serverless environment where process.cwd() might be different
+    const vercelPaths = [
+        path.join(process.cwd(), 'node_modules', moduleName),
+        path.join(process.cwd(), '.next', 'server', 'node_modules', moduleName),
+        '/var/task/node_modules/' + moduleName
+    ];
+
+    for (const p of vercelPaths) {
+        if (fs.existsSync(p)) return p;
+    }
+
     return null;
 }
 

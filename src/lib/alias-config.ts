@@ -14,21 +14,23 @@ function findModulePath(moduleName: string): string | null {
         }
         currentDir = path.dirname(currentDir);
     }
+
+    // Fallback for Vercel Serverless environment where process.cwd() might be different
+    // Vercel typical paths: /var/task/node_modules
+    const vercelPaths = [
+        path.join(process.cwd(), 'node_modules', moduleName),
+        path.join(process.cwd(), '.next', 'server', 'node_modules', moduleName),
+        '/var/task/node_modules/' + moduleName
+    ];
+
+    for (const p of vercelPaths) {
+        if (fs.existsSync(p)) return p;
+    }
+
     return null;
 }
 
 try {
-    console.log('[Alias Debug] CWD:', process.cwd());
-    try {
-        console.log('[Alias Debug] Root contents:', fs.readdirSync(process.cwd()));
-        console.log('[Alias Debug] node_modules exists:', fs.existsSync(path.join(process.cwd(), 'node_modules')));
-        if (fs.existsSync(path.join(process.cwd(), 'node_modules'))) {
-            console.log('[Alias Debug] node_modules top-level:', fs.readdirSync(path.join(process.cwd(), 'node_modules')).slice(0, 50));
-        }
-    } catch (e) {
-        console.error('[Alias Debug] FS Error:', e);
-    }
-
     const canvasPath = findModulePath('@napi-rs/canvas');
     if (canvasPath) {
         moduleAlias.addAlias('canvas', canvasPath);
