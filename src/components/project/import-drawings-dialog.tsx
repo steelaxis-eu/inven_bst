@@ -203,6 +203,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         setCreating(false)
         if (successCount > 0) {
             toast.success(`Created ${successCount} parts`)
+            reset()
             window.location.reload()
         }
     }
@@ -234,6 +235,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         setCreating(false)
         if (successCount > 0) {
             toast.success(`Created ${successCount} assemblies`)
+            reset()
             window.location.reload()
         }
     }
@@ -267,7 +269,18 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         }
     }
 
-    // ... (updatePart) ...
+    const handleReset = () => {
+        reset() // context reset
+        setStep('upload')
+        setFile(null)
+        setParts([])
+        setAssemblies([])
+        setCreating(false)
+    }
+
+    // ... (updatePart kept implied, but I am inserting before updatePart or similar)
+    // Actually, I will insert it before `return (` which is around line 263.
+    // Let's target the lines before `return`.
 
     return (
         <Dialog open={open} onOpenChange={setOpen} >
@@ -284,7 +297,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         Automated extraction for Parts and Assemblies using AI.
                     </DialogDescription>
                     <div className="pt-2">
-                        <Tabs value={mode} onValueChange={(v: any) => { setMode(v); reset(); }}>
+                        <Tabs value={mode} onValueChange={(v: any) => { setMode(v); handleReset(); }}>
                             <TabsList>
                                 <TabsTrigger value="parts" className="gap-2"><FileText className="h-4 w-4" /> Parts (Single)</TabsTrigger>
                                 <TabsTrigger value="assemblies" className="gap-2"><Layers className="h-4 w-4" /> Assemblies</TabsTrigger>
@@ -533,7 +546,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         </Button>
                     ) : (
                         <>
-                            <Button variant="outline" onClick={reset}>Cancel / Restart</Button>
+                            <Button variant="outline" onClick={handleReset}>Cancel / Restart</Button>
                             <Button onClick={mode === 'parts' ? handleCreateParts : handleCreateAssemblies} disabled={creating}>
                                 {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Create {mode === 'parts' ? 'Parts' : 'Assemblies'}
