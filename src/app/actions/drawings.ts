@@ -26,7 +26,7 @@ const GENERATION_CONFIG = {
     responseSchema: {
         type: SchemaType.OBJECT,
         properties: {
-            partNumber: { type: SchemaType.STRING },
+            partNumber: { type: SchemaType.STRING, description: "The unique part identifier." },
             title: { type: SchemaType.STRING },
             quantity: { type: SchemaType.NUMBER },
             material: { type: SchemaType.STRING },
@@ -34,11 +34,16 @@ const GENERATION_CONFIG = {
             width: { type: SchemaType.NUMBER },
             length: { type: SchemaType.NUMBER },
             confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" },
-            type: { type: SchemaType.STRING, description: "Type of part: 'PROFILE' or 'PLATE'" },
-            profileType: { type: SchemaType.STRING, description: "Type of profile if applicable (RHS, SHS, IPE, etc.)" },
+            type: {
+                type: SchemaType.STRING,
+                description: "Type of part: 'PROFILE' or 'PLATE' only.",
+                enum: ["PROFILE", "PLATE"]
+            },
+            profileType: { type: SchemaType.STRING, description: "Type of profile if applicable (RHS, SHS, IPE, HEA, UNP, etc.)" },
             profileDimensions: { type: SchemaType.STRING, description: "Dimensions string for profile (e.g. 100x100x5)" }
-        }
-    } as const
+        },
+        required: ["partNumber", "quantity", "type", "confidence"]
+    }
 }
 
 export async function parseDrawingsZip(formData: FormData): Promise<{ success: boolean, parts?: ParsedPart[], error?: string }> {
@@ -81,24 +86,29 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
                 // Send PDF directly to Gemini
                 const prompt = `
-          Analyze this technical drawing (PDF). Extract the following details into JSON:
-          - partNumber: The main part number (often in the title block).
-          - title: The part description or title.
-          - quantity: The required quantity (QTY). If not found, default to 1.
-          - material: The material grade (e.g., S355, 304, AlMg3). Standardize if possible.
-          - type: "PROFILE" if the part is a beam, tube, angle, or channel (e.g. HEA, IPE, RHS, SHS, UNP, L-profile). "PLATE" ONLY if it is a flat sheet defined by Thickness x Width x Length.
-          - profileType: REQUIRED if type is "PROFILE". Specify the designation (e.g. "RHS", "SHS", "IPE", "HEA", "FLAT BAR").
-          - profileDimensions: REQUIRED if type is "PROFILE". The standard dimension string (e.g. "100x100x5", "IPE200", "50x5").
-          - thickness: The thickness in mm (CRITICAL for Plate).
-          - width: The width in mm (if Plate).
-          - length: The length in mm.
-          - confidence: Your confidence (0-100) in the extraction.
+          Analyze this technical drawing (PDF) and extract the Part Information into the specified JSON structure.
+
+          CRITICAL CLASSIFICATION RULES:
+          1. **PROFILE**: Any part that is a standard section beam, tube, or angle.
+             - Keywords to look for: RHS, SHS, IPE, HEA, HEB, UNP, UPE, L-Profile, Angle, Tube, Pipe, Beam.
+             - Example Descriptions: "HEA 200", "RHS 100x100x5", "L 50x50x5".
+             - If the part is defined by a Profile Name (e.g. "IPE200") it is a PROFILE.
           
-          GUIDANCE:
-          - If the description says "HEA", "IPE", "UNP" or similar, it IS A PROFILE.
-          - If the description looks like "PL 10x200" it is a PLATE.
-          - If the part is a tube (rectangular or square), it is a PROFILE (RHS/SHS).
-        `
+          2. **PLATE**: Any part that is a flat sheet of material defined by Thickness x Width x Length.
+             - Typically designated as "PL", "FL", "Flat Bar" (sometimes), or just dimensions like "10x200x500".
+             - If the part has a 'Thickness' and 'Width' that define its cross-section, and it is NOT a standard profile, it is a PLATE.
+
+          EXTRACTION INSTRUCTIONS:
+          - **type**: MUST be "PROFILE" or "PLATE" based on the rules above.
+          - **profileType**: If type is PROFILE, extract the designation (e.g. "RHS").
+          - **profileDimensions**: If type is PROFILE, extract the dimensions string (e.g. "100x100x5").
+          - **thickness**: Critical for PLATE. Extract in mm.
+          - **width**: Critical for PLATE. Extract in mm.
+          - **length**: Extract in mm for all parts.
+          - **quantity**: Default to 1 if not explicitly stated.
+          
+          Return JSON strictly adhering to the schema.`
+                    `
 
                 const result = await model.generateContent([
                     {
@@ -112,7 +122,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
                 const response = result.response
                 const text = response.text()
-                console.log(`[AI] Response for ${entry.name}:`, text)
+                console.log(`[AI] Response for ${ entry.name }: `, text)
 
                 let data: any = {}
                 try {
@@ -139,7 +149,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 })
 
             } catch (e) {
-                console.error(`Failed to process ${entry.name} with Gemini:`, e)
+                console.error(`Failed to process ${ entry.name } with Gemini: `, e)
                 parsedParts.push({
                     id: uuidv4(),
                     filename: entry.name,
@@ -244,11 +254,11 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
 
                 // Gemini Call with PDF
                 const prompt = `
-                    Analyze this technical drawing (PDF). It is an Assembly Drawing.
+                    Analyze this technical drawing(PDF).It is an Assembly Drawing.
                     Extract:
-                    1. The Assembly Number and Title (from title block).
-                    2. The overall Quantity of this assembly required (if specified, e.g. "MAKE 2", otherwise 1).
-                    3. The Bill of Materials (BOM) table. Extract each row: Part Number, Quantity, Description, Material.
+                1. The Assembly Number and Title(from title block).
+                    2. The overall Quantity of this assembly required(if specified, e.g. "MAKE 2", otherwise 1).
+                3. The Bill of Materials(BOM) table.Extract each row: Part Number, Quantity, Description, Material.
                 `
 
                 const result = await model.generateContent([
@@ -257,7 +267,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 ])
 
                 const text = result.response.text()
-                console.log(`[AI] Response for Assembly ${entry.name}:`, text)
+                console.log(`[AI] Response for Assembly ${ entry.name }: `, text)
                 let data: any = {}
                 try {
                     data = JSON.parse(text)
@@ -278,7 +288,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 })
 
             } catch (e) {
-                console.error(`Failed to process Assembly ${entry.name}:`, e)
+                console.error(`Failed to process Assembly ${ entry.name }: `, e)
                 parsedAssemblies.push({
                     id: uuidv4(),
                     filename: entry.name,
