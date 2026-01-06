@@ -13,12 +13,12 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 
 const nextConfig: NextConfig = {
   /* config options here */
-  serverExternalPackages: ["canvas"],
+  serverExternalPackages: ["@napi-rs/canvas"],
   transpilePackages: ["pdfjs-dist"],
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@napi-rs/canvas': 'canvas',
+      canvas: '@napi-rs/canvas',
     }
     return config
   },
