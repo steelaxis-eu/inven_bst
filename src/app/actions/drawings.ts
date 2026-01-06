@@ -108,7 +108,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
           - **quantity**: Default to 1 if not explicitly stated.
           
           Return JSON strictly adhering to the schema.`
-                    `
+
 
                 const result = await model.generateContent([
                     {
@@ -122,7 +122,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
 
                 const response = result.response
                 const text = response.text()
-                console.log(`[AI] Response for ${ entry.name }: `, text)
+                console.log(`[AI] Response for ${entry.name}: `, text)
 
                 let data: any = {}
                 try {
@@ -149,7 +149,7 @@ export async function parseDrawingsZip(formData: FormData): Promise<{ success: b
                 })
 
             } catch (e) {
-                console.error(`Failed to process ${ entry.name } with Gemini: `, e)
+                console.error(`Failed to process ${entry.name} with Gemini: `, e)
                 parsedParts.push({
                     id: uuidv4(),
                     filename: entry.name,
@@ -267,7 +267,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 ])
 
                 const text = result.response.text()
-                console.log(`[AI] Response for Assembly ${ entry.name }: `, text)
+                console.log(`[AI] Response for Assembly ${entry.name}: `, text)
                 let data: any = {}
                 try {
                     data = JSON.parse(text)
@@ -288,7 +288,7 @@ export async function parseAssemblyZip(formData: FormData): Promise<{ success: b
                 })
 
             } catch (e) {
-                console.error(`Failed to process Assembly ${ entry.name }: `, e)
+                console.error(`Failed to process Assembly ${entry.name}: `, e)
                 parsedAssemblies.push({
                     id: uuidv4(),
                     filename: entry.name,
