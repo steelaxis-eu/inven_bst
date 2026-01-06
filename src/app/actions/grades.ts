@@ -18,3 +18,19 @@ export async function updateGrade(id: string, data: { density: number, scrapPric
         return { success: false, error: e.message }
     }
 }
+export async function createGrade(name: string) {
+    try {
+        const grade = await prisma.materialGrade.create({
+            data: {
+                name,
+                density: 7850, // Default for steel
+                scrapPrice: 0
+            }
+        })
+        revalidatePath('/settings')
+        revalidatePath('/')
+        return { success: true, grade }
+    } catch (e: any) {
+        return { success: false, error: e.message }
+    }
+}

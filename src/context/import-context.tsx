@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { ParsedPart, ParsedAssembly } from '@/app/actions/drawings'
 import { toast } from 'sonner'
 import { parseDrawingsZip, parseAssemblyZip } from '@/app/actions/drawings'
@@ -34,6 +34,28 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         resultParts: [],
         resultAssemblies: []
     })
+
+    // Load from localStorage on mount
+    useEffect(() => {
+        const saved = localStorage.getItem('import_context_state')
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved)
+                setState(prev => ({ ...prev, ...parsed }))
+            } catch (e) {
+                console.error("Failed to load import state", e)
+            }
+        }
+    }, [])
+
+    // Save to localStorage on change
+    useEffect(() => {
+        if (state.status !== 'idle') {
+            localStorage.setItem('import_context_state', JSON.stringify(state))
+        } else {
+            // If idle, maybe clear it? Or keep it? kept for now, but usually clear on full reset
+        }
+    }, [state])
 
     const startImport = async (file: File, mode: 'parts' | 'assemblies') => {
         setState(prev => ({
@@ -118,6 +140,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
     }
 
     const reset = () => {
+        localStorage.removeItem('import_context_state')
         setState({
             isProcessing: false,
             progress: 0,
