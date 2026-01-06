@@ -87,7 +87,10 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     }
 
     // Derived lists for Profile Selectors
-    const profileTypes = Array.from(new Set(standardProfiles.map(p => p.type))).sort()
+    const profileTypes = Array.from(new Set([
+        ...standardProfiles.map(p => p.type),
+        "RHS", "SHS", "CHS"
+    ])).sort()
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
