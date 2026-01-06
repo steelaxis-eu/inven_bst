@@ -1,5 +1,13 @@
 'use server'
 
+// Runtime alias for pdfjs-dist dependency
+import moduleAlias from 'module-alias';
+try {
+    moduleAlias.addAlias('@napi-rs/canvas', 'canvas');
+} catch (e) {
+    // ignore if already registered
+}
+
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
