@@ -72,73 +72,14 @@ export async function createPart(input: CreatePartInput) {
             })
             if (profile) weightPerMeter = profile.weightPerMeter
         } else if (rest.profileType && rest.profileDimensions) {
-            // Try to find in Active Profiles first
-            const activeProfile = await prisma.steelProfile.findUnique({
-                where: {
-                    type_dimensions: {
-                        type: rest.profileType,
-                        dimensions: rest.profileDimensions
-                    }
-                }
+            // Use centralized calculator
+            const { calculateProfileWeight } = await import('@/app/actions/calculator')
+            const calculated = await calculateProfileWeight(rest.profileType, {
+                dimensions: rest.profileDimensions,
+                gradeId: rest.gradeId // Pass gradeId for density lookup
             })
-            if (activeProfile) {
-                weightPerMeter = activeProfile.weightPerMeter
-            } else {
-                // Try Standard Catalog
-                const stdProfile = await prisma.standardProfile.findUnique({
-                    where: {
-                        type_dimensions: {
-                            type: rest.profileType,
-                            dimensions: rest.profileDimensions
-                        }
-                    }
-                })
-                if (stdProfile) {
-                    weightPerMeter = stdProfile.weightPerMeter
-                }
-            }
-
-            // If still no weight, try to calculate dynamically
-            if (weightPerMeter === 0 && rest.gradeId) {
-                const shape = await prisma.profileShape.findUnique({
-                    where: { id: rest.profileType }
-                })
-                const grade = await prisma.materialGrade.findUnique({
-                    where: { id: rest.gradeId }
-                })
-
-                if (shape && shape.formula && grade && grade.density) {
-                    try {
-                        // Parse dimensions: "100x50x5" -> [100, 50, 5]
-                        const dimParts = rest.profileDimensions.toLowerCase().split(/[x* ]+/).map(s => parseFloat(s)).filter(n => !isNaN(n))
-                        const params = shape.params as string[] // e.g. ["h", "b", "t"]
-
-                        if (dimParts.length > 0 && params.length > 0) {
-                            const numericParams: Record<string, number> = {}
-
-                            // Map sequential numbers to params
-                            params.forEach((param, i) => {
-                                if (dimParts[i] !== undefined) {
-                                    numericParams[param] = dimParts[i]
-                                }
-                            })
-
-                            // Evaluate
-                            const areaMm2 = evaluateFormula(shape.formula, numericParams)
-                            // area (mm2) / 1000 * density (kg/dm3 ? No usually g/cm3 or similar. Check density unit.)
-                            // In system we assume density is kg/m per mm2... wait.
-                            // Standard: Weight = Area * Density * Length
-                            // Density usually in kg/dm3 ~ 7.85
-                            // Weight/m = (Area_mm2 / 10^6 m2) ?? 
-                            // Let's check `create-inventory-dialog.tsx`: `const weight = (areaMm2 / 1000) * gradeObj.density`
-                            // If density is 7.85, and area is 100x100 = 10000. 10000 / 1000 * 7.85 = 78.5 kg/m. Correct.
-                            // So we replicate EXACTLY:
-                            weightPerMeter = (areaMm2 / 1000) * grade.density
-                        }
-                    } catch (err) {
-                        console.error("Dynamic weight calc failed:", err)
-                    }
-                }
+            if (calculated) {
+                weightPerMeter = calculated
             }
         }
 
@@ -916,16 +857,12 @@ export async function recalculateProjectWeights(projectId: string) {
             if (part.profile?.weightPerMeter) {
                 weightPerMeter = part.profile.weightPerMeter
             } else if (part.profileType && part.profileDimensions) {
-                const active = await prisma.steelProfile.findUnique({
-                    where: { type_dimensions: { type: part.profileType, dimensions: part.profileDimensions } }
+                const { calculateProfileWeight } = await import('@/app/actions/calculator')
+                const calculated = await calculateProfileWeight(part.profileType, {
+                    dimensions: part.profileDimensions,
+                    gradeId: part.gradeId || undefined
                 })
-                if (active) weightPerMeter = active.weightPerMeter
-                else {
-                    const std = await prisma.standardProfile.findUnique({
-                        where: { type_dimensions: { type: part.profileType, dimensions: part.profileDimensions } }
-                    })
-                    if (std) weightPerMeter = std.weightPerMeter
-                }
+                if (calculated) weightPerMeter = calculated
             }
 
             if (weightPerMeter > 0 && part.length) {

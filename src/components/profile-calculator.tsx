@@ -6,14 +6,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
-import { getStandardProfileTypes, getStandardProfileDimensions, calculateProfileWeight } from "@/app/actions/calculator"
+import { getStandardProfileTypes, getStandardProfileDimensions, calculateProfileWeight, getProfileShapes, getMaterialGrades } from "@/app/actions/calculator"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface ProfileCalculatorProps {
-    onSelect: (profile: { type: string, dimensions: string, weight: number }) => void
+    onSelect: (profile: { type: string, dimensions: string, weight: number, gradeId?: string }) => void
     trigger?: React.ReactNode
 }
 
@@ -33,8 +33,13 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
     const [openType, setOpenType] = useState(false)
     const [openDim, setOpenDim] = useState(false)
 
+    // Data Sources
+    const [shapes, setShapes] = useState<{ id: string, name: string }[]>([])
+    const [grades, setGrades] = useState<{ id: string, name: string }[]>([])
+
     // Custom
     const [customType, setCustomType] = useState('RHS')
+    const [selectedGradeId, setSelectedGradeId] = useState<string>('')
     const [w, setW] = useState('')
     const [h, setH] = useState('')
     const [t, setT] = useState('')
@@ -45,13 +50,20 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
     const [calculatedWeight, setCalculatedWeight] = useState<number | null>(null)
     const [calculating, setCalculating] = useState(false)
 
-    // Initial Fetch for standard types
+    // Initial Fetch for standard types and metadata
     useEffect(() => {
         getStandardProfileTypes().then(types => {
             setStdTypes(types)
             if (types.length > 0) {
                 setType(types[0]) // Set initial type to the first available
             }
+        })
+        getProfileShapes().then(data => {
+            setShapes(data)
+        })
+        getMaterialGrades().then(data => {
+            setGrades(data)
+            if (data.length > 0) setSelectedGradeId(data[0].id)
         })
     }, [])
 
@@ -84,7 +96,7 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                 let weight = 0
                 if (mode === 'STANDARD') {
                     if (type && dim) {
-                        weight = await calculateProfileWeight(type, { dimensions: dim })
+                        weight = await calculateProfileWeight(type, { dimensions: dim, gradeId: selectedGradeId })
                     }
                 } else {
                     // Custom
@@ -94,7 +106,8 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                         h: parseFloat(h),
                         t: parseFloat(t),
                         d: parseFloat(d),
-                        s: parseFloat(s)
+                        s: parseFloat(s),
+                        gradeId: selectedGradeId
                     }
                     // Check if at least one relevant dimension is a valid number
                     const hasValidDimension = !isNaN(params.w) || !isNaN(params.h) || !isNaN(params.t) || !isNaN(params.d) || !isNaN(params.s);
@@ -115,7 +128,7 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
         // Debounce slightly to avoid too many server calls
         const timer = setTimeout(fetchWeight, 300)
         return () => clearTimeout(timer)
-    }, [mode, type, dim, customType, w, h, t, d, s])
+    }, [mode, type, dim, customType, w, h, t, d, s, selectedGradeId])
 
 
     const handleUseCheck = () => {
@@ -128,24 +141,31 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
             finalDim = dim
         } else {
             // Build dimension string for display
-            switch (customType) {
-                case 'RHS': finalDim = `${w}x${h}x${t}`; break;
-                case 'SHS': finalDim = `${w}x${w}x${t}`; break;
-                case 'CHS': finalDim = `${d}x${t}`; break;
-                case 'FB': finalDim = `${w}x${t}`; break;
-                case 'PL': finalDim = `${w}x${t}`; break;
-                case 'R': finalDim = `D${d}`; break;
-                case 'SQB': finalDim = `${s || w}`; break;
-            }
+            // This needs to be robust for the generic "Custom" shapes logic or rely on params present
+            if (customType.includes('RHS')) finalDim = `${w}x${h}x${t}`
+            else if (customType.includes('SHS')) finalDim = `${w || s}x${w || s}x${t}` // Handle potential alias
+            else if (customType.includes('CHS')) finalDim = `${d}x${t}`
+            else if (['FB', 'PL', 'Plate'].includes(customType)) finalDim = `${w}x${t}`
+            else if (['R', 'Round', 'Round Bar'].includes(customType)) finalDim = `D${d}`
+            else if (['SQB', 'Square Bar'].includes(customType)) finalDim = `${s || w}`
+            else finalDim = `${w}x${h}x${t}` // Fallback
         }
 
         onSelect({
             type: finalType,
             dimensions: finalDim,
-            weight: calculatedWeight
+            weight: calculatedWeight,
+            gradeId: selectedGradeId
         })
         setOpen(false)
     }
+
+    // Helper to determine inputs based on shape ID
+    const showW = (id: string) => ['RHS', 'SHS', 'FB', 'PL', 'Plate', 'SQB'].some(k => id.includes(k))
+    const showH = (id: string) => ['RHS'].some(k => id.includes(k)) && !id.includes('SHS') // SHS usually only W/S
+    const showT = (id: string) => ['RHS', 'SHS', 'CHS', 'FB', 'PL', 'Plate'].some(k => id.includes(k))
+    const showD = (id: string) => ['CHS', 'R', 'Round'].some(k => id.includes(k))
+    const showS = (id: string) => ['SHS', 'SQB'].some(k => id.includes(k))
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -161,6 +181,18 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                     <div className="flex gap-4 border-b pb-4">
                         <Button variant={mode === 'STANDARD' ? 'default' : 'ghost'} onClick={() => setMode('STANDARD')}>Standard Catalog</Button>
                         <Button variant={mode === 'CUSTOM' ? 'default' : 'ghost'} onClick={() => setMode('CUSTOM')}>Custom Calculator</Button>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Material Grade</Label>
+                        <Select value={selectedGradeId} onValueChange={setSelectedGradeId}>
+                            <SelectTrigger><SelectValue placeholder="Select Grade" /></SelectTrigger>
+                            <SelectContent>
+                                {grades.map(g => (
+                                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     {mode === 'STANDARD' ? (
@@ -265,30 +297,24 @@ export function ProfileCalculator({ onSelect, trigger }: ProfileCalculatorProps)
                                 <Select value={customType} onValueChange={setCustomType}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="RHS">RHS (Rectangular Hollow)</SelectItem>
-                                        <SelectItem value="SHS">SHS (Square Hollow)</SelectItem>
-                                        <SelectItem value="CHS">CHS (Circular Hollow)</SelectItem>
-                                        <SelectItem value="FB">FB / PL (Flat Bar)</SelectItem>
-                                        <SelectItem value="R">Round Bar</SelectItem>
-                                        <SelectItem value="SQB">Square Bar</SelectItem>
+                                        {shapes.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>{s.name || s.id}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                {(customType === 'RHS' || customType === 'SHS' || customType === 'FB' || customType === 'PL') && (
-                                    <>
-                                        <div className="space-y-2"><Label>Width (W) mm</Label><Input type="number" value={w} onChange={e => setW(e.target.value)} /></div>
-                                        {(customType === 'RHS') && <div className="space-y-2"><Label>Height (H) mm</Label><Input type="number" value={h} onChange={e => setH(e.target.value)} /></div>}
-                                    </>
+                                {(showW(customType) || showS(customType)) && (
+                                    <div className="space-y-2"><Label>{showS(customType) ? 'Side (S)' : 'Width (W)'} mm</Label><Input type="number" value={w || s} onChange={e => { setW(e.target.value); setS(e.target.value) }} /></div>
                                 )}
-                                {(customType === 'CHS' || customType === 'R') && (
+                                {showH(customType) && (
+                                    <div className="space-y-2"><Label>Height (H) mm</Label><Input type="number" value={h} onChange={e => setH(e.target.value)} /></div>
+                                )}
+                                {showD(customType) && (
                                     <div className="space-y-2"><Label>Diameter (D) mm</Label><Input type="number" value={d} onChange={e => setD(e.target.value)} /></div>
                                 )}
-                                {(customType === 'SQB') && (
-                                    <div className="space-y-2"><Label>Side (S) mm</Label><Input type="number" value={s} onChange={e => setS(e.target.value)} /></div>
-                                )}
-                                {(customType !== 'R' && customType !== 'SQB') && (
+                                {showT(customType) && (
                                     <div className="space-y-2"><Label>Thickness (t) mm</Label><Input type="number" value={t} onChange={e => setT(e.target.value)} /></div>
                                 )}
                             </div>
