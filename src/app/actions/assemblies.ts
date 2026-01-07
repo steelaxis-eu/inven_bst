@@ -178,34 +178,21 @@ export async function createAssembly(input: CreateAssemblyInput) {
 
                     console.log(`Failed to link BOM item: ${item.partNumber} in project ${projectId}`)
                 }
-                const plateData = await (tx as any).platePart.findUnique({ where: { id: matchedPlate.id }, include: { pieces: { select: { pieceNumber: true } } } })
-                if (plateData) {
-                    const maxNum = (plateData.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
-                    const newPieces = Array.from({ length: totalNeeded }, (_, i) => ({
-                        platePartId: matchedPlate.id,
-                        pieceNumber: maxNum + i + 1,
-                        status: PlatePieceStatus.PENDING
-                    }))
-                    await (tx as any).platePiece.createMany({ data: newPieces })
-                }
-            }
-        }
-                }
             }
 
-return assembly
+            return assembly
         })
 
-revalidatePath(`/projects/${projectId}`)
-return { success: true, data: result }
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true, data: result }
 
     } catch (e: any) {
-    if (e.code === 'P2002') {
-        return { success: false, error: 'Assembly number already exists in this project' }
+        if (e.code === 'P2002') {
+            return { success: false, error: 'Assembly number already exists in this project' }
+        }
+        console.error('createAssembly error:', e)
+        return { success: false, error: e.message }
     }
-    console.error('createAssembly error:', e)
-    return { success: false, error: e.message }
-}
 }
 
 /**
