@@ -84,13 +84,31 @@ export async function createAssembly(input: CreateAssemblyInput) {
                     select: { id: true, partNumber: true }
                 })
 
+                // Helper for normalization
+                const normalizeSimple = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+                const normalizeAdvanced = (s: string) => {
+                    let cleaned = s.toLowerCase()
+                    // Remove "part", "pos", "item", "no" prefixes (with optional dot/space)
+                    cleaned = cleaned.replace(/^(part|pos|item|no)\.?\s*/, '')
+                    // Remove "p", "a" prefixes ONLY if followed by separator (e.g. P-101, A_200)
+                    cleaned = cleaned.replace(/^(p|a)[-._\s]+/, '')
+                    return cleaned.replace(/[^a-z0-9]/g, '')
+                }
+
                 for (const item of bom) {
-                    const normalizedItemNum = item.partNumber.toLowerCase().replace(/[^a-z0-9]/g, '')
+                    const itemSimple = normalizeSimple(item.partNumber)
+                    const itemAdv = normalizeAdvanced(item.partNumber)
 
                     // 1. Try finding in Parts
-                    const matchedPart = projectParts.find(p => p.partNumber.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedItemNum)
+                    // We try strict match first, then loose match
+                    let matchedPart = projectParts.find(p => p.partNumber === item.partNumber)
+                    if (!matchedPart) matchedPart = projectParts.find(p => normalizeSimple(p.partNumber) === itemSimple)
+                    if (!matchedPart) matchedPart = projectParts.find(p => normalizeAdvanced(p.partNumber) === itemSimple)
+                    if (!matchedPart) matchedPart = projectParts.find(p => normalizeSimple(p.partNumber) === itemAdv)
+                    if (!matchedPart) matchedPart = projectParts.find(p => normalizeAdvanced(p.partNumber) === itemAdv)
 
                     if (matchedPart) {
+                        console.log(`Matched Assembly Part: ${item.partNumber} -> ${matchedPart.partNumber}`)
                         await tx.assemblyPart.create({
                             data: {
                                 assemblyId: assembly.id,
@@ -105,9 +123,7 @@ export async function createAssembly(input: CreateAssemblyInput) {
                                 where: { id: matchedPart.id },
                                 data: { quantity: { increment: totalNeeded } }
                             })
-                            // ... and create pieces logic (simplified here or reuse addPartToAssembly logic?)
-                            // To keep it simple and robust, we just inc qty here. Pieces generation ideally should happen too.
-                            // Let's copy the pieces generation logic from addPartToAssembly to be correct.
+                            // Create pieces
                             const partData = await tx.part.findUnique({ where: { id: matchedPart.id }, include: { pieces: { select: { pieceNumber: true } } } })
                             if (partData) {
                                 const maxNum = partData.pieces.reduce((max, p) => p.pieceNumber > max ? p.pieceNumber : max, 0)
@@ -123,8 +139,14 @@ export async function createAssembly(input: CreateAssemblyInput) {
                     }
 
                     // 2. Try finding in PlateParts
-                    const matchedPlate = projectPlates.find((p: any) => p.partNumber.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedItemNum)
+                    let matchedPlate = projectPlates.find((p: any) => p.partNumber === item.partNumber)
+                    if (!matchedPlate) matchedPlate = projectPlates.find((p: any) => normalizeSimple(p.partNumber) === itemSimple)
+                    if (!matchedPlate) matchedPlate = projectPlates.find((p: any) => normalizeAdvanced(p.partNumber) === itemSimple)
+                    if (!matchedPlate) matchedPlate = projectPlates.find((p: any) => normalizeSimple(p.partNumber) === itemAdv)
+                    if (!matchedPlate) matchedPlate = projectPlates.find((p: any) => normalizeAdvanced(p.partNumber) === itemAdv)
+
                     if (matchedPlate) {
+                        console.log(`Matched Assembly Plate: ${item.partNumber} -> ${matchedPlate.partNumber}`)
                         await tx.plateAssemblyPart.create({
                             data: {
                                 assemblyId: assembly.id,
@@ -139,34 +161,51 @@ export async function createAssembly(input: CreateAssemblyInput) {
                                 where: { id: matchedPlate.id },
                                 data: { quantity: { increment: totalNeeded } }
                             })
+                            // Create pieces
                             const plateData = await (tx as any).platePart.findUnique({ where: { id: matchedPlate.id }, include: { pieces: { select: { pieceNumber: true } } } })
                             if (plateData) {
-                                const maxNum = (plateData.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                                const maxNum = plateData.pieces.reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
                                 const newPieces = Array.from({ length: totalNeeded }, (_, i) => ({
                                     platePartId: matchedPlate.id,
                                     pieceNumber: maxNum + i + 1,
                                     status: PlatePieceStatus.PENDING
                                 }))
-                                await (tx as any).platePiece.createMany({ data: newPieces })
+                                await tx.platePiece.createMany({ data: newPieces })
                             }
                         }
+                        continue
                     }
+
+                    console.log(`Failed to link BOM item: ${item.partNumber} in project ${projectId}`)
+                }
+                const plateData = await (tx as any).platePart.findUnique({ where: { id: matchedPlate.id }, include: { pieces: { select: { pieceNumber: true } } } })
+                if (plateData) {
+                    const maxNum = (plateData.pieces as any[]).reduce((max: number, p: any) => p.pieceNumber > max ? p.pieceNumber : max, 0)
+                    const newPieces = Array.from({ length: totalNeeded }, (_, i) => ({
+                        platePartId: matchedPlate.id,
+                        pieceNumber: maxNum + i + 1,
+                        status: PlatePieceStatus.PENDING
+                    }))
+                    await (tx as any).platePiece.createMany({ data: newPieces })
+                }
+            }
+        }
                 }
             }
 
-            return assembly
+return assembly
         })
 
-        revalidatePath(`/projects/${projectId}`)
-        return { success: true, data: result }
+revalidatePath(`/projects/${projectId}`)
+return { success: true, data: result }
 
     } catch (e: any) {
-        if (e.code === 'P2002') {
-            return { success: false, error: 'Assembly number already exists in this project' }
-        }
-        console.error('createAssembly error:', e)
-        return { success: false, error: e.message }
+    if (e.code === 'P2002') {
+        return { success: false, error: 'Assembly number already exists in this project' }
     }
+    console.error('createAssembly error:', e)
+    return { success: false, error: e.message }
+}
 }
 
 /**
