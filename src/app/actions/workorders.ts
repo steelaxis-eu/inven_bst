@@ -12,7 +12,8 @@ import {
     AssemblyStatus,
     QualityCheckStatus,
     QualityCheckType,
-    InventoryStatus
+    InventoryStatus,
+    PlatePieceStatus
 } from '@prisma/client'
 
 // ============================================================================
@@ -425,6 +426,69 @@ export async function completeWorkOrder(workOrderId: string) {
                 data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
+            // Handle Plate Pieces
+            const plateItems = wo.items.filter(i => i.platePartId)
+            if (plateItems.length > 0) {
+                let newPlateStatus: string | null = null
+                // Use string literals to avoid Enum import issues if client is stale
+                if (wo.type === 'CUTTING') newPlateStatus = 'CUT'
+
+                if (newPlateStatus) {
+                    for (const item of plateItems) {
+                        const piece: any = await (tx as any).platePiece.findFirst({
+                            where: {
+                                platePartId: item.platePartId!,
+                                status: 'PENDING'
+                            },
+                            orderBy: { pieceNumber: 'asc' }
+                        })
+
+                        if (piece) {
+                            await (tx as any).platePiece.update({
+                                where: { id: piece.id },
+                                data: { status: newPlateStatus }
+                            })
+                        }
+                    }
+                }
+            }
+
+            // Handle Plate Pieces (Transition PENDING -> CUT etc.)
+            const plateItems = wo.items.filter(i => i.platePartId)
+            if (plateItems.length > 0) {
+                let newPlateStatus: PlatePieceStatus | null = null
+                switch (wo.type) {
+                    case WorkOrderType.CUTTING:
+                        newPlateStatus = PlatePieceStatus.CUT
+                        break
+                    // Add more status transitions if PlatePieceStatus supports them
+                }
+
+                if (newPlateStatus) {
+                    for (const item of plateItems) {
+                        // Find the next available PENDING piece for this part
+                        const piece = await tx.platePiece.findFirst({
+                            where: {
+                                platePartId: item.platePartId!,
+                                status: PlatePieceStatus.PENDING
+                            },
+                            orderBy: { pieceNumber: 'asc' }
+                        })
+
+                        if (piece) {
+                            await tx.platePiece.update({
+                                where: { id: piece.id },
+                                data: {
+                                    status: newPlateStatus,
+                                    // receivedAt? PlatePiece doesn't have cutAt. 
+                                    // If CUTTING implies received/done, we could set receivedAt if appropriate but it's optional
+                                }
+                            })
+                        }
+                    }
+                }
+            }
+
             // Update piece statuses based on work order type
             if (pieceIds.length > 0) {
                 const now = new Date()
@@ -788,96 +852,166 @@ export async function completeMaterialPrepWorkOrder(
  * Check if inventory has sufficient stock using Optimization Logic
  * Returns the optimized plan
  */
-export async function getOptimizationPreview(pieceIds: string[]) {
+/**
+ * Check if inventory has sufficient stock using Optimization Logic
+ * Returns the optimized plan for Profiles and Stock Availability for Plates
+ */
+export async function getOptimizationPreview(input: string[] | { id: string, type: 'part' | 'plate' }[]) {
     try {
-        // 1. Get pieces with their part profiles
-        const pieces = await prisma.partPiece.findMany({
-            where: { id: { in: pieceIds } },
-            include: {
-                part: {
-                    include: { profile: true, grade: true }
+        // Normalize input
+        const items = Array.isArray(input) && typeof input[0] === 'string'
+            ? (input as string[]).map(id => ({ id, type: 'part' as const }))
+            : (input as { id: string, type: 'part' | 'plate' }[])
+
+        const partIds = items.filter(i => i.type === 'part').map(i => i.id)
+        const plateIds = items.filter(i => i.type === 'plate').map(i => i.id)
+
+        const planResults: any[] = []
+
+        // ====================================================
+        // 1. PROFILE OPTIMIZATION (Existing Logic)
+        // ====================================================
+        if (partIds.length > 0) {
+            const pieces = await prisma.partPiece.findMany({
+                where: { id: { in: partIds } },
+                include: {
+                    part: {
+                        include: { profile: true, grade: true }
+                    }
                 }
-            }
-        })
+            })
 
-        if (pieces.length === 0) return { success: false, error: 'No pieces found' }
+            // Group by Profile/Grade
+            const materialGroups: Record<string, typeof pieces> = {}
 
-        // Group by Profile/Grade (Optimization must be done per material type)
-        // We'll run optimization for each unique Material Group
-        const materialGroups: Record<string, typeof pieces> = {}
+            pieces.forEach(p => {
+                const key = `${p.part.profileId || 'custom'}|${p.part.gradeId || 'custom'}`
+                if (!materialGroups[key]) materialGroups[key] = []
+                materialGroups[key].push(p)
+            })
 
-        pieces.forEach(p => {
-            const key = `${p.part.profileId || 'custom'}|${p.part.gradeId || 'custom'}`
-            if (!materialGroups[key]) materialGroups[key] = []
-            materialGroups[key].push(p)
-        })
+            for (const [key, groupPieces] of Object.entries(materialGroups)) {
+                const firstPart = groupPieces[0].part
+                if (!firstPart.profileId || !firstPart.gradeId) {
+                    planResults.push({
+                        type: 'profile',
+                        materialKey: key,
+                        profile: 'Custom / Unknown',
+                        grade: 'Unknown',
+                        canOptimize: false,
+                        error: 'Missing Profile/Grade data'
+                    })
+                    continue
+                }
 
-        const planResults = []
-
-        for (const [key, groupPieces] of Object.entries(materialGroups)) {
-            const firstPart = groupPieces[0].part
-            if (!firstPart.profileId || !firstPart.gradeId) {
-                // Cannot optimize custom/undefined profiles
-                planResults.push({
-                    materialKey: key,
-                    profile: 'Custom / Unknown',
-                    grade: 'Unknown',
-                    canOptimize: false,
-                    error: 'Missing Profile/Grade data'
+                // Fetch Stock
+                const inventory = await prisma.inventory.findMany({
+                    where: {
+                        profileId: firstPart.profileId,
+                        gradeId: firstPart.gradeId,
+                        status: 'ACTIVE',
+                        quantityAtHand: { gt: 0 }
+                    }
                 })
-                continue
-            }
 
-            // Fetch Available Stock (Inventory + Remnants)
-            const inventory = await prisma.inventory.findMany({
-                where: {
-                    profileId: firstPart.profileId,
-                    gradeId: firstPart.gradeId,
-                    status: 'ACTIVE',
-                    quantityAtHand: { gt: 0 }
-                }
-            })
+                const remnants = await prisma.remnant.findMany({
+                    where: {
+                        profileId: firstPart.profileId,
+                        gradeId: firstPart.gradeId,
+                        status: 'AVAILABLE'
+                    }
+                })
 
-            const remnants = await prisma.remnant.findMany({
-                where: {
-                    profileId: firstPart.profileId,
-                    gradeId: firstPart.gradeId,
-                    status: 'AVAILABLE'
-                }
-            })
+                const stockInfo: StockInfo[] = [
+                    ...remnants.map(r => ({
+                        id: r.id,
+                        length: r.length,
+                        quantity: r.quantity,
+                        type: 'REMNANT' as const
+                    })),
+                    ...inventory.map(i => ({
+                        id: i.id,
+                        length: i.length,
+                        quantity: i.quantityAtHand,
+                        type: 'INVENTORY' as const
+                    }))
+                ]
 
-            // Format for Optimizer
-            const stockInfo: StockInfo[] = [
-                ...remnants.map(r => ({
-                    id: r.id,
-                    length: r.length,
-                    quantity: r.quantity, // Should be 1 typically
-                    type: 'REMNANT' as const
-                })),
-                ...inventory.map(i => ({
-                    id: i.id,
-                    length: i.length,
-                    quantity: i.quantityAtHand,
-                    type: 'INVENTORY' as const
+                const partsRequest = groupPieces.map(p => ({
+                    id: p.id,
+                    length: p.part.length || 0,
+                    quantity: 1
                 }))
-            ]
 
-            const partsRequest = groupPieces.map(p => ({
-                id: p.id,
-                length: p.part.length || 0,
-                quantity: 1
-            }))
+                const result = optimizeCuttingPlan(partsRequest, stockInfo, 12000)
 
-            const result = optimizeCuttingPlan(partsRequest, stockInfo, 12000) // Default 12m new bar
+                planResults.push({
+                    type: 'profile',
+                    materialKey: key,
+                    profile: `${firstPart.profile?.type} ${firstPart.profile?.dimensions}`,
+                    grade: firstPart.grade?.name,
+                    canOptimize: true,
+                    pieceIds: partsRequest.map(p => p.id),
+                    result
+                })
+            }
+        }
 
-            planResults.push({
-                materialKey: key,
-                profile: `${firstPart.profile?.type} ${firstPart.profile?.dimensions}`,
-                grade: firstPart.grade?.name,
-                canOptimize: true,
-                pieceIds: partsRequest.map(p => p.id),
-                result
+        // ====================================================
+        // 2. PLATE OPTIMIZATION (Material Check)
+        // ====================================================
+        if (plateIds.length > 0) {
+            const plates = await prisma.platePiece.findMany({
+                where: { id: { in: plateIds } },
+                include: {
+                    platePart: {
+                        include: { grade: true } // Grade is on PlatePart
+                    }
+                }
             })
+
+            // Group by Grade + Thickness
+            const plateGroups: Record<string, typeof plates> = {}
+
+            plates.forEach(p => {
+                const key = `${p.platePart.gradeId}|${p.platePart.thickness}`
+                if (!plateGroups[key]) plateGroups[key] = []
+                plateGroups[key].push(p)
+            })
+
+            for (const [key, groupPlates] of Object.entries(plateGroups)) {
+                const first = groupPlates[0].platePart
+                const gradeName = first.grade?.name || 'Unknown'
+                const thickness = first.thickness
+
+                // Find matching inventory
+                // We look for Sheets (Inventory) with same Grade and Thickness
+                // Note: Inventory schema for Plates usually stores dimensions in specific fields or "profile" isn't used
+                // Assuming Inventory has `gradeId` and we check textual dimensions or specific Plate fields?
+                // Checking `prisma.schema`: Inventory has `gradeId`. It has `profileId` (optional).
+                // How are Plates stored in Inventory? Likely with `profile` being null? Or a specific "Plate" profile?
+                // Let's assume for now we look for Inventory with correct Grade and `description` or `dimensions` matching Plate?
+                // Better: Check `checkMaterialStock`. It loops `profileTypes`.
+                // We'll rely on GradeId match for now and assume users put Plate info in notes or `dimensions`.
+                // Update: We'll list what we need.
+
+                const totalArea = groupPlates.reduce((acc, p) => acc + (p.platePart.width * p.platePart.length), 0) / 1000000 // m2
+
+                planResults.push({
+                    type: 'plate',
+                    materialKey: key,
+                    profile: `Plate ${thickness}mm`,
+                    grade: gradeName,
+                    canOptimize: false, // No 2D nesting yet
+                    pieceIds: groupPlates.map(p => p.id),
+                    summary: {
+                        count: groupPlates.length,
+                        totalAreaM2: totalArea.toFixed(2),
+                        thickness: thickness,
+                        grade: gradeName
+                    }
+                })
+            }
         }
 
         return { success: true, plans: planResults }
@@ -895,7 +1029,7 @@ export async function getOptimizationPreview(pieceIds: string[]) {
  */
 export async function createSmartWorkOrder(input: {
     projectId: string
-    pieceIds: string[]
+    pieceIds: string[] | { id: string, type: 'part' | 'plate' }[]
     type: string
     title?: string
     priority?: WorkOrderPriority
@@ -906,21 +1040,41 @@ export async function createSmartWorkOrder(input: {
     supplyMaterial?: boolean
     vendor?: string
     // Optimization confirmation
-    cachedPlan?: any // If user passed verified plan (optional, for now we re-run)
+    cachedPlan?: any
 }): Promise<{
     success: boolean
     message?: string
     error?: string
 }> {
     try {
-        const { projectId, pieceIds, type, title, isOutsourced, supplyMaterial, vendor, priority, scheduledDate, notes } = input
+        const { projectId, pieceIds: inputPieces, type, title, isOutsourced, supplyMaterial, vendor, priority, scheduledDate, notes } = input
 
-        if (!projectId || pieceIds.length === 0) {
+        // Normalize input
+        const items = Array.isArray(inputPieces) && (typeof inputPieces[0] === 'string' || inputPieces.length === 0)
+            ? (inputPieces as string[]).map(id => ({ id, type: 'part' as const }))
+            : (inputPieces as { id: string, type: 'part' | 'plate' }[])
+
+        if (!projectId || items.length === 0) {
             return { success: false, error: 'Project ID and pieces required' }
         }
 
         const user = await getCurrentUser()
         if (!user?.id) return { success: false, error: 'Unauthorized' }
+
+        // Fetch Piece Details for linking (PartPiece vs PlatePart)
+        // We need to know specific IDs to link properly
+        const partIds = items.filter(i => i.type === 'part').map(i => i.id)
+        const plateIds = items.filter(i => i.type === 'plate').map(i => i.id)
+
+        // Helper to get PlatePartId for a PlatePiece
+        let platePieceMap: Record<string, string> = {} // pieceId -> platePartId
+        if (plateIds.length > 0) {
+            const plates = await prisma.platePiece.findMany({
+                where: { id: { in: plateIds } },
+                select: { id: true, platePartId: true }
+            })
+            plates.forEach(p => platePieceMap[p.id] = p.platePartId)
+        }
 
         // ====================================================================
         // SCENARIO 1: OUTSOURCED WORK
@@ -929,28 +1083,20 @@ export async function createSmartWorkOrder(input: {
             const woNumber = await generateWorkOrderNumber(projectId)
 
             if (supplyMaterial) {
-                // A. INTERNAL SUPPLY -> MATERIAL PREP (BLOCKING) -> OUTSOURCED
-                // We need to calculate what material to send.
-                // Run Optimization to see what we have vs what we need? 
-                // Or acts as "Material Prep" for the RAW lengths.
-                // Logic: We are sending material. This implies we pick from stock.
-                // We'll create a PREP WO to "Pick/Cut Material".
-                // Then Outsourced WO is for the processing.
-
+                // INTERNAL SUPPLY -> MATERIAL PREP (BLOCKING) -> OUTSOURCED
                 const prepWONumber = await generateWorkOrderNumber(projectId)
-                const outsourcedWONumber = await generateWorkOrderNumber(projectId) // Re-gen to keep order if needed
+                const outsourcedWONumber = await generateWorkOrderNumber(projectId)
 
-                // We'll rely on the user to define exactly what material in the Prep WO if complex.
-                // For automation, we'd run optimization. Let's assume we do run it to find stock.
-                // Re-using optimization logic here is smart.
-
-                const optRes = await getOptimizationPreview(pieceIds)
+                // Run Optimization / Stock Check
+                const optRes = await getOptimizationPreview(items)
                 let prepNotes = "Sanity Check: Prepare material for Outsourced Job.\n"
 
                 if (optRes.success && optRes.plans) {
                     optRes.plans.forEach((p: any) => {
-                        if (p.canOptimize) {
-                            prepNotes += `\n${p.profile} (${p.grade}): Used ${p.result.stockUsed.length} existing items, Need ${p.result.newStockNeeded.length} new bars.`
+                        if (p.type === 'profile' && p.canOptimize) {
+                            prepNotes += `\n${p.profile} (${p.grade}): Used ${p.result?.stockUsed?.length || 0} existing items, Need ${p.result?.newStockNeeded?.length || 0} new bars.`
+                        } else if (p.type === 'plate') {
+                            prepNotes += `\nPlate ${p.thickness}mm (${p.grade}): ${p.summary.count} pieces. Area: ${p.summary.totalAreaM2}m2.`
                         }
                     })
                 }
@@ -962,19 +1108,11 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: prepWONumber,
                             title: `Prep for ${vendor || 'Vendor'} (${title || 'Outsourced'})`,
-                            type: WorkOrderType.MATERIAL_PREP, // Picking/Cutting starts here
+                            type: WorkOrderType.MATERIAL_PREP,
                             priority: (priority as any) || WorkOrderPriority.MEDIUM,
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             notes: prepNotes + "\n\n" + (notes || ''),
-                            // We link the actual pieces here? No, Pre-WO usually handles "Stock".
-                            // But we can link pieces to track them.
-                            // If we link pieces to Prep, they might get "Completed". 
-                            // We want pieces to be "Completed" only after Outsourced return.
-                            // So Prep WO items should be "Stock Items" ideally. 
-                            // But our schema links WOItem to Piece. 
-                            // Let's link pieces to the OUTSOURCED WO primarily.
-                            // The Prep WO is just a task.
                         }
                     })
 
@@ -984,14 +1122,17 @@ export async function createSmartWorkOrder(input: {
                             projectId,
                             workOrderNumber: outsourcedWONumber,
                             title: title || `Outsourced ${type}`,
-                            type: type as WorkOrderType, // e.g. CUTTING, HDG
+                            type: type as WorkOrderType,
                             priority: priority || WorkOrderPriority.MEDIUM,
                             status: WorkOrderStatus.PENDING,
-                            scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined, // Likely later
+                            scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             blockedByWOId: prepWO.id,
                             notes: `Vendor: ${vendor}\nSupply Material: YES\n` + (notes || ''),
                             items: {
-                                create: pieceIds.map(id => ({ pieceId: id }))
+                                create: items.map(i => ({
+                                    pieceId: i.type === 'part' ? i.id : undefined,
+                                    platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                                }))
                             }
                         }
                     })
@@ -1012,7 +1153,10 @@ export async function createSmartWorkOrder(input: {
                         scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                         notes: `Vendor: ${vendor}\nSupply Material: NO (Vendor Provided)\n` + (notes || ''),
                         items: {
-                            create: pieceIds.map(id => ({ pieceId: id }))
+                            create: items.map(i => ({
+                                pieceId: i.type === 'part' ? i.id : undefined,
+                                platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                            }))
                         }
                     }
                 })
@@ -1025,10 +1169,10 @@ export async function createSmartWorkOrder(input: {
         // ====================================================================
         if (type === 'CUTTING') {
             // Run Optimization
-            const optRes = await getOptimizationPreview(pieceIds)
+            const optRes = await getOptimizationPreview(items)
 
             if (!optRes.success || !optRes.plans) {
-                // Fallback to simple WO if optimization fails
+                // Fallback
                 await prisma.workOrder.create({
                     data: {
                         projectId,
@@ -1036,62 +1180,77 @@ export async function createSmartWorkOrder(input: {
                         title: title || 'Cutting',
                         type: WorkOrderType.CUTTING,
                         status: WorkOrderStatus.PENDING,
-                        items: { create: pieceIds.map(id => ({ pieceId: id })) }
+                        items: {
+                            create: items.map(i => ({
+                                pieceId: i.type === 'part' ? i.id : undefined,
+                                platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                            }))
+                        }
                     }
                 })
-                return { success: true, message: 'Optimization failed, created simple WO' }
+                return { success: true, message: 'Optimization failed/NA, created simple WO' }
             }
 
-            // Lists to bucket piece IDs
-            const immediatePieceIds: string[] = []
-            const blockedPieceIds: string[] = []
+            // Buckets
+            const immediateItems: typeof items = []
+            const blockedItems: typeof items = []
             let materialPrepRequired = false
             let prepSummary = "Material Required for Cutting:\n"
 
             for (const plan of optRes.plans) {
-                if (!plan.canOptimize || !plan.result) {
-                    // Cannot optimize -> Default to manual/immediate
-                    // Add all pieces in this plan to immediate
-                    if (plan.pieceIds) {
-                        plan.pieceIds.forEach((id: string) => immediatePieceIds.push(id))
+                if (plan.type === 'profile') {
+                    if (!plan.canOptimize || !plan.result) {
+                        // Manual/Immediate fallback
+                        if (plan.pieceIds) {
+                            plan.pieceIds.forEach((id: string) => immediateItems.push({ id, type: 'part' }))
+                        }
+                        continue
                     }
-                    continue
-                }
 
-                const result = plan.result
+                    const result = plan.result
 
-                // 1. In-Stock allocations -> Immediate
-                result.stockUsed.forEach((stock: any) => {
-                    stock.parts.forEach((p: any) => immediatePieceIds.push(p.partId))
-                })
-
-                // 2. New Stock allocations -> Blocked
-                if (result.newStockNeeded.length > 0) {
-                    materialPrepRequired = true
-                    prepSummary += `\n[${plan.profile} - ${plan.grade}]`
-
-                    result.newStockNeeded.forEach((ns: any) => {
-                        prepSummary += `\n- Buy ${ns.quantity}x ${ns.length}mm`
-                        ns.parts.forEach((p: any) => blockedPieceIds.push(p.partId))
+                    // 1. In-Stock -> Immediate
+                    result.stockUsed.forEach((stock: any) => {
+                        stock.parts.forEach((p: any) => immediateItems.push({ id: p.partId, type: 'part' }))
                     })
-                }
 
-                // 3. Unallocated (Too long?) -> Blocked/Manual
-                result.unallocated.forEach((p: any) => blockedPieceIds.push(p.id))
+                    // 2. New Stock -> Blocked
+                    if (result.newStockNeeded.length > 0) {
+                        materialPrepRequired = true
+                        prepSummary += `\n[${plan.profile} - ${plan.grade}]`
+
+                        result.newStockNeeded.forEach((ns: any) => {
+                            prepSummary += `\n- Buy ${ns.quantity}x ${ns.length}mm`
+                            ns.parts.forEach((p: any) => blockedItems.push({ id: p.partId, type: 'part' }))
+                        })
+                    }
+
+                    // 3. Unallocated -> Blocked
+                    result.unallocated.forEach((p: any) => blockedItems.push({ id: p.id, type: 'part' }))
+
+                } else if (plan.type === 'plate') {
+                    // Basic Plate Logic:
+                    // If we assume Plates are always "Requires Check" or "In Stock", we can direct them.
+                    // For now, let's put Plates into "Immediate" if they are small or standard, 
+                    // or "Blocked" if we want to force a simplified "Prep" logic.
+                    // Since we don't have stock check real logic, let's Put all Plates to Immediate unless explicitly configured?
+                    // Safe bet: Put into Immediate but mark notes. Or if user wanted Prep.
+                    // Let's Put into Immediate for now as Plate management is usually ad-hoc in MVP.
+                    // OR: If specific input "Supply Material" was checked (handled in Outsourced).
+                    // For Internal, assume we have stock or will pick it.
+                    if (plan.pieceIds) {
+                        plan.pieceIds.forEach((id: string) => immediateItems.push({ id, type: 'plate' }))
+                    }
+                }
             }
 
             // EXECUTE TRANSACTION
             await prisma.$transaction(async (tx) => {
                 let prepWOId = null
 
-                // A. Material Prep WO (if needed)
-                if (materialPrepRequired || blockedPieceIds.length > 0) {
-                    // Even if only unallocated, we might need prep. 
-                    // If blocked pieces exist, we need a blocker.
-
+                // A. Material Prep WO
+                if (materialPrepRequired) {
                     const prepDate = scheduledDate ? new Date(scheduledDate) : new Date()
-                    // Prep should be earlier? Or same start?
-
                     const prepWO = await tx.workOrder.create({
                         data: {
                             projectId,
@@ -1108,26 +1267,29 @@ export async function createSmartWorkOrder(input: {
                 }
 
                 // B. Immediate Cutting WO
-                if (immediatePieceIds.length > 0) {
+                if (immediateItems.length > 0) {
                     await tx.workOrder.create({
                         data: {
                             projectId,
                             workOrderNumber: await generateWorkOrderNumber(projectId),
-                            title: (title || 'Cutting') + ' (In Stock)',
+                            title: (title || 'Cutting') + ' (Ready/InStock)',
                             type: WorkOrderType.CUTTING,
                             priority: priority || WorkOrderPriority.MEDIUM,
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                            notes: (notes || '') + "\n[Auto-Optimized: Uses Stock/Remnants]",
+                            notes: (notes || '') + "\n[Auto-Optimized]",
                             items: {
-                                create: immediatePieceIds.map(id => ({ pieceId: id }))
+                                create: immediateItems.map(i => ({
+                                    pieceId: i.type === 'part' ? i.id : undefined,
+                                    platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                                }))
                             }
                         }
                     })
                 }
 
                 // C. Blocked Cutting WO
-                if (blockedPieceIds.length > 0 && prepWOId) {
+                if (blockedItems.length > 0 && prepWOId) {
                     await tx.workOrder.create({
                         data: {
                             projectId,
@@ -1140,7 +1302,10 @@ export async function createSmartWorkOrder(input: {
                             blockedByWOId: prepWOId,
                             notes: (notes || '') + "\n[Waiting for Material Prep]",
                             items: {
-                                create: blockedPieceIds.map(id => ({ pieceId: id }))
+                                create: blockedItems.map(i => ({
+                                    pieceId: i.type === 'part' ? i.id : undefined,
+                                    platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                                }))
                             }
                         }
                     })
@@ -1150,12 +1315,12 @@ export async function createSmartWorkOrder(input: {
             revalidatePath(`/projects/${projectId}`)
             return {
                 success: true,
-                message: `Created WOs: ${immediatePieceIds.length} ready, ${blockedPieceIds.length} waiting for material.`
+                message: `Created WOs: ${immediateItems.length} ready, ${blockedItems.length} waiting.`
             }
         }
 
         // ====================================================================
-        // SCENARIO 3: STANDARD (WELDING, ETC)
+        // SCENARIO 3: STANDARD WO
         // ====================================================================
         await prisma.workOrder.create({
             data: {
@@ -1168,7 +1333,10 @@ export async function createSmartWorkOrder(input: {
                 scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                 notes,
                 items: {
-                    create: pieceIds.map(id => ({ pieceId: id }))
+                    create: items.map(i => ({
+                        pieceId: i.type === 'part' ? i.id : undefined,
+                        platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                    }))
                 }
             }
         })

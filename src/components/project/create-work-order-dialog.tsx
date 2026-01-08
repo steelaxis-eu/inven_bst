@@ -61,7 +61,7 @@ const formSchema = z.object({
 interface CreateWorkOrderDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    pieceIds: string[]
+    pieceIds: string[] | { id: string, type: 'part' | 'plate' }[]
     projectedType?: string
     projectId: string
     onSuccess?: () => void
@@ -399,17 +399,42 @@ export function CreateWorkOrderDialog({
                             </p>
                         </div>
 
-                        <div className="max-h-[60vh] overflow-y-auto pr-2">
-                            {optimizationResult.map((plan: any, i: number) => (
-                                plan.canOptimize ? (
-                                    <NestingVisualizer key={i} plan={plan} />
-                                ) : (
-                                    <div key={i} className="p-4 border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 rounded-md">
-                                        <p className="font-semibold text-yellow-800 dark:text-yellow-200">{plan.materialKey}</p>
-                                        <p className="text-sm text-yellow-700 dark:text-yellow-300">Cannot optimize (Missing Data). Will be added to manual block.</p>
-                                    </div>
-                                )
-                            ))}
+                        <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-3">
+                            {optimizationResult.map((plan: any, i: number) => {
+                                if (plan.type === 'profile' && plan.canOptimize) {
+                                    return <NestingVisualizer key={i} plan={plan} />
+                                } else if (plan.type === 'plate') {
+                                    // Render Plate Summary
+                                    return (
+                                        <div key={i} className="p-4 border rounded-md bg-card/50 flex items-center justify-between">
+                                            <div>
+                                                <h4 className="font-semibold flex items-center gap-2">
+                                                    <Scissors className="h-4 w-4" />
+                                                    {plan.profile}
+                                                    <span className="text-muted-foreground font-normal text-sm">({plan.grade})</span>
+                                                </h4>
+                                                <div className="text-sm text-muted-foreground mt-1">
+                                                    {plan.summary.count} Pieces &bull; {plan.summary.totalAreaM2}m² Total Area
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-xs font-mono bg-muted px-2 py-1 rounded">
+                                                    {plan.materialKey}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                } else {
+                                    return (
+                                        <div key={i} className="p-4 border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 rounded-md">
+                                            <p className="font-semibold text-yellow-800 dark:text-yellow-200">{plan.materialKey}</p>
+                                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                                                {plan.error || "Cannot optimize (Missing Data). Will be added to manual block."}
+                                            </p>
+                                        </div>
+                                    )
+                                }
+                            })}
                         </div>
 
                         <DialogFooter className="gap-2">

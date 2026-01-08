@@ -48,7 +48,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
 
     // Create Work Order State
     const [createWODialogOpen, setCreateWODialogOpen] = useState(false)
-    const [woPieceIds, setWoPieceIds] = useState<string[]>([])
+    const [woPieceIds, setWoPieceIds] = useState<{ id: string, type: 'part' | 'plate' }[]>([])
 
     const handleOpenDetails = (item: UnifiedPartItem) => {
         if (item.kind === 'part') {
@@ -81,14 +81,14 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
 
     const handleCreateWO = () => {
         const selectedItems = items.filter(i => selectedIds.includes(i.data.id))
-        const pieceIds: string[] = []
+        const pieceIds: { id: string, type: 'part' | 'plate' }[] = []
 
         selectedItems.forEach(item => {
             if (item.data.pieces && Array.isArray(item.data.pieces)) {
                 // Determine which pieces to include?
                 // For now, include ALL pieces of the selected parts
                 // The User optimizes or filters later (or we could select specific pieces, but table selects Parts)
-                item.data.pieces.forEach((p: any) => pieceIds.push(p.id))
+                item.data.pieces.forEach((p: any) => pieceIds.push({ id: p.id, type: item.kind }))
             }
         })
 
