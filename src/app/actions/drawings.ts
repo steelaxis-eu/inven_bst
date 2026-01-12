@@ -133,7 +133,7 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                 const storagePath = `${year}/${projectNumber}/uploads/parts/${filename}`
 
                 const { error: uploadError } = await supabase.storage
-                    .from('projects') // Assuming 'projects' bucket
+                    .from('Projects') // Assuming 'projects' bucket
                     .upload(storagePath, pdfBuffer, {
                         contentType: 'application/pdf',
                         upsert: true
@@ -404,7 +404,7 @@ export async function parseAssemblyZip(formData: FormData, projectId: string): P
                 const storagePath = `${year}/${projectNumber}/uploads/assemblies/${filename}`
 
                 const { error: uploadError } = await supabase.storage
-                    .from('projects')
+                    .from('Projects')
                     .upload(storagePath, pdfBuffer, {
                         contentType: 'application/pdf',
                         upsert: true
