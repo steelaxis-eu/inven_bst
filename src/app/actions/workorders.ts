@@ -426,32 +426,6 @@ export async function completeWorkOrder(workOrderId: string) {
                 data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
             })
 
-            // Handle Plate Pieces
-            const plateItems = wo.items.filter(i => i.platePartId)
-            if (plateItems.length > 0) {
-                let newPlateStatus: string | null = null
-                // Use string literals to avoid Enum import issues if client is stale
-                if (wo.type === 'CUTTING') newPlateStatus = 'CUT'
-
-                if (newPlateStatus) {
-                    for (const item of plateItems) {
-                        const piece: any = await (tx as any).platePiece.findFirst({
-                            where: {
-                                platePartId: item.platePartId!,
-                                status: 'PENDING'
-                            },
-                            orderBy: { pieceNumber: 'asc' }
-                        })
-
-                        if (piece) {
-                            await (tx as any).platePiece.update({
-                                where: { id: piece.id },
-                                data: { status: newPlateStatus }
-                            })
-                        }
-                    }
-                }
-            }
 
             // Handle Plate Pieces (Transition PENDING -> CUT etc.)
             const plateItems = wo.items.filter(i => i.platePartId)
