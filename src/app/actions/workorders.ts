@@ -969,7 +969,7 @@ export async function getOptimizationPreview(input: string[] | { id: string, typ
                 // We'll rely on GradeId match for now and assume users put Plate info in notes or `dimensions`.
                 // Update: We'll list what we need.
 
-                const totalArea = groupPlates.reduce((acc, p) => acc + (p.platePart.width * p.platePart.length), 0) / 1000000 // m2
+                const totalArea = groupPlates.reduce((acc, p) => acc + ((p.platePart.width || 0) * (p.platePart.length || 0)), 0) / 1000000 // m2
 
                 planResults.push({
                     type: 'plate',
