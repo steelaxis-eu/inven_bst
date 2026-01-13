@@ -97,7 +97,7 @@ async function main() {
         { id: 'Plate', name: 'Plate / Flat Bar', params: ['w', 't'], formula: 'w * t * 1' },
         { id: 'Round', name: 'Round Bar', params: ['d'], formula: 'Math.PI * (d/2) * (d/2)' }, // Corrected from 'PI * (d/2)^2' to valid JS
         { id: 'RHS', name: 'Rectangular Hollow Section', params: ['h', 'w', 't'], formula: '2 * t * (w + h - 2 * t)' },
-        { id: 'SHS', name: 'Square Hollow Section', params: ['s', 't'], formula: '4 * t * (s - t)' },
+        { id: 'SHS', name: 'Square Hollow Section', params: ['w', 'h', 't'], formula: '2 * t * (w + h - 2 * t)' },
         { id: 'CHS', name: 'Circular Hollow Section', params: ['d', 't'], formula: 'Math.PI * t * (d - t)' }, // Corrected from 'PI * t * (d - t)' to valid JS
     ]
     for (const s of SHAPES) {
