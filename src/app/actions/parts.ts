@@ -852,7 +852,8 @@ export async function recalculateProjectWeights(projectId: string) {
             let weightPerMeter = 0
 
             // Skip if already has weight? Or force update? Let's check 0 or small.
-            if (part.unitWeight > 0.01) continue
+            // Removed check to strictly enforce recalculation based on current profile data
+            // if (part.unitWeight > 0.01) continue
 
             if (part.profile?.weightPerMeter) {
                 weightPerMeter = part.profile.weightPerMeter

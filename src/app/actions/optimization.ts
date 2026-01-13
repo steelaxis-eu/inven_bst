@@ -106,7 +106,8 @@ async function processRecalculateJob(jobId: string) {
             // Actually, if I remove it, I might overwrite manually entered weights for custom parts.
             // So I'll keep the check: "Only fix 0 weights".
 
-            if (part.unitWeight > 0.01) continue
+            // Removed check to strictly enforce recalculation based on current profile data
+            // if (part.unitWeight > 0.01) continue
 
             if (part.profile?.weightPerMeter) {
                 weightPerMeter = part.profile.weightPerMeter
