@@ -1,38 +1,68 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { Button } from "@/components/ui/button"
-import { ChevronLeft } from 'lucide-react'
+import { Button, Card, Title1, Text, makeStyles, tokens } from "@fluentui/react-components"
+import { ChevronLeftRegular, PrintRegular } from '@fluentui/react-icons'
 import Link from 'next/link'
+
+const useStyles = makeStyles({
+    root: {
+        padding: '32px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+    },
+    header: {
+        display: 'flex',
+        gap: '16px',
+        alignItems: 'center',
+    },
+    card: {
+        padding: '48px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        gap: '16px',
+        backgroundColor: tokens.colorNeutralBackground1,
+
+    },
+    link: {
+        textDecoration: 'none',
+        color: 'inherit',
+    }
+})
 
 export default function WorkOrderDetailsPage() {
     const params = useParams()
     const projectId = params.id as string
     const woId = params.woId as string
+    const styles = useStyles()
 
     return (
-        <div className="p-8 space-y-6">
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="sm" asChild>
-                    <Link href={`/projects/${projectId}`}>
-                        <ChevronLeft className="h-4 w-4 mr-2" />
+        <div className={styles.root}>
+            <div className={styles.header}>
+                <Link href={`/projects/${projectId}`} className={styles.link}>
+                    <Button appearance="subtle" icon={<ChevronLeftRegular />}>
                         Back to Project
-                    </Link>
-                </Button>
+                    </Button>
+                </Link>
             </div>
 
-            <div className="bg-card border rounded-lg p-12 text-center text-muted-foreground">
-                <h1 className="text-2xl font-bold text-foreground mb-4">Work Order Details</h1>
-                <p>Work Order ID: {woId}</p>
-                <p className="mt-4 italic">Full details view for this Work Order is coming soon.</p>
-                <div className="mt-8 flex justify-center gap-4">
-                    <Button variant="outline" asChild>
-                        <Link href={`/projects/${projectId}/work-orders/${woId}/print`} target="_blank">
+            <Card className={styles.card}>
+                <Title1>Work Order Details</Title1>
+                <Text size={400}>Work Order ID: {woId}</Text>
+                <Text style={{ fontStyle: 'italic', marginTop: '16px' }}>
+                    Full details view for this Work Order is coming soon.
+                </Text>
+                <div style={{ marginTop: '32px', display: 'flex', gap: '16px' }}>
+                    <Link href={`/projects/${projectId}/work-orders/${woId}/print`} target="_blank" className={styles.link}>
+                        <Button appearance="outline" icon={<PrintRegular />}>
                             Print View
-                        </Link>
-                    </Button>
+                        </Button>
+                    </Link>
                 </div>
-            </div>
+            </Card>
         </div>
     )
 }

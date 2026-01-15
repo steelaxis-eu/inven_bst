@@ -1,25 +1,56 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+    Button,
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogContent,
+    DialogActions,
+    Input,
+    Label,
+    Dropdown,
+    Option,
+    makeStyles,
+    tokens
+} from "@fluentui/react-components"
+import { SettingsRegular } from "@fluentui/react-icons"
 import { useRouter } from 'next/navigation'
 import { updateProject } from '@/app/actions/projects'
-import { Settings } from 'lucide-react'
 
 // Coating type options
 const COATING_TYPES = [
-    { value: 'NONE', label: 'None' },
-    { value: 'HDG', label: 'Hot-Dip Galvanized' },
-    { value: 'PAINTED', label: 'Painted' },
-    { value: 'POWDER_COATED', label: 'Powder Coated' },
-    { value: 'EPOXY', label: 'Epoxy Coated' },
-    { value: 'ZINC_PRIMER', label: 'Zinc Primer' },
-    { value: 'INTUMESCENT', label: 'Intumescent (Fire)' },
+    { value: 'NONE', text: 'None' },
+    { value: 'HDG', text: 'Hot-Dip Galvanized' },
+    { value: 'PAINTED', text: 'Painted' },
+    { value: 'POWDER_COATED', text: 'Powder Coated' },
+    { value: 'EPOXY', text: 'Epoxy Coated' },
+    { value: 'ZINC_PRIMER', text: 'Zinc Primer' },
+    { value: 'INTUMESCENT', text: 'Intumescent (Fire)' },
 ]
+
+const useStyles = makeStyles({
+    content: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    gridTwo: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+    },
+    sectionTitle: {
+        fontWeight: tokens.fontWeightSemibold,
+        marginTop: '16px',
+        marginBottom: '8px',
+        borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+        paddingTop: '16px',
+    }
+})
 
 interface EditProjectDialogProps {
     project: {
@@ -34,6 +65,7 @@ interface EditProjectDialogProps {
 }
 
 export function EditProjectDialog({ project }: EditProjectDialogProps) {
+    const styles = useStyles()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [name, setName] = useState(project.name)
@@ -69,95 +101,94 @@ export function EditProjectDialog({ project }: EditProjectDialogProps) {
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1">
-                    <Settings className="h-4 w-4" /> Settings
-                </Button>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button appearance="subtle" icon={<SettingsRegular />}>Settings</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-xl">
-                <DialogHeader>
+            <DialogSurface>
+                <DialogBody>
                     <DialogTitle>Project Settings</DialogTitle>
-                    <DialogDescription>Edit project details including coating specification.</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                        <Label>Project Name</Label>
-                        <Input
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                            <Label>Client</Label>
+                    <DialogContent className={styles.content}>
+                        <div>
+                            <Label>Project Name</Label>
                             <Input
-                                value={client}
-                                onChange={e => setClient(e.target.value)}
-                                placeholder="Customer name"
+                                value={name}
+                                onChange={(e, d) => setName(d.value)}
+                                style={{ width: '100%' }}
                             />
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Priority</Label>
-                            <Select value={priority} onValueChange={setPriority}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="LOW">Low</SelectItem>
-                                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                                    <SelectItem value="HIGH">High</SelectItem>
-                                    <SelectItem value="CRITICAL">Critical</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="grid gap-2">
-                        <Label>Description</Label>
-                        <Input
-                            value={description}
-                            onChange={e => setDescription(e.target.value)}
-                            placeholder="Project description"
-                        />
-                    </div>
-
-                    <div className="border-t pt-4 mt-2">
-                        <h3 className="font-medium mb-3">Coating Specification</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="grid gap-2">
-                                <Label>Coating Type</Label>
-                                <Select value={coatingType} onValueChange={setCoatingType}>
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {COATING_TYPES.map(ct => (
-                                            <SelectItem key={ct.value} value={ct.value}>
-                                                {ct.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                        <div className={styles.gridTwo}>
+                            <div>
+                                <Label>Client</Label>
+                                <Input
+                                    value={client}
+                                    onChange={(e, d) => setClient(d.value)}
+                                    placeholder="Customer name"
+                                    style={{ width: '100%' }}
+                                />
                             </div>
-                            <div className="grid gap-2">
-                                <Label>Coating Specification</Label>
+                            <div>
+                                <Label>Priority</Label>
+                                <Dropdown
+                                    value={priority}
+                                    selectedOptions={[priority]}
+                                    onOptionSelect={(e, d) => setPriority(d.optionValue as string)}
+                                    style={{ width: '100%' }}
+                                >
+                                    <Option value="LOW" text="Low">Low</Option>
+                                    <Option value="MEDIUM" text="Medium">Medium</Option>
+                                    <Option value="HIGH" text="High">High</Option>
+                                    <Option value="CRITICAL" text="Critical">Critical</Option>
+                                </Dropdown>
+                            </div>
+                        </div>
+                        <div>
+                            <Label>Description</Label>
+                            <Input
+                                value={description}
+                                onChange={(e, d) => setDescription(d.value)}
+                                placeholder="Project description"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+
+                        <div className={styles.sectionTitle}>Coating Specification</div>
+                        <div className={styles.gridTwo}>
+                            <div>
+                                <Label>Coating Type</Label>
+                                <Dropdown
+                                    value={COATING_TYPES.find(c => c.value === coatingType)?.text || 'None'}
+                                    selectedOptions={[coatingType]}
+                                    onOptionSelect={(e, d) => setCoatingType(d.optionValue as string)}
+                                    style={{ width: '100%' }}
+                                >
+                                    {COATING_TYPES.map(ct => (
+                                        <Option key={ct.value} value={ct.value} text={ct.text}>
+                                            {ct.text}
+                                        </Option>
+                                    ))}
+                                </Dropdown>
+                            </div>
+                            <div>
+                                <Label>Specification</Label>
                                 <Input
                                     value={coatingSpec}
-                                    onChange={e => setCoatingSpec(e.target.value)}
+                                    onChange={(e, d) => setCoatingSpec(d.value)}
                                     placeholder="e.g. RAL 7016, 60μm"
                                     disabled={coatingType === 'NONE'}
+                                    style={{ width: '100%' }}
                                 />
                             </div>
                         </div>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading || !name}>
-                        {loading ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button appearance="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button appearance="primary" onClick={handleSubmit} disabled={loading || !name}>
+                            {loading ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
         </Dialog>
     )
 }

@@ -1,8 +1,8 @@
 'use client'
 
 import React from 'react'
-import { Button } from "@/components/ui/button"
-import { Printer, ArrowLeft } from 'lucide-react'
+import { Button } from "@fluentui/react-components"
+import { PrintRegular, ArrowLeftRegular } from '@fluentui/react-icons'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -20,16 +20,16 @@ export function PrintView({ workOrder }: PrintViewProps) {
             {/* No-Print Controls */}
             <div className="print:hidden mb-6 flex justify-between items-center bg-gray-100 p-4 rounded-lg shadow-sm">
                 <Link href={`/projects/${workOrder.projectId}`}>
-                    <Button variant="outline" size="sm">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Project
+                    <Button appearance="outline" icon={<ArrowLeftRegular />}>
+                        Back to Project
                     </Button>
                 </Link>
-                <Button onClick={handlePrint}>
-                    <Printer className="mr-2 h-4 w-4" /> Print Work Order
+                <Button appearance="primary" onClick={handlePrint} icon={<PrintRegular />}>
+                    Print Work Order
                 </Button>
             </div>
 
-            {/* Printable Content */}
+            {/* Printable Content - Keeping Tailwind classes for print layout as they are not Shadcn dependencies */}
             <div className="max-w-[210mm] mx-auto bg-white print:w-full print:max-w-none">
                 {/* Header */}
                 <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">

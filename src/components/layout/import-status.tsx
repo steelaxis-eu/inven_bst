@@ -1,9 +1,9 @@
 'use client'
 
 import { useImport } from "@/context/import-context"
-import { Progress } from "@/components/ui/progress"
-import { Button } from "@/components/ui/button"
-import { Loader2, CheckCircle, XCircle } from "lucide-react"
+import { Button, ProgressBar, Spinner } from "@fluentui/react-components"
+import { CheckmarkCircleRegular, DismissCircleRegular, OpenRegular } from "@fluentui/react-icons"
+import { tokens } from "@fluentui/react-components"
 
 export function ImportStatus() {
     const { isProcessing, progress, status, fileName, setReviewing, dismiss } = useImport()
@@ -14,42 +14,49 @@ export function ImportStatus() {
         <div className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
             {/* Progress Bar Line */}
             {(status === 'uploading' || status === 'processing') && (
-                <div className="h-1 w-full bg-primary/10">
-                    <div
-                        className="h-full bg-primary transition-all duration-500 ease-out"
-                        style={{ width: `${progress}%` }}
-                    />
+                <div style={{ width: '100%', height: '4px' }}>
+                    <ProgressBar value={progress} max={100} thickness="medium" shape="square" color="brand" />
                 </div>
             )}
 
             {/* Status Card (Centered or top-right) */}
             <div className="container mx-auto relative">
                 <div className="absolute top-4 right-4 pointer-events-auto">
-                    <div className="bg-background/80 backdrop-blur-md border border-border shadow-lg rounded-lg p-3 flex items-center gap-4 animate-in slide-in-from-top-2">
+                    <div style={{
+                        backgroundColor: tokens.colorNeutralBackground1,
+                        border: `1px solid ${tokens.colorNeutralStroke1}`,
+                        borderRadius: tokens.borderRadiusMedium,
+                        boxShadow: tokens.shadow16,
+                        padding: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        minWidth: '280px'
+                    }} className="animate-in slide-in-from-top-2">
                         {status === 'processing' || status === 'uploading' ? (
                             <>
-                                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium">Processing {fileName}...</span>
-                                    <span className="text-xs text-muted-foreground">{Math.round(progress)}%</span>
+                                <Spinner size="tiny" />
+                                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                                    <span style={{ fontSize: '14px', fontWeight: 600 }}>Processing {fileName}...</span>
+                                    <span style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>{Math.round(progress)}%</span>
                                 </div>
                             </>
                         ) : status === 'reviewing' ? (
                             <>
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium">Ready for Review</span>
-                                    <span className="text-xs text-muted-foreground">{fileName}</span>
+                                <CheckmarkCircleRegular style={{ color: tokens.colorPaletteGreenForeground1, fontSize: '20px' }} />
+                                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                                    <span style={{ fontSize: '14px', fontWeight: 600 }}>Ready for Review</span>
+                                    <span style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>{fileName}</span>
                                 </div>
-                                <Button size="sm" variant="default" onClick={setReviewing}>
+                                <Button size="small" appearance="primary" onClick={setReviewing} icon={<OpenRegular />}>
                                     Open
                                 </Button>
                             </>
                         ) : status === 'error' ? (
                             <>
-                                <XCircle className="h-4 w-4 text-red-500" />
-                                <span className="text-sm font-medium text-red-500">Import Failed</span>
-                                <Button size="sm" variant="ghost" onClick={dismiss}>
+                                <DismissCircleRegular style={{ color: tokens.colorPaletteRedForeground1, fontSize: '20px' }} />
+                                <span style={{ fontSize: '14px', fontWeight: 600, color: tokens.colorPaletteRedForeground1, flex: 1 }}>Import Failed</span>
+                                <Button size="small" appearance="subtle" onClick={dismiss}>
                                     Close
                                 </Button>
                             </>

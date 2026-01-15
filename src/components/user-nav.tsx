@@ -2,16 +2,18 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Loader2, LogOut, User } from 'lucide-react'
+    Menu,
+    MenuTrigger,
+    MenuList,
+    MenuItem,
+    MenuPopover,
+    MenuDivider,
+    Avatar,
+    Button,
+    Spinner
+} from '@fluentui/react-components'
+import { SignOutRegular, PersonRegular } from '@fluentui/react-icons'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -39,47 +41,40 @@ export function UserNav({ userEmail }: UserNavProps) {
 
     if (!userEmail) {
         return (
-            <Button variant="ghost" asChild>
-                <Link href="/login">Sign In</Link>
-            </Button>
+            <Link href="/login" passHref legacyBehavior>
+                <Button as="a" appearance="subtle">Sign In</Button>
+            </Link>
         )
     }
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted border">
-                        <User className="h-4 w-4" />
+        <Menu>
+            <MenuTrigger disableButtonEnhancement>
+                <Button appearance="transparent" icon={<Avatar name={userEmail} size={32} color="brand" />} style={{ minWidth: 'auto', padding: 0 }} />
+            </MenuTrigger>
+            <MenuPopover>
+                <MenuList>
+                    <div style={{ padding: '8px 12px' }}>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: '14px' }}>Account</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{userEmail}</p>
                     </div>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">Account</p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                            {userEmail}
-                        </p>
-                    </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                    <Link href="/settings/profile" className="cursor-pointer">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Profile</span>
-                    </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut} disabled={loading} className="text-red-600 focus:text-red-600 cursor-pointer">
-                    {loading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                        <LogOut className="mr-2 h-4 w-4" />
-                    )}
-                    <span>Log out</span>
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                    <MenuDivider />
+                    <MenuItem icon={<PersonRegular />}>
+                        <Link href="/settings/profile" style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
+                            Profile
+                        </Link>
+                    </MenuItem>
+                    <MenuDivider />
+                    <MenuItem
+                        icon={loading ? <Spinner size="tiny" /> : <SignOutRegular />}
+                        onClick={handleSignOut}
+                        disabled={loading}
+                        style={{ color: '#d32f2f' }}
+                    >
+                        Log out
+                    </MenuItem>
+                </MenuList>
+            </MenuPopover>
+        </Menu>
     )
 }

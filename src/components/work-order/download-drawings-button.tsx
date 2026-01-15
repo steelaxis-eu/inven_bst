@@ -1,23 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Download, Loader2 } from 'lucide-react'
+import { Button, Spinner } from '@fluentui/react-components'
+import { ArrowDownloadRegular } from '@fluentui/react-icons'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 
 interface DownloadDrawingsButtonProps {
     workOrderId: string
     workOrderNumber: string
     className?: string
     showText?: boolean
+    iconOnly?: boolean
 }
 
 export function DownloadDrawingsButton({
     workOrderId,
     workOrderNumber,
-    className,
-    showText = true
+    className, // Keeping className for potential layout utility passing
+    showText = true,
+    iconOnly = false
 }: DownloadDrawingsButtonProps) {
     const [loading, setLoading] = useState(false)
 
@@ -35,7 +36,6 @@ export function DownloadDrawingsButton({
                 throw new Error('Failed to generate drawings bundle')
             }
 
-            // Create blob and simple download link
             const blob = await response.blob()
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
@@ -55,21 +55,20 @@ export function DownloadDrawingsButton({
         }
     }
 
+    // Determine final visibility of text
+    const shouldShowText = showText && !iconOnly
+
     return (
         <Button
-            variant="outline"
-            size="sm"
+            appearance="outline"
+            size="small"
             className={className}
             onClick={handleDownload}
             disabled={loading}
-            title={showText ? undefined : "Download Drawings"}
+            title={shouldShowText ? undefined : "Download Drawings"}
+            icon={loading ? <Spinner size="tiny" /> : <ArrowDownloadRegular />}
         >
-            {loading ? (
-                <Loader2 className={cn("h-4 w-4 animate-spin", showText && "mr-2")} />
-            ) : (
-                <Download className={cn("h-4 w-4", showText && "mr-2")} />
-            )}
-            {showText && "Download Drawings"}
+            {shouldShowText && "Download Drawings"}
         </Button>
     )
 }

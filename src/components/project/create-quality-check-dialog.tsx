@@ -1,16 +1,63 @@
 'use client'
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
+import {
+    Button,
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogContent,
+    DialogActions,
+    Input,
+    Label,
+    Dropdown,
+    Option,
+    Textarea,
+    makeStyles,
+    tokens,
+    Spinner
+} from "@fluentui/react-components"
+import { AddRegular } from "@fluentui/react-icons"
 import { createQualityCheck } from "@/app/actions/quality"
 import { toast } from "sonner"
-import { Loader2, Plus } from "lucide-react"
 import { useRouter } from "next/navigation"
+
+const useStyles = makeStyles({
+    content: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    gridTwo: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+    },
+    resultBox: {
+        backgroundColor: tokens.colorNeutralBackground2,
+        padding: '16px',
+        borderRadius: tokens.borderRadiusMedium,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        marginTop: '8px',
+    },
+    resultLabel: {
+        color: tokens.colorBrandForeground1,
+        fontWeight: tokens.fontWeightSemibold,
+    },
+    passedBox: {
+        backgroundColor: tokens.colorPaletteGreenBackground1,
+        color: tokens.colorPaletteGreenForeground1,
+        padding: '8px 12px',
+        borderRadius: tokens.borderRadiusMedium,
+        fontSize: '12px',
+        border: `1px solid ${tokens.colorPaletteGreenBorder1}`,
+    }
+})
 
 interface CreateQualityCheckDialogProps {
     projectId: string
@@ -32,6 +79,7 @@ const CHECK_TYPES = [
 ]
 
 export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: CreateQualityCheckDialogProps) {
+    const styles = useStyles()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const router = useRouter()
@@ -97,137 +145,126 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Inspection
-                </Button>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<AddRegular />}>New Inspection</Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
+            <DialogSurface>
+                <DialogBody>
                     <DialogTitle>Create Quality Inspection</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
+                    <DialogContent className={styles.content}>
 
-                    {/* Assembly Selection */}
-                    <div className="grid gap-2">
-                        <Label>Assembly (Optional)</Label>
-                        <Select
-                            value={formData.assemblyId}
-                            onValueChange={(val) => setFormData({ ...formData, assemblyId: val })}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select assembly or Project Level" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="PROJECT_LEVEL">Project Level (General)</SelectItem>
+                        {/* Assembly Selection */}
+                        <div>
+                            <Label>Assembly (Optional)</Label>
+                            <Dropdown
+                                value={formData.assemblyId === 'PROJECT_LEVEL' ? 'Project Level (General)' : assemblyOptions.find(a => a.id === formData.assemblyId)?.assemblyNumber || ''}
+                                selectedOptions={[formData.assemblyId]}
+                                onOptionSelect={(e, d) => setFormData({ ...formData, assemblyId: d.optionValue as string })}
+                                style={{ width: '100%' }}
+                            >
+                                <Option value="PROJECT_LEVEL" text="Project Level (General)">Project Level (General)</Option>
                                 {assemblyOptions.map(a => (
-                                    <SelectItem key={a.id} value={a.id}>
+                                    <Option key={a.id} value={a.id} text={`${a.assemblyNumber} - ${a.name}`}>
                                         {a.assemblyNumber} - {a.name}
-                                    </SelectItem>
+                                    </Option>
                                 ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                            </Dropdown>
+                        </div>
 
-                    {/* Process Stage */}
-                    <div className="grid gap-2">
-                        <Label>Process Stage</Label>
-                        <Select
-                            value={formData.processStage}
-                            onValueChange={(val) => setFormData({ ...formData, processStage: val })}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select stage" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {PROCESS_STAGES.map(s => (
-                                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Type */}
-                    <div className="grid gap-2">
-                        <Label>Inspection Type</Label>
-                        <Select
-                            value={formData.type}
-                            onValueChange={(val) => setFormData({ ...formData, type: val })}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {CHECK_TYPES.map(t => (
-                                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Due Date */}
-                    <div className="grid gap-2">
-                        <Label>Due Date</Label>
-                        <Input
-                            type="date"
-                            value={formData.dueDate}
-                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                        />
-                    </div>
-
-                    {/* Notes */}
-                    <div className="grid gap-2">
-                        <Label>Notes / Instructions</Label>
-                        <Textarea
-                            placeholder="Specific instructions for inspector..."
-                            value={formData.notes}
-                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        />
-                    </div>
-
-                    <div className="border-t pt-4 mt-2 mb-2">
-                        <Label className="mb-2 block font-semibold text-primary">Result Recording (Optional)</Label>
-                        <div className="grid gap-4 bg-muted/20 p-4 rounded-md border">
-                            <div className="grid gap-2">
-                                <Label>Status</Label>
-                                <Select
-                                    value={formData.status}
-                                    onValueChange={(val) => setFormData({ ...formData, status: val })}
+                        <div className={styles.gridTwo}>
+                            {/* Process Stage */}
+                            <div>
+                                <Label required>Process Stage</Label>
+                                <Dropdown
+                                    value={formData.processStage}
+                                    selectedOptions={[formData.processStage]}
+                                    onOptionSelect={(e, d) => setFormData({ ...formData, processStage: d.optionValue as string })}
+                                    style={{ width: '100%' }}
+                                    placeholder="Select stage"
                                 >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="PENDING">Pending (Schedule for later)</SelectItem>
-                                        <SelectItem value="PASSED">PASSED</SelectItem>
-                                        <SelectItem value="FAILED">FAILED (Create NCR)</SelectItem>
-                                        <SelectItem value="WAIVED">WAIVED</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                    {PROCESS_STAGES.map(s => (
+                                        <Option key={s} value={s} text={s}>{s}</Option>
+                                    ))}
+                                </Dropdown>
+                            </div>
+
+                            {/* Type */}
+                            <div>
+                                <Label required>Inspection Type</Label>
+                                <Dropdown
+                                    value={formData.type}
+                                    selectedOptions={[formData.type]}
+                                    onOptionSelect={(e, d) => setFormData({ ...formData, type: d.optionValue as string })}
+                                    style={{ width: '100%' }}
+                                    placeholder="Select type"
+                                >
+                                    {CHECK_TYPES.map(t => (
+                                        <Option key={t} value={t} text={t}>{t}</Option>
+                                    ))}
+                                </Dropdown>
+                            </div>
+                        </div>
+
+                        {/* Due Date */}
+                        <div>
+                            <Label>Due Date</Label>
+                            <Input
+                                type="date"
+                                value={formData.dueDate}
+                                onChange={(e, d) => setFormData({ ...formData, dueDate: d.value })}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+
+                        {/* Notes */}
+                        <div>
+                            <Label>Notes / Instructions</Label>
+                            <Textarea
+                                placeholder="Specific instructions for inspector..."
+                                value={formData.notes}
+                                onChange={(e, d) => setFormData({ ...formData, notes: d.value })}
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+
+                        <div className={styles.resultBox}>
+                            <Label className={styles.resultLabel}>Result Recording (Optional)</Label>
+                            <div>
+                                <Label>Status</Label>
+                                <Dropdown
+                                    value={formData.status}
+                                    selectedOptions={[formData.status]}
+                                    onOptionSelect={(e, d) => setFormData({ ...formData, status: d.optionValue as string })}
+                                    style={{ width: '100%' }}
+                                >
+                                    <Option value="PENDING" text="Pending (Schedule)">Pending (Schedule)</Option>
+                                    <Option value="PASSED" text="PASSED">PASSED</Option>
+                                    <Option value="FAILED" text="FAILED (Create NCR)">FAILED (Create NCR)</Option>
+                                    <Option value="WAIVED" text="WAIVED">WAIVED</Option>
+                                </Dropdown>
                             </div>
 
                             {formData.status === 'FAILED' && (
                                 <>
-                                    <div className="grid gap-2">
-                                        <Label className="text-destructive">Discrepancies / Findings</Label>
+                                    <div>
+                                        <Label style={{ color: tokens.colorPaletteRedForeground1 }}>Discrepancies / Findings</Label>
                                         <Textarea
-                                            className="border-destructive/50"
                                             placeholder="Describe the defect..."
                                             value={formData.findings}
-                                            onChange={(e) => setFormData({ ...formData, findings: e.target.value })}
+                                            onChange={(e, d) => setFormData({ ...formData, findings: d.value })}
+                                            style={{ width: '100%', borderColor: tokens.colorPaletteRedBorder1 }}
                                         />
                                     </div>
-                                    <div className="grid gap-2">
-                                        <Label className="text-destructive">NCR Number (Optional)</Label>
+                                    <div>
+                                        <Label style={{ color: tokens.colorPaletteRedForeground1 }}>NCR Number (Optional)</Label>
                                         <Input
-                                            className="border-destructive/50"
                                             placeholder="(Auto-generated if empty)"
                                             value={formData.ncr}
-                                            onChange={(e) => setFormData({ ...formData, ncr: e.target.value })}
+                                            onChange={(e, d) => setFormData({ ...formData, ncr: d.value })}
+                                            style={{ width: '100%', borderColor: tokens.colorPaletteRedBorder1 }}
                                         />
-                                        <p className="text-[0.8rem] text-muted-foreground">
+                                        <p style={{ fontSize: '11px', color: tokens.colorNeutralForeground3 }}>
                                             Leave empty to auto-generate from Settings.
                                         </p>
                                     </div>
@@ -235,21 +272,20 @@ export function CreateQualityCheckDialog({ projectId, assemblyOptions = [] }: Cr
                             )}
 
                             {formData.status === 'PASSED' && (
-                                <div className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded text-sm text-green-800 dark:text-green-300">
+                                <div className={styles.passedBox}>
                                     Inspection will be marked as passed immediately.
                                 </div>
                             )}
                         </div>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading}>
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Create Inspection
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button appearance="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button appearance="primary" onClick={handleSubmit} disabled={loading}>
+                            {loading ? <Spinner size="tiny" /> : "Create Inspection"}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
         </Dialog>
     )
 }

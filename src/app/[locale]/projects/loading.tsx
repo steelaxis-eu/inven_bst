@@ -1,29 +1,65 @@
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card } from "@/components/ui/card"
+'use client'
+
+import { Skeleton, SkeletonItem, Card, makeStyles } from "@fluentui/react-components"
+
+const useStyles = makeStyles({
+    root: {
+        padding: '32px',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '32px'
+    },
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '32px'
+    },
+    grid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+        gap: '16px'
+    },
+    cardContent: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        padding: '24px'
+    },
+    cardHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+    }
+})
 
 export default function ProjectsLoading() {
+    const styles = useStyles()
+
     return (
-        <div className="container mx-auto py-8">
-            <div className="flex justify-between items-center mb-8">
-                <Skeleton className="h-9 w-32" />
-                <Skeleton className="h-10 w-36" />
+        <Skeleton className={styles.root}>
+            <div className={styles.header}>
+                <SkeletonItem style={{ height: '36px', width: '120px' }} />
+                <SkeletonItem style={{ height: '40px', width: '150px' }} />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className={styles.grid}>
                 {Array.from({ length: 6 }).map((_, i) => (
-                    <Card key={i} className="p-6">
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <Skeleton className="h-6 w-28" />
-                                <Skeleton className="h-8 w-8" />
+                    <Card key={i}>
+                        <div className={styles.cardContent}>
+                            <div className={styles.cardHeader}>
+                                <SkeletonItem style={{ height: '24px', width: '120px' }} />
+                                <SkeletonItem style={{ height: '32px', width: '32px', borderRadius: '50%' }} />
                             </div>
-                            <Skeleton className="h-5 w-48" />
-                            <Skeleton className="h-4 w-24" />
-                            <Skeleton className="h-10 w-full" />
+                            <SkeletonItem style={{ height: '20px', width: '180px' }} />
+                            <SkeletonItem style={{ height: '16px', width: '100px' }} />
+                            <SkeletonItem style={{ height: '10px', width: '100%' }} />
                         </div>
                     </Card>
                 ))}
             </div>
-        </div>
+        </Skeleton>
     )
 }

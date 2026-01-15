@@ -1,11 +1,28 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Truck, Calendar, Package, CheckCircle, AlertTriangle, Printer } from 'lucide-react'
+import {
+    Card,
+    CardHeader,
+    Badge,
+    ProgressBar,
+    Button,
+    makeStyles,
+    tokens,
+    Title3,
+    Text,
+    TabList,
+    Tab,
+    shorthands
+} from "@fluentui/react-components"
+import {
+    VehicleTruckProfileRegular,
+    CalendarRegular,
+    BoxRegular,
+    CheckmarkCircleRegular,
+    WarningRegular,
+    PrintRegular
+} from "@fluentui/react-icons"
 import Link from 'next/link'
-import { Button } from "@/components/ui/button"
 
 interface DeliverySchedule {
     id: string
@@ -34,10 +51,90 @@ interface DeliveriesListProps {
     deliveries: DeliverySchedule[]
 }
 
-const STATUS_COLORS: Record<string, string> = {
-    'PENDING': 'bg-gray-100 text-gray-800 border-gray-300',
-    'SHIPPED': 'bg-blue-100 text-blue-800 border-blue-300',
-    'DELIVERED': 'bg-green-100 text-green-800 border-green-300',
+const useStyles = makeStyles({
+    root: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+        gap: '16px',
+    },
+    card: {
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    cardHeader: {
+        paddingBottom: '12px',
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        marginBottom: '12px',
+    },
+    headerRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+    },
+    title: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        fontSize: tokens.fontSizeBase400,
+        fontWeight: tokens.fontWeightSemibold,
+    },
+    metaRow: {
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        marginTop: '8px',
+        color: tokens.colorNeutralForeground3,
+        fontSize: tokens.fontSizeBase200,
+    },
+    content: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    readinessSection: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+    },
+    readinessHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontSize: tokens.fontSizeBase200,
+    },
+    tags: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '4px',
+    },
+    readyMsg: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        color: tokens.colorPaletteGreenForeground1,
+        fontWeight: tokens.fontWeightMedium,
+        marginTop: 'auto',
+    },
+    footer: {
+        marginTop: '16px',
+        paddingTop: '16px',
+        borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+        backgroundColor: tokens.colorNeutralBackground2,
+        margin: '16px -12px -12px -12px',
+        padding: '12px',
+        borderRadius: `0 0 ${tokens.borderRadiusMedium} ${tokens.borderRadiusMedium}`,
+    },
+    overdue: {
+        backgroundColor: tokens.colorPaletteRedBackground1,
+        ...shorthands.borderColor(tokens.colorPaletteRedBorder1),
+    }
+})
+
+const STATUS_COLORS: Record<string, "outline" | "filled" | "tint"> = {
+    'PENDING': 'outline',
+    'SHIPPED': 'tint',
+    'DELIVERED': 'filled',
 }
 
 function getDeliveryReadiness(delivery: DeliverySchedule): { ready: number; total: number; percent: number } {
@@ -61,6 +158,7 @@ function getDeliveryReadiness(delivery: DeliverySchedule): { ready: number; tota
 }
 
 function DeliveryCard({ delivery }: { delivery: DeliverySchedule }) {
+    const styles = useStyles()
     const readiness = getDeliveryReadiness(delivery)
     const scheduledDate = new Date(delivery.scheduledDate)
     const daysUntil = Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -68,100 +166,95 @@ function DeliveryCard({ delivery }: { delivery: DeliverySchedule }) {
     const isReady = readiness.percent === 100
 
     return (
-        <Card className={`${isOverdue ? 'border-red-300 bg-red-50/30' : isReady ? 'border-green-300 bg-green-50/30' : ''} flex flex-col h-full`}>
-            <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
+        <Card className={styles.card} style={isOverdue ? { border: `1px solid ${tokens.colorPaletteRedBorder1}` } : undefined}>
+            <div className={styles.cardHeader}>
+                <div className={styles.headerRow}>
                     <div>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                            <Truck className="h-5 w-5" />
+                        <div className={styles.title}>
+                            <VehicleTruckProfileRegular />
                             {delivery.name}
-                        </CardTitle>
-                        <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
+                        </div>
+                        <div className={styles.metaRow}>
+                            <CalendarRegular fontSize={14} />
                             {scheduledDate.toLocaleDateString()}
                             {isOverdue && (
-                                <span className="text-red-600 font-medium flex items-center gap-1">
-                                    <AlertTriangle className="h-3 w-3" />
+                                <span style={{ color: tokens.colorPaletteRedForeground1, fontWeight: tokens.fontWeightBold, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <WarningRegular fontSize={14} />
                                     {Math.abs(daysUntil)} days overdue
                                 </span>
                             )}
                             {!isOverdue && delivery.status === 'PENDING' && daysUntil <= 7 && (
-                                <span className="text-orange-600">
+                                <span style={{ color: tokens.colorPaletteDarkOrangeForeground1 }}>
                                     {daysUntil === 0 ? 'Today' : `${daysUntil} days`}
                                 </span>
                             )}
                         </div>
                     </div>
-                    <Badge variant="outline" className={STATUS_COLORS[delivery.status]}>
+                    <Badge appearance={STATUS_COLORS[delivery.status] || 'outline'}>
                         {delivery.status}
                     </Badge>
                 </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-                <div className="space-y-3 flex-1">
-                    <div>
-                        <div className="flex items-center justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">Readiness</span>
-                            <span className="font-medium">
-                                {readiness.ready}/{readiness.total} pieces ({readiness.percent}%)
-                            </span>
-                        </div>
-                        <Progress value={readiness.percent} className="h-2" />
+            </div>
+
+            <div className={styles.content}>
+                <div className={styles.readinessSection}>
+                    <div className={styles.readinessHeader}>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Readiness</Text>
+                        <Text weight="medium">
+                            {readiness.ready}/{readiness.total} pieces ({readiness.percent}%)
+                        </Text>
                     </div>
-
-                    <div className="space-y-1">
-                        <div className="text-sm text-muted-foreground">Assemblies:</div>
-                        <div className="flex flex-wrap gap-1">
-                            {delivery.items.map(item => (
-                                <Badge
-                                    key={item.assembly.id}
-                                    variant="outline"
-                                    className={
-                                        item.assembly.status === 'SHIPPED'
-                                            ? 'bg-green-50 text-green-700'
-                                            : item.assembly.status === 'QC_PASSED'
-                                                ? 'bg-blue-50 text-blue-700'
-                                                : ''
-                                    }
-                                >
-                                    {item.assembly.assemblyNumber}
-                                </Badge>
-                            ))}
-                        </div>
-                    </div>
-
-                    {delivery.notes && (
-                        <p className="text-xs text-muted-foreground italic">{delivery.notes}</p>
-                    )}
-
-                    {isReady && delivery.status === 'PENDING' && (
-                        <div className="flex items-center gap-1 text-green-600 text-sm font-medium pt-2">
-                            <CheckCircle className="h-4 w-4" />
-                            Ready to ship
-                        </div>
-                    )}
+                    <ProgressBar value={readiness.percent / 100} thickness="medium" color={isReady ? 'success' : 'brand'} />
                 </div>
 
-                <div className="mt-4 pt-4 border-t flex justify-between items-center bg-white/50 -mx-6 -mb-6 p-4 rounded-b-lg">
-                    <Link href={`/projects/${delivery.projectId}/deliveries/${delivery.id}/print`} target="_blank" className="w-full">
-                        <Button variant="outline" size="sm" className="w-full">
-                            <Printer className="mr-2 h-3 w-3" />
-                            Print Packing List
-                        </Button>
-                    </Link>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Assemblies:</Text>
+                    <div className={styles.tags}>
+                        {delivery.items.map(item => (
+                            <Badge
+                                key={item.assembly.id}
+                                appearance="outline"
+                                color={
+                                    item.assembly.status === 'SHIPPED' ? 'success' :
+                                        item.assembly.status === 'QC_PASSED' ? 'brand' : 'subtle'
+                                }
+                            >
+                                {item.assembly.assemblyNumber}
+                            </Badge>
+                        ))}
+                    </div>
                 </div>
-            </CardContent>
-        </Card>
+
+                {delivery.notes && (
+                    <Text size={200} italic style={{ color: tokens.colorNeutralForeground3 }}>{delivery.notes}</Text>
+                )}
+
+                {isReady && delivery.status === 'PENDING' && (
+                    <div className={styles.readyMsg}>
+                        <CheckmarkCircleRegular />
+                        Ready to ship
+                    </div>
+                )}
+            </div>
+
+            <div className={styles.footer}>
+                <Link href={`/projects/${delivery.projectId}/deliveries/${delivery.id}/print`} target="_blank" style={{ textDecoration: 'none' }}>
+                    <Button icon={<PrintRegular />} style={{ width: '100%' }}>Print Packing List</Button>
+                </Link>
+            </div>
+        </Card >
     )
 }
 
 export function DeliveriesList({ deliveries }: DeliveriesListProps) {
+    const styles = useStyles()
+
     if (deliveries.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                <Truck className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p>No deliveries scheduled yet.</p>
-                <p className="text-sm">Create delivery schedules to track shipments.</p>
+            <div style={{ textAlign: 'center', padding: '48px', border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
+                <VehicleTruckProfileRegular fontSize={48} style={{ opacity: 0.5, color: tokens.colorNeutralForeground3 }} />
+                <div style={{ marginTop: '8px', fontWeight: 600 }}>No deliveries scheduled yet</div>
+                <Text>Create delivery schedules to track shipments.</Text>
             </div>
         )
     }
@@ -174,7 +267,7 @@ export function DeliveriesList({ deliveries }: DeliveriesListProps) {
     })
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={styles.root}>
             {sorted.map(delivery => (
                 <DeliveryCard key={delivery.id} delivery={delivery} />
             ))}
@@ -182,7 +275,6 @@ export function DeliveriesList({ deliveries }: DeliveriesListProps) {
     )
 }
 
-// Summary for deliveries
 export function DeliveriesSummary({ deliveries }: { deliveries: DeliverySchedule[] }) {
     const pending = deliveries.filter(d => d.status === 'PENDING')
     const overdue = pending.filter(d => new Date(d.scheduledDate) < new Date()).length
@@ -194,50 +286,26 @@ export function DeliveriesSummary({ deliveries }: { deliveries: DeliverySchedule
     const delivered = deliveries.filter(d => d.status === 'DELIVERED').length
 
     return (
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{deliveries.length}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Total</Text>} />
+                <Title3>{deliveries.length}</Title3>
             </Card>
-            <Card className={overdue > 0 ? 'border-red-300 bg-red-50/50' : ''}>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Overdue</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className={`text-2xl font-bold ${overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                        {overdue}
-                    </div>
-                </CardContent>
+            <Card style={overdue > 0 ? { border: `1px solid ${tokens.colorPaletteRedBorder1}`, backgroundColor: tokens.colorPaletteRedBackground1 } : undefined}>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Overdue</Text>} />
+                <Title3 style={overdue > 0 ? { color: tokens.colorPaletteRedForeground1 } : { color: tokens.colorNeutralForegroundDisabled }}>{overdue}</Title3>
             </Card>
-            <Card className={thisWeek > 0 ? 'border-orange-300 bg-orange-50/50' : ''}>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">This Week</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className={`text-2xl font-bold ${thisWeek > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                        {thisWeek}
-                    </div>
-                </CardContent>
+            <Card style={thisWeek > 0 ? { border: `1px solid ${tokens.colorPaletteDarkOrangeBorder1}`, backgroundColor: tokens.colorPaletteDarkOrangeBackground1 } : undefined}>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>This Week</Text>} />
+                <Title3 style={thisWeek > 0 ? { color: tokens.colorPaletteDarkOrangeForeground1 } : { color: tokens.colorNeutralForegroundDisabled }}>{thisWeek}</Title3>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Shipped</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-blue-600">{shipped}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Shipped</Text>} />
+                <Title3 style={{ color: tokens.colorPaletteBlueForeground2 }}>{shipped}</Title3>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Delivered</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{delivered}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Delivered</Text>} />
+                <Title3 style={{ color: tokens.colorPaletteGreenForeground1 }}>{delivered}</Title3>
             </Card>
         </div>
     )

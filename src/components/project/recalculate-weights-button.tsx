@@ -1,7 +1,7 @@
 'use client'
 
-import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+import { Button, Spinner } from "@fluentui/react-components"
+import { ArrowSyncRegular } from "@fluentui/react-icons"
 import { startRecalculateJob } from "@/app/actions/optimization"
 import { toast } from "sonner"
 import { useState } from "react"
@@ -26,19 +26,17 @@ export function RecalculateWeightsButton({ projectId }: RecalculateWeightsButton
             toast.error("Error starting job")
         } finally {
             setLoading(false)
-            // We don't need to refresh page immediately, the indicator will show progress
         }
     }
 
     return (
         <Button
-            variant="outline"
+            appearance="outline"
             onClick={handleRecalculate}
             disabled={loading}
-            className="gap-2"
+            icon={loading ? <Spinner size="tiny" /> : <ArrowSyncRegular />}
             title="Recalculate weights for all parts based on profiles"
         >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Recalculate Weights
         </Button>
     )

@@ -5,6 +5,22 @@ import { CreateQualityCheckDialog } from "./create-quality-check-dialog"
 import { updateQualityCheckStatus } from "@/app/actions/quality"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { Title3, Text, makeStyles, tokens } from "@fluentui/react-components"
+
+const useStyles = makeStyles({
+    root: {
+        marginTop: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+    },
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+    }
+})
 
 interface ProjectQualityTabProps {
     projectId: string
@@ -13,10 +29,10 @@ interface ProjectQualityTabProps {
 }
 
 export function ProjectQualityTab({ projectId, checks, assemblies }: ProjectQualityTabProps) {
+    const styles = useStyles()
     const router = useRouter()
 
     const handleStatusChange = async (id: string, status: string, findings?: string, ncr?: string) => {
-        // Optimistic update could go here, but for now we look for simplicity
         try {
             const result = await updateQualityCheckStatus(id, status as any, findings, ncr)
             if (result.success) {
@@ -37,11 +53,13 @@ export function ProjectQualityTab({ projectId, checks, assemblies }: ProjectQual
     }))
 
     return (
-        <div className="mt-6">
-            <div className="flex justify-between items-center mb-4">
+        <div className={styles.root}>
+            <div className={styles.header}>
                 <div>
-                    <h2 className="text-xl font-semibold">Quality Checks</h2>
-                    <p className="text-sm text-muted-foreground">Manage inspections, NDT reports, and quality records.</p>
+                    <Title3>Quality Checks</Title3>
+                    <Text block style={{ color: tokens.colorNeutralForeground3 }}>
+                        Manage inspections, NDT reports, and quality records.
+                    </Text>
                 </div>
                 <CreateQualityCheckDialog
                     projectId={projectId}

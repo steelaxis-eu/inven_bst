@@ -1,26 +1,73 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import {
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogActions,
+    DialogContent,
+    Button,
+    Input,
+    Field,
+    makeStyles,
+    Dropdown,
+    Option,
+    Textarea,
+    tokens,
+    shorthands
+} from "@fluentui/react-components";
+import { AddRegular, SaveRegular } from "@fluentui/react-icons";
 import { useRouter } from 'next/navigation'
 import { createProject } from '@/app/actions/projects'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { format } from "date-fns"
-import { Calendar as CalendarIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { format } from "date-fns"
+
+const useStyles = makeStyles({
+    dialogContent: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        minWidth: "600px",
+        maxWidth: "800px",
+    },
+    section: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        padding: "16px",
+        backgroundColor: tokens.colorNeutralBackground2,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    },
+    sectionTitle: {
+        fontWeight: "bold",
+        color: tokens.colorNeutralForeground2,
+        textTransform: "uppercase",
+        fontSize: "12px",
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        paddingBottom: "8px",
+        marginBottom: "8px",
+    },
+    row: {
+        display: "flex",
+        gap: "16px",
+    },
+    field: {
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        gap: "4px"
+    }
+});
 
 interface CreateProjectDialogProps {
     customers?: any[]
 }
 
 export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps) {
+    const styles = useStyles();
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
 
@@ -33,8 +80,10 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
     const [corrosionDurability, setCorrosionDurability] = useState<string>('')
     const [corrosionComments, setCorrosionComments] = useState('')
     const [estimatedHours, setEstimatedHours] = useState('')
-    const [contractDate, setContractDate] = useState<Date | undefined>()
-    const [deliveryDate, setDeliveryDate] = useState<Date | undefined>()
+
+    // Dates as strings YYYY-MM-DD for input type="date"
+    const [contractDateStr, setContractDateStr] = useState('')
+    const [deliveryDateStr, setDeliveryDateStr] = useState('')
 
     const router = useRouter()
 
@@ -54,9 +103,9 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                 corrosionCategory: corrosionCategory || undefined,
                 corrosionDurability: corrosionDurability || undefined,
                 corrosionComments: corrosionComments || undefined,
-                contractDate: contractDate,
+                contractDate: contractDateStr ? new Date(contractDateStr) : undefined,
                 estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
-                deliveryDate: deliveryDate
+                deliveryDate: deliveryDateStr ? new Date(deliveryDateStr) : undefined
             })
 
             if (res.success) {
@@ -71,8 +120,8 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
                 setCorrosionDurability('')
                 setCorrosionComments('')
                 setEstimatedHours('')
-                setContractDate(undefined)
-                setDeliveryDate(undefined)
+                setContractDateStr('')
+                setDeliveryDateStr('')
 
                 router.refresh()
             } else {
@@ -86,188 +135,114 @@ export function CreateProjectDialog({ customers = [] }: CreateProjectDialogProps
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>+ New Project</Button>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<AddRegular />}>New Project</Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-6xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
+            <DialogSurface className={styles.dialogContent}>
+                <DialogBody>
                     <DialogTitle>Create New Project</DialogTitle>
-                    <DialogDescription>Enter project details, technical specifications, and milestones.</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-8 py-6">
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                            <Label>Project Number</Label>
-                            <Input
-                                value={projectNumber}
-                                onChange={e => setProjectNumber(e.target.value)}
-                                placeholder="(Auto-generated if empty)"
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Project Name *</Label>
-                            <Input
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                                placeholder="e.g. Hangar Expansion"
-                            />
+
+                    <div className={styles.section}>
+                        <div className={styles.sectionTitle}>Basic Info</div>
+                        <div className={styles.row}>
+                            <Field label="Project Number" className={styles.field}>
+                                <Input
+                                    value={projectNumber}
+                                    onChange={(e, d) => setProjectNumber(d.value)}
+                                    placeholder="(Auto-generated)"
+                                />
+                            </Field>
+                            <Field label="Project Name" required className={styles.field}>
+                                <Input
+                                    value={name}
+                                    onChange={(e, d) => setName(d.value)}
+                                    placeholder="e.g. Hangar Expansion"
+                                />
+                            </Field>
                         </div>
                     </div>
 
-                    {/* Customer & Contract */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                            <Label>Customer</Label>
-                            <Select value={customerId} onValueChange={setCustomerId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Customer" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {customers.length === 0 && <SelectItem value="none" disabled>No customers found</SelectItem>}
+                    <div className={styles.section}>
+                        <div className={styles.sectionTitle}>Customer & Schedule</div>
+                        <div className={styles.row}>
+                            <Field label="Customer" className={styles.field}>
+                                <Dropdown
+                                    value={customers.find(c => c.id === customerId)?.companyName || (customerId ? "Selected" : "")}
+                                    onOptionSelect={(e, d) => setCustomerId(d.optionValue || '')}
+                                    placeholder="Select Customer"
+                                >
+                                    {customers.length === 0 && <Option text="">No customers found</Option>}
                                     {customers.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.companyName}</SelectItem>
+                                        <Option key={c.id} value={c.id} text={c.companyName}>{c.companyName}</Option>
                                     ))}
-                                </SelectContent>
-                            </Select>
+                                </Dropdown>
+                            </Field>
+                            <Field label="Contract Date" className={styles.field}>
+                                <Input type="date" value={contractDateStr} onChange={(e, d) => setContractDateStr(d.value)} />
+                            </Field>
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Contract Date</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                            "w-full justify-start text-left font-normal",
-                                            !contractDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {contractDate ? format(contractDate, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="!w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={contractDate}
-                                        onSelect={setContractDate}
-                                        initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
+                        <div className={styles.row}>
+                            <Field label="Est. Delivery Date" className={styles.field}>
+                                <Input type="date" value={deliveryDateStr} onChange={(e, d) => setDeliveryDateStr(d.value)} />
+                            </Field>
+                            <Field label="Est. Hours" className={styles.field}>
+                                <Input type="number" value={estimatedHours} onChange={(e, d) => setEstimatedHours(d.value)} placeholder="Total" />
+                            </Field>
                         </div>
                     </div>
 
-                    {/* Technical Specs */}
-                    <div className="space-y-6 border rounded-xl p-6 bg-slate-50/50">
-                        <h4 className="font-semibold text-base text-gray-800 mb-4 flex items-center gap-2">
-                            Technical Specifications
-                            <span className="text-xs font-normal text-muted-foreground bg-white border px-2 py-0.5 rounded-full">Required for Production</span>
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            <div className="grid gap-2">
-                                <Label>Coating Type</Label>
-                                <Select value={coatingType} onValueChange={setCoatingType}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Painted">Painted</SelectItem>
-                                        <SelectItem value="HDG">Hot Dip Galvanized (HDG)</SelectItem>
-                                        <SelectItem value="Duplex">Duplex (HDG + Paint)</SelectItem>
-                                        <SelectItem value="Powder">Powder Coated</SelectItem>
-                                        <SelectItem value="None">None / Raw</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label>Corrosion Category</Label>
-                                <Select value={corrosionCategory} onValueChange={setCorrosionCategory}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="C1">C1</SelectItem>
-                                        <SelectItem value="C2">C2</SelectItem>
-                                        <SelectItem value="C3">C3</SelectItem>
-                                        <SelectItem value="C4">C4</SelectItem>
-                                        <SelectItem value="C5">C5</SelectItem>
-                                        <SelectItem value="CX">CX</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label>Durability</Label>
-                                <Select value={corrosionDurability} onValueChange={setCorrosionDurability}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Durability" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="L">Low (L)</SelectItem>
-                                        <SelectItem value="M">Medium (M)</SelectItem>
-                                        <SelectItem value="H">High (H)</SelectItem>
-                                        <SelectItem value="VH">Very High (VH)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                    <div className={styles.section}>
+                        <div className={styles.sectionTitle}>Specs</div>
+                        <div className={styles.row}>
+                            <Field label="Coating" className={styles.field}>
+                                <Dropdown
+                                    value={coatingType}
+                                    onOptionSelect={(e, d) => setCoatingType(d.optionValue || '')}
+                                    placeholder="Select"
+                                >
+                                    <Option value="Painted">Painted</Option>
+                                    <Option value="HDG">Hot Dip Galvanized (HDG)</Option>
+                                    <Option value="Duplex">Duplex (HDG + Paint)</Option>
+                                    <Option value="Powder">Powder Coated</Option>
+                                    <Option value="None">None / Raw</Option>
+                                </Dropdown>
+                            </Field>
+                            <Field label="Category" className={styles.field}>
+                                <Dropdown
+                                    value={corrosionCategory}
+                                    onOptionSelect={(e, d) => setCorrosionCategory(d.optionValue || '')}
+                                    placeholder="C1-CX"
+                                >
+                                    {["C1", "C2", "C3", "C4", "C5", "CX"].map(c => <Option key={c}>{c}</Option>)}
+                                </Dropdown>
+                            </Field>
+                            <Field label="Durability" className={styles.field}>
+                                <Dropdown
+                                    value={corrosionDurability}
+                                    onOptionSelect={(e, d) => setCorrosionDurability(d.optionValue || '')}
+                                    placeholder="L-VH"
+                                >
+                                    <Option value="L">Low (L)</Option>
+                                    <Option value="M">Medium (M)</Option>
+                                    <Option value="H">High (H)</Option>
+                                    <Option value="VH">Very High (VH)</Option>
+                                </Dropdown>
+                            </Field>
                         </div>
-                        <div className="grid gap-2">
-                            <Label>Corrosion/Coating Comments</Label>
-                            <Textarea
-                                value={corrosionComments}
-                                onChange={e => setCorrosionComments(e.target.value)}
-                                placeholder="Details about protection level or specific systems..."
-                            />
-                        </div>
+                        <Field label="Comments" className={styles.field}>
+                            <Textarea value={corrosionComments} onChange={(e, d) => setCorrosionComments(d.value)} />
+                        </Field>
                     </div>
 
-                    {/* Schedule */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                            <Label>Requested Delivery</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                            "w-full justify-start text-left font-normal",
-                                            !deliveryDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {deliveryDate ? format(deliveryDate, "PPP") : <span>Pick a date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="!w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        selected={deliveryDate}
-                                        onSelect={setDeliveryDate}
-                                        initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>Estimated Hours/Days</Label>
-                            <Input
-                                type="number"
-                                value={estimatedHours}
-                                onChange={e => setEstimatedHours(e.target.value)}
-                                placeholder="Total Hours"
-                            />
-                        </div>
-                    </div>
-
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading}>
+                </DialogBody>
+                <DialogActions>
+                    <Button appearance="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+                    <Button appearance="primary" icon={<SaveRegular />} disabled={loading} onClick={handleSubmit}>
                         {loading ? "Creating..." : "Create Project"}
                     </Button>
-                </DialogFooter>
-            </DialogContent>
+                </DialogActions>
+            </DialogSurface>
         </Dialog>
     )
 }

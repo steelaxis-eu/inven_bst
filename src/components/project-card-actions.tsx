@@ -1,25 +1,27 @@
 'use client'
 
-import { Button } from "@/components/ui/button"
+import {
+    Button,
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogActions,
+    DialogContent,
+    Text,
+    Spinner
+} from "@fluentui/react-components"
 import { archiveProject } from "@/app/actions/projects"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { Trash2 } from "lucide-react"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { DeleteRegular } from "@fluentui/react-icons"
 import { toast } from "sonner"
+import { tokens } from "@fluentui/react-components"
 
 export function ProjectCardActions({ id, name }: { id: string, name: string }) {
     const [loading, setLoading] = useState(false)
+    const [open, setOpen] = useState(false)
     const router = useRouter()
 
     const handleArchive = async () => {
@@ -28,6 +30,7 @@ export function ProjectCardActions({ id, name }: { id: string, name: string }) {
             await archiveProject(id)
             router.refresh()
             toast.success("Project archived")
+            setOpen(false)
         } catch (e) {
             toast.error("Failed to archive project")
         } finally {
@@ -36,27 +39,38 @@ export function ProjectCardActions({ id, name }: { id: string, name: string }) {
     }
 
     return (
-        <AlertDialog>
-            <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                    <Trash2 className="h-4 w-4" />
-                </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Archive Project?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Are you sure you want to archive <strong>{name}</strong>?
-                        This will hide it from the main list. You can restore it from the database if needed.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleArchive} className="bg-red-600 hover:bg-red-700">
-                        {loading ? 'Archiving...' : 'Archive'}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button
+                    appearance="subtle"
+                    icon={<DeleteRegular style={{ color: tokens.colorPaletteRedForeground1 }} />}
+                    style={{ color: tokens.colorPaletteRedForeground1 }}
+                    className="hover:bg-red-50" // Tailwind utility still works if needed, or use inline styles
+                />
+            </DialogTrigger>
+            <DialogSurface>
+                <DialogBody>
+                    <DialogTitle>Archive Project?</DialogTitle>
+                    <DialogContent>
+                        <Text>
+                            Are you sure you want to archive <strong>{name}</strong>?
+                            This will hide it from the main list. You can restore it from the database if needed.
+                        </Text>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button appearance="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+                        <Button
+                            appearance="primary"
+                            onClick={handleArchive}
+                            disabled={loading}
+                            icon={loading ? <Spinner size="tiny" /> : undefined}
+                            style={{ backgroundColor: tokens.colorPaletteRedBackground3, border: 'none' }}
+                        >
+                            {loading ? 'Archiving...' : 'Archive'}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
+        </Dialog>
     )
 }

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "../globals.css";
-import Link from "next/link";
 import { APP_CONFIG } from "@/lib/config";
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
+import { Toaster } from 'sonner';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,32 +25,15 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/sonner"
-import { ModeToggle } from "@/components/mode-toggle"
 import { Analytics } from "@vercel/analytics/react"
 import { SpeedInsights } from "@vercel/speed-insights/next"
 
 import { getCurrentUser } from "@/lib/auth"
-import { UserNav } from "@/components/user-nav"
-import { LanguageSwitcher } from "@/components/language-switcher"
-import { useTranslations } from 'next-intl';
 import { ImportProvider } from "@/context/import-context";
 import { ImportStatus } from "@/components/layout/import-status";
-
-function Navigation() {
-  const t = useTranslations('Navigation');
-  return (
-    <nav className="hidden md:flex gap-6">
-      <Link href="/" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('dashboard')}</Link>
-      <Link href="/stock" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('stock')}</Link>
-      <Link href="/inventory" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('inventory')}</Link>
-      <Link href="/usage/history" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('history')}</Link>
-      <Link href="/projects" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('projects')}</Link>
-      <Link href="/customers" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('customers')}</Link>
-      <Link href="/settings" className="hover:text-blue-600 font-medium text-muted-foreground hover:text-primary transition-colors">{t('settings')}</Link>
-    </nav>
-  );
-}
+import StyledComponentsRegistry from "../registry";
+import { AppFluentProvider } from "../fluent-provider";
+import { Header } from "@/components/layout/header";
 
 export default async function RootLayout({
   children,
@@ -68,39 +51,29 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
-        <NextIntlClientProvider messages={messages} locale={locale}>
-          <ImportProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <header className="border-b bg-background p-4 shadow-sm sticky top-0 z-10 transition-colors">
-                <div className="container mx-auto flex justify-between items-center">
-                  <Link href="/" className="font-bold text-xl tracking-tight text-primary hover:text-blue-600 transition-colors">
-                    {APP_CONFIG.name}
-                  </Link>
-                  <div className="flex items-center gap-6">
-                    <Navigation />
-                    <div className="flex items-center gap-2">
-                      <LanguageSwitcher />
-                      <ModeToggle />
-                      <UserNav userEmail={user?.email} />
-                    </div>
-                  </div>
-                </div>
-              </header>
-              <ImportStatus />
-              <main className="flex-1 bg-gradient-to-br from-background to-muted/50">
-                {children}
-              </main>
-              <Toaster />
-              <Analytics />
-              <SpeedInsights />
-            </ThemeProvider>
-          </ImportProvider>
-        </NextIntlClientProvider>
+        <StyledComponentsRegistry>
+          <NextIntlClientProvider messages={messages} locale={locale}>
+            <ImportProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <AppFluentProvider>
+                  <Header userEmail={user?.email ?? undefined} />
+                  <ImportStatus />
+                  <main className="flex-1 bg-gradient-to-br from-white to-gray-50 dark:from-neutral-900 dark:to-neutral-950">
+                    {children}
+                  </main>
+                  <Toaster richColors position="bottom-right" />
+                  <Analytics />
+                  <SpeedInsights />
+                </AppFluentProvider>
+              </ThemeProvider>
+            </ImportProvider>
+          </NextIntlClientProvider>
+        </StyledComponentsRegistry>
       </body>
     </html>
   );

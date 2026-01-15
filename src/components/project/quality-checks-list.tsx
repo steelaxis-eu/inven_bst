@@ -1,10 +1,23 @@
 'use client'
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle2, XCircle, AlertTriangle, Shield } from 'lucide-react'
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    Badge,
+    Button,
+    Card,
+    CardHeader,
+    CardPreview,
+    Text,
+    Subtitle2,
+    Title3
+} from "@fluentui/react-components"
+import { CheckmarkCircleRegular, DismissCircleRegular, AlertRegular, ShieldRegular, CheckmarkRegular, DismissRegular } from '@fluentui/react-icons'
+import { tokens } from "@fluentui/react-components"
 
 interface QualityCheck {
     id: string
@@ -27,43 +40,43 @@ interface QualityChecksListProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-    'PENDING': 'bg-gray-100 text-gray-800',
-    'PASSED': 'bg-green-100 text-green-800',
-    'FAILED': 'bg-red-100 text-red-800',
-    'WAIVED': 'bg-yellow-100 text-yellow-800',
+    'PENDING': 'neutral',
+    'PASSED': 'success',
+    'FAILED': 'danger',
+    'WAIVED': 'warning',
 }
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
-    'VISUAL': <Shield className="h-4 w-4" />,
-    'DIMENSIONAL': <Shield className="h-4 w-4" />,
-    'NDT': <Shield className="h-4 w-4" />,
-    'COATING': <Shield className="h-4 w-4" />,
+    'VISUAL': <ShieldRegular />,
+    'DIMENSIONAL': <ShieldRegular />,
+    'NDT': <ShieldRegular />,
+    'COATING': <ShieldRegular />,
 }
 
 export function QualityChecksList({ checks, onStatusChange }: QualityChecksListProps) {
     if (checks.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                <Shield className="mx-auto h-12 w-12 mb-4 opacity-50" />
+            <div style={{ textAlign: 'center', padding: '48px', color: tokens.colorNeutralForeground2 }}>
+                <ShieldRegular style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }} />
                 <p>No quality checks defined yet.</p>
-                <p className="text-sm">Create quality checks to track inspections.</p>
+                <p style={{ fontSize: '12px' }}>Create quality checks to track inspections.</p>
             </div>
         )
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden">
+        <div style={{ border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium, overflow: 'hidden' }}>
             <Table>
                 <TableHeader>
-                    <TableRow className="bg-muted/50">
-                        <TableHead>Type</TableHead>
-                        <TableHead>Stage</TableHead>
-                        <TableHead>Assembly</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead>Inspector</TableHead>
-                        <TableHead>Findings</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="w-32">Actions</TableHead>
+                    <TableRow style={{ backgroundColor: tokens.colorNeutralBackground2 }}>
+                        <TableHeaderCell>Type</TableHeaderCell>
+                        <TableHeaderCell>Stage</TableHeaderCell>
+                        <TableHeaderCell>Assembly</TableHeaderCell>
+                        <TableHeaderCell>Due Date</TableHeaderCell>
+                        <TableHeaderCell>Inspector</TableHeaderCell>
+                        <TableHeaderCell>Findings</TableHeaderCell>
+                        <TableHeaderCell>Status</TableHeaderCell>
+                        <TableHeaderCell style={{ width: '100px' }}>Actions</TableHeaderCell>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -71,64 +84,60 @@ export function QualityChecksList({ checks, onStatusChange }: QualityChecksListP
                         const isOverdue = qc.dueDate && new Date(qc.dueDate) < new Date() && qc.status === 'PENDING'
 
                         return (
-                            <TableRow key={qc.id} className={isOverdue ? 'bg-red-50/50' : ''}>
+                            <TableRow key={qc.id} style={isOverdue ? { backgroundColor: tokens.colorPaletteRedBackground1 } : undefined}>
                                 <TableCell>
-                                    <div className="flex items-center gap-2">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         {TYPE_ICONS[qc.type]}
                                         <span>{qc.type}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell className="font-medium">{qc.processStage}</TableCell>
+                                <TableCell style={{ fontWeight: 600 }}>{qc.processStage}</TableCell>
                                 <TableCell>
                                     {qc.assembly
                                         ? `${qc.assembly.assemblyNumber} - ${qc.assembly.name}`
-                                        : <span className="text-muted-foreground">Project-level</span>}
+                                        : <span style={{ color: tokens.colorNeutralForeground3 }}>Project-level</span>}
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-1">
-                                        {isOverdue && <AlertTriangle className="h-3 w-3 text-red-500" />}
-                                        <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {isOverdue && <AlertRegular style={{ color: tokens.colorPaletteRedForeground1 }} />}
+                                        <span style={isOverdue ? { color: tokens.colorPaletteRedForeground1, fontWeight: 600 } : {}}>
                                             {qc.dueDate ? new Date(qc.dueDate).toLocaleDateString() : '-'}
                                         </span>
                                     </div>
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">
+                                <TableCell style={{ color: tokens.colorNeutralForeground3 }}>
                                     {qc.inspectedBy || '-'}
                                 </TableCell>
                                 <TableCell>
-                                    <div className="max-w-xs truncate text-sm">
+                                    <div style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                         {qc.findings || '-'}
                                     </div>
                                     {qc.ncr && (
-                                        <div className="text-xs text-red-600">NCR: {qc.ncr}</div>
+                                        <div style={{ fontSize: '10px', color: tokens.colorPaletteRedForeground1 }}>NCR: {qc.ncr}</div>
                                     )}
                                 </TableCell>
                                 <TableCell>
-                                    <Badge variant="outline" className={STATUS_COLORS[qc.status] || ''}>
+                                    <Badge appearance="tint" color={STATUS_COLORS[qc.status] as any || 'brand'}>
                                         {qc.status}
                                     </Badge>
                                 </TableCell>
                                 <TableCell>
                                     {qc.status === 'PENDING' && (
-                                        <div className="flex gap-1">
+                                        <div style={{ display: 'flex', gap: '4px' }}>
                                             <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-7 w-7 p-0 text-green-600"
+                                                size="small"
+                                                appearance="subtle"
+                                                icon={<CheckmarkRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
                                                 onClick={() => onStatusChange?.(qc.id, 'PASSED')}
                                                 title="Pass"
-                                            >
-                                                <CheckCircle2 className="h-4 w-4" />
-                                            </Button>
+                                            />
                                             <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="h-7 w-7 p-0 text-red-600"
+                                                size="small"
+                                                appearance="subtle"
+                                                icon={<DismissRegular style={{ color: tokens.colorPaletteRedForeground1 }} />}
                                                 onClick={() => onStatusChange?.(qc.id, 'FAILED')}
                                                 title="Fail"
-                                            >
-                                                <XCircle className="h-4 w-4" />
-                                            </Button>
+                                            />
                                         </div>
                                     )}
                                 </TableCell>
@@ -151,40 +160,32 @@ export function QualitySummary({ checks }: { checks: QualityCheck[] }) {
     ).length
 
     return (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-gray-600">{pending}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="semibold" style={{ color: tokens.colorNeutralForeground2 }}>Pending</Text>} />
+                <div style={{ padding: '0 12px 12px 12px' }}>
+                    <Title3>{pending}</Title3>
+                </div>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Passed</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{passed}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="semibold" style={{ color: tokens.colorNeutralForeground2 }}>Passed</Text>} />
+                <div style={{ padding: '0 12px 12px 12px' }}>
+                    <Title3 style={{ color: tokens.colorPaletteGreenForeground1 }}>{passed}</Title3>
+                </div>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Failed</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-red-600">{failed}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="semibold" style={{ color: tokens.colorNeutralForeground2 }}>Failed</Text>} />
+                <div style={{ padding: '0 12px 12px 12px' }}>
+                    <Title3 style={{ color: tokens.colorPaletteRedForeground1 }}>{failed}</Title3>
+                </div>
             </Card>
-            <Card className={overdue > 0 ? 'border-orange-300 bg-orange-50/50' : ''}>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Overdue</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className={`text-2xl font-bold ${overdue > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+            <Card style={overdue > 0 ? { backgroundColor: tokens.colorPaletteDarkOrangeBackground1, borderColor: tokens.colorPaletteDarkOrangeBorder1 } : undefined}>
+                <CardHeader header={<Text weight="semibold" style={{ color: tokens.colorNeutralForeground2 }}>Overdue</Text>} />
+                <div style={{ padding: '0 12px 12px 12px' }}>
+                    <Title3 style={{ color: overdue > 0 ? tokens.colorPaletteDarkOrangeForeground1 : tokens.colorNeutralForegroundDisabled }}>
                         {overdue}
-                    </div>
-                </CardContent>
+                    </Title3>
+                </div>
             </Card>
         </div>
     )

@@ -357,6 +357,8 @@ export interface PlatePart {
     material: string | null
     gradeId: string | null
     thickness: number | null
+    width: number | null
+    length: number | null
     quantity: number
     unitWeight: number
     dxfFilename: string | null
@@ -383,6 +385,13 @@ export interface PlatePiece {
     receivedAt: Date | null
     receivedBy: string | null
     notes: string | null
+}
+
+export interface PlatePartWithRelations extends PlatePart {
+    pieces: PlatePiece[]
+    grade: MaterialGrade | null
+    isOutsourced?: boolean
+    area?: number
 }
 
 export interface PlateAssemblyPart {

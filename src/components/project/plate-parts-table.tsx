@@ -1,11 +1,25 @@
 'use client'
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { FileText, Package, Truck, ExternalLink } from 'lucide-react'
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
+    Badge,
+    Button,
+    Card,
+    CardHeader,
+    ProgressBar,
+    tokens,
+    Title3,
+    Text
+} from "@fluentui/react-components"
+import {
+    DocumentRegular,
+    BoxRegular
+} from "@fluentui/react-icons"
 
 interface PlatePart {
     id: string
@@ -32,41 +46,41 @@ interface PlatePartsTableProps {
     onStatusChange?: (id: string, status: string) => void
 }
 
-const STATUS_COLORS: Record<string, string> = {
-    'PENDING': 'bg-gray-100 text-gray-800',
-    'ORDERED': 'bg-blue-100 text-blue-800',
-    'IN_PRODUCTION': 'bg-yellow-100 text-yellow-800',
-    'RECEIVED': 'bg-green-100 text-green-800',
-    'QC_PASSED': 'bg-emerald-100 text-emerald-800',
+const STATUS_COLORS: Record<string, "outline" | "filled" | "tint"> = {
+    'PENDING': 'outline',
+    'ORDERED': 'tint',
+    'IN_PRODUCTION': 'tint',
+    'RECEIVED': 'filled',
+    'QC_PASSED': 'filled',
 }
 
 export function PlatePartsTable({ plateParts, onStatusChange }: PlatePartsTableProps) {
     if (plateParts.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p>No plate parts defined yet.</p>
-                <p className="text-sm">Add laser/plasma cut parts for outsourced fabrication.</p>
+            <div style={{ textAlign: 'center', padding: '48px', border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
+                <BoxRegular fontSize={48} style={{ opacity: 0.5, color: tokens.colorNeutralForeground3 }} />
+                <div style={{ marginTop: '8px', fontWeight: 600 }}>No plate parts defined yet</div>
+                <Text>Add laser/plasma cut parts for outsourced fabrication.</Text>
             </div>
         )
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden">
+        <div style={{ border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium, overflow: 'hidden' }}>
             <Table>
                 <TableHeader>
-                    <TableRow className="bg-muted/50">
-                        <TableHead>Part #</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Material</TableHead>
-                        <TableHead className="text-right">Thickness</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead>Supplier</TableHead>
-                        <TableHead>PO #</TableHead>
-                        <TableHead>Expected</TableHead>
-                        <TableHead>Received</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>DXF</TableHead>
+                    <TableRow>
+                        <TableHeaderCell>Part #</TableHeaderCell>
+                        <TableHeaderCell>Description</TableHeaderCell>
+                        <TableHeaderCell>Material</TableHeaderCell>
+                        <TableHeaderCell style={{ textAlign: 'right' }}>Thickness</TableHeaderCell>
+                        <TableHeaderCell style={{ textAlign: 'right' }}>Qty</TableHeaderCell>
+                        <TableHeaderCell>Supplier</TableHeaderCell>
+                        <TableHeaderCell>PO #</TableHeaderCell>
+                        <TableHeaderCell>Expected</TableHeaderCell>
+                        <TableHeaderCell>Received</TableHeaderCell>
+                        <TableHeaderCell>Status</TableHeaderCell>
+                        <TableHeaderCell>DXF</TableHeaderCell>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -77,49 +91,49 @@ export function PlatePartsTable({ plateParts, onStatusChange }: PlatePartsTableP
 
                         return (
                             <TableRow key={pp.id}>
-                                <TableCell className="font-mono font-medium">{pp.partNumber}</TableCell>
-                                <TableCell className="text-muted-foreground">{pp.description || '-'}</TableCell>
+                                <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>{pp.partNumber}</TableCell>
+                                <TableCell><Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{pp.description || '-'}</Text></TableCell>
                                 <TableCell>
                                     {pp.material || pp.grade?.name || '-'}
                                 </TableCell>
-                                <TableCell className="text-right font-mono">
+                                <TableCell style={{ textAlign: 'right', fontFamily: 'monospace' }}>
                                     {pp.thickness ? `${pp.thickness} mm` : '-'}
                                 </TableCell>
-                                <TableCell className="text-right font-medium">{pp.quantity}</TableCell>
+                                <TableCell style={{ textAlign: 'right', fontWeight: 500 }}>{pp.quantity}</TableCell>
                                 <TableCell>{pp.supplier || '-'}</TableCell>
-                                <TableCell className="font-mono text-sm">{pp.poNumber || '-'}</TableCell>
-                                <TableCell className="text-sm">
+                                <TableCell style={{ fontFamily: 'monospace', fontSize: '12px' }}>{pp.poNumber || '-'}</TableCell>
+                                <TableCell style={{ fontSize: '12px' }}>
                                     {pp.expectedDate
                                         ? new Date(pp.expectedDate).toLocaleDateString()
                                         : '-'}
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 500 }}>
                                             {pp.receivedQty}/{pp.quantity}
                                         </span>
                                         {pp.quantity > 0 && (
-                                            <Progress value={receivedPercent} className="w-16 h-2" />
+                                            <ProgressBar value={receivedPercent / 100} style={{ width: '60px' }} />
                                         )}
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge variant="outline" className={STATUS_COLORS[pp.status] || ''}>
+                                    <Badge appearance={STATUS_COLORS[pp.status] || 'outline'}>
                                         {pp.status.replace('_', ' ')}
                                     </Badge>
                                 </TableCell>
                                 <TableCell>
                                     {pp.dxfFilename ? (
                                         <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 gap-1 text-blue-600"
+                                            size="small"
+                                            appearance="subtle"
+                                            icon={<DocumentRegular />}
+                                            style={{ color: tokens.colorPaletteBlueForeground2 }}
                                         >
-                                            <FileText className="h-3 w-3" />
-                                            <span className="text-xs">{pp.dxfFilename}</span>
+                                            <span style={{ fontSize: '11px' }}>{pp.dxfFilename}</span>
                                         </Button>
                                     ) : (
-                                        <span className="text-xs text-muted-foreground">—</span>
+                                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>—</Text>
                                     )}
                                 </TableCell>
                             </TableRow>
@@ -131,7 +145,6 @@ export function PlatePartsTable({ plateParts, onStatusChange }: PlatePartsTableP
     )
 }
 
-// Summary cards for plate parts
 export function PlatePartsSummary({ plateParts }: { plateParts: PlatePart[] }) {
     const total = plateParts.length
     const pending = plateParts.filter(p => p.status === 'PENDING').length
@@ -140,46 +153,26 @@ export function PlatePartsSummary({ plateParts }: { plateParts: PlatePart[] }) {
     const totalWeight = plateParts.reduce((sum, p) => sum + (p.quantity * (p.unitWeight || 0)), 0)
 
     return (
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Parts</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{total}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Total Parts</Text>} />
+                <Title3>{total}</Title3>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Pending Order</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-gray-600">{pending}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Pending Order</Text>} />
+                <Title3 style={{ color: tokens.colorNeutralForegroundDisabled }}>{pending}</Title3>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Ordered</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-blue-600">{ordered}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Ordered</Text>} />
+                <Title3 style={{ color: tokens.colorPaletteBlueForeground2 }}>{ordered}</Title3>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Received</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{received}</div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Received</Text>} />
+                <Title3 style={{ color: tokens.colorPaletteGreenForeground1 }}>{received}</Title3>
             </Card>
             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Weight</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{totalWeight.toFixed(0)} <span className="text-sm font-normal">kg</span></div>
-                </CardContent>
+                <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Total Weight</Text>} />
+                <Title3>{totalWeight.toFixed(0)} <span style={{ fontSize: '14px', fontWeight: 400 }}>kg</span></Title3>
             </Card>
         </div>
     )

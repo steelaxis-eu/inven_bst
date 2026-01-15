@@ -1,8 +1,32 @@
 'use client'
 
 import { useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button, Card, CardHeader, Text, Title3, makeStyles, tokens } from '@fluentui/react-components'
+import { ArrowRotateClockwiseRegular, ErrorCircleRegular } from '@fluentui/react-icons'
+
+const useStyles = makeStyles({
+    container: {
+        padding: '32px',
+        display: 'flex',
+        justifyContent: 'center',
+    },
+    card: {
+        width: '100%',
+        maxWidth: '480px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        padding: '24px',
+    },
+    errorBox: {
+        backgroundColor: tokens.colorPaletteRedBackground1,
+        color: tokens.colorPaletteRedForeground1,
+        padding: '8px 12px',
+        borderRadius: tokens.borderRadiusMedium,
+        fontFamily: 'monospace',
+        fontSize: '12px',
+    }
+})
 
 export default function StockError({
     error,
@@ -11,29 +35,34 @@ export default function StockError({
     error: Error & { digest?: string }
     reset: () => void
 }) {
+    const styles = useStyles()
+
     useEffect(() => {
         console.error('Stock Error:', error)
     }, [error])
 
     return (
-        <div className="container mx-auto py-8">
-            <Card className="max-w-md mx-auto">
-                <CardHeader>
-                    <CardTitle className="text-destructive">Something went wrong</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                        Failed to load stock data. Please try again.
-                    </p>
-                    {error.message && (
-                        <p className="text-xs font-mono bg-muted p-2 rounded">
-                            {error.message}
-                        </p>
-                    )}
-                    <Button onClick={reset} variant="outline" className="w-full">
-                        Try again
-                    </Button>
-                </CardContent>
+        <div className={styles.container}>
+            <Card className={styles.card}>
+                <CardHeader
+                    header={<Title3>Something went wrong</Title3>}
+                    description={<Text>Failed to load stock data. Please try again.</Text>}
+                    image={<ErrorCircleRegular style={{ fontSize: 32, color: tokens.colorPaletteRedForeground3 }} />}
+                />
+
+                {error.message && (
+                    <div className={styles.errorBox}>
+                        {error.message}
+                    </div>
+                )}
+
+                <Button
+                    appearance="primary"
+                    onClick={reset}
+                    icon={<ArrowRotateClockwiseRegular />}
+                >
+                    Try again
+                </Button>
             </Card>
         </div>
     )

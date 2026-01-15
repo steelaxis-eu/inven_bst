@@ -7,39 +7,11 @@ import { getProjectPlateParts } from "@/app/actions/plateparts"
 import { getProjectDeliverySchedules } from "@/app/actions/deliveries"
 import prisma from "@/lib/prisma"
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { DownloadCertificatesButton } from "@/components/download-certificates-button"
-
-import { UnifiedPartsTable, UnifiedPartItem } from "@/components/project/unified-parts-table"
-import { ImportDrawingsDialog } from '@/components/project/import-drawings-dialog'
-import { CreatePartDialog } from "@/components/project/create-part-dialog"
-
-// ... existing imports
-
-// Inside the component...
-
-
-import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialog"
-import { EditProjectDialog } from "@/components/project/edit-project-dialog"
-import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
-import { BackgroundTasksIndicator } from "@/components/project/background-tasks-indicator"
-import { RecalculateWeightsButton } from "@/components/project/recalculate-weights-button"
-import { WorkOrdersList, WorkOrderSummary } from "@/components/project/workorders-list"
-import { ProjectQualityTab } from "@/components/project/project-quality-tab"
-import { PlatePartsSummary } from "@/components/project/plate-parts-table"
-import { DeliveriesList, DeliveriesSummary } from "@/components/project/deliveries-list"
-
-import {
-    Package, Layers, ClipboardList, Shield,
-    Truck, FileWarning, BarChart3, Scissors,
-    Factory, ShoppingCart
-} from "lucide-react"
+import { notFound } from "next/navigation"
+import type { UnifiedPartItem } from "@/components/project/unified-parts-table"
+import { ProjectDetailsView } from "./project-details-view"
 
 export default async function ProjectDashboard({ params }: { params: Promise<{ id: string }> }) {
-    // ... data fetching remains ...
     const { id } = await params
     const cleanId = decodeURIComponent(id).trim()
 
@@ -62,17 +34,10 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
             prisma.profileShape.findMany()
         ])
 
-    // ... (keep existing check for project) ...
-
     if (!project) {
-        return (
-            <div className="p-8 text-center text-red-500">
-                Project "{cleanId}" not found. Please check the URL.
-            </div>
-        )
+        notFound()
     }
 
-    // ... (keep progress calcs) ...
     type PartData = { pieces: { status: string }[] }
     const totalPieces = parts.reduce((sum: number, p: PartData) => sum + p.pieces.length, 0)
     const readyPieces = parts.reduce((sum: number, p: PartData) => sum + p.pieces.filter((pc: { status: string }) => pc.status === 'READY').length, 0)
@@ -85,14 +50,9 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
 
     const {
         missingCertCount = 0,
-        totalProjectCost = 0,
-        totalScrapValue = 0,
-        netCost = 0,
     } = project.stats || {}
 
-
-    // GROUPING PARTS BY SOURCE
-    // GROUPING PARTS BY SOURCE
+    // Grouping
     const inHouseItems: UnifiedPartItem[] = [
         ...parts.filter((p: any) => !p.isOutsourcedCut).map((p: any) => ({ kind: 'part' as const, data: p })),
         ...plateParts.filter((p: any) => !p.isOutsourced).map((p: any) => ({ kind: 'plate' as const, data: p }))
@@ -104,316 +64,25 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
     ].sort((a, b) => a.data.partNumber.localeCompare(b.data.partNumber, undefined, { numeric: true }))
 
     return (
-        <div className="container mx-auto py-6 space-y-6">
-            {/* Header ... (unchanged) */}
-            <div className="flex justify-between items-start">
-                <div>
-                    <div className="flex items-center gap-3 mb-2">
-                        <h1 className="text-3xl font-bold">{project.projectNumber}</h1>
-                        <Badge variant="outline" className="text-sm">
-                            {project.status}
-                        </Badge>
-                    </div>
-                    <p className="text-xl text-muted-foreground">{project.name}</p>
-                    {project.client && (
-                        <p className="text-sm text-muted-foreground">Client: {project.client}</p>
-                    )}
-                    {project.coatingType && (
-                        <p className="text-sm text-muted-foreground">
-                            Coating: <span className="font-medium">{project.coatingType}</span>
-                            {project.coatingSpec && ` - ${project.coatingSpec}`}
-                        </p>
-                    )}
-                </div>
-                <div className="flex gap-4 items-center">
-                    <BackgroundTasksIndicator projectId={project.id} />
-                    {missingCertCount > 0 ? (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 text-destructive rounded-md border border-destructive/20">
-                            <FileWarning className="h-4 w-4" />
-                            <span>{missingCertCount} missing certs</span>
-                        </div>
-                    ) : (
-                        <DownloadCertificatesButton projectId={project.id} projectNumber={project.projectNumber} />
-                    )}
-                    <EditProjectDialog project={{
-                        id: project.id,
-                        name: project.name,
-                        client: project.client,
-                        description: project.description,
-                        priority: project.priority,
-                        coatingType: project.coatingType,
-                        coatingSpec: project.coatingSpec
-                    }} />
-                </div>
-            </div>
-
-            {/* Overview Cards ... (unchanged) */}
-            <div className="grid grid-cols-6 gap-4">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <BarChart3 className="h-4 w-4" /> Progress
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{overallProgress}%</div>
-                        <Progress value={overallProgress} className="h-2 mt-2" />
-                        <p className="text-xs text-muted-foreground mt-1">{readyPieces}/{totalPieces} pieces</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <Factory className="h-4 w-4" /> In-House
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{inHouseItems.length}</div>
-                        <p className="text-xs text-muted-foreground">Items to fabricate</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <ShoppingCart className="h-4 w-4" /> Outsourced
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{outsourcedItems.length}</div>
-                        <p className="text-xs text-muted-foreground">Items to buy/subcon</p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <Layers className="h-4 w-4" /> Assemblies
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{assemblies.length}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {(assemblies as { status: string }[]).filter((a: { status: string }) => a.status === 'SHIPPED').length} shipped
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <ClipboardList className="h-4 w-4" /> Work Orders
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {(workOrders as { status: string }[]).filter((w: { status: string }) => w.status === 'IN_PROGRESS').length}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            {(workOrders as { status: string }[]).filter((w: { status: string }) => w.status === 'PENDING').length} pending
-                        </p>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                            <Truck className="h-4 w-4" /> Deliveries
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {(deliveries as { status: string }[]).filter((d: { status: string }) => d.status === 'PENDING').length}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            {(deliveries as { status: string }[]).filter((d: { status: string }) => d.status === 'DELIVERED').length} completed
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Tabs */}
-            <Tabs defaultValue="inhouse" className="w-full">
-                <TabsList className="grid w-full grid-cols-6">
-                    <TabsTrigger value="inhouse" className="gap-2">
-                        <Factory className="h-4 w-4" /> In-House
-                    </TabsTrigger>
-                    <TabsTrigger value="outsourced" className="gap-2">
-                        <ShoppingCart className="h-4 w-4" /> Outsourced
-                    </TabsTrigger>
-                    <TabsTrigger value="assemblies" className="gap-2">
-                        <Layers className="h-4 w-4" /> Assemblies
-                    </TabsTrigger>
-                    <TabsTrigger value="workorders" className="gap-2">
-                        <ClipboardList className="h-4 w-4" /> Work Orders
-                    </TabsTrigger>
-                    <TabsTrigger value="quality" className="gap-2">
-                        <Shield className="h-4 w-4" /> Quality
-                    </TabsTrigger>
-                    <TabsTrigger value="deliveries" className="gap-2">
-                        <Truck className="h-4 w-4" /> Deliveries
-                    </TabsTrigger>
-                </TabsList>
-
-                {/* In-House Tab */}
-                <TabsContent value="inhouse" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <div>
-                            <h2 className="text-xl font-semibold">In-House Production</h2>
-                            <p className="text-sm text-muted-foreground">Items fabricated internally (Profiles & Plates)</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <RecalculateWeightsButton projectId={cleanId} />
-                            <ImportDrawingsDialog
-                                projectId={cleanId}
-                                profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                                standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                                grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
-                                shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [] }))}
-                            />
-                            <CreatePartDialog
-                                projectId={cleanId}
-                                profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                                standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                                grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
-                                shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
-                                inventory={inventoryMap}
-                            />
-                        </div>
-                    </div>
-                    <UnifiedPartsTable items={inHouseItems} projectId={cleanId} />
-                </TabsContent>
-
-                {/* Outsourced Tab */}
-                <TabsContent value="outsourced" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <div>
-                            <h2 className="text-xl font-semibold">Outsourced Items</h2>
-                            <p className="text-sm text-muted-foreground">Items to be purchased or sub-contracted</p>
-                        </div>
-                        {/* We could add generic "Create Outsourced Part" button here if CreatePartDialog doesn't cover it well enough */}
-                    </div>
-                    <UnifiedPartsTable items={outsourcedItems} projectId={cleanId} />
-                </TabsContent>
-
-                {/* Assemblies Tab */}
-                <TabsContent value="assemblies" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Assemblies</h2>
-                        <CreateAssemblyDialog
-                            projectId={cleanId}
-                            existingParts={(parts as any)}
-                            existingAssemblies={(assemblies as any)}
-                            profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                            grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
-                            shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [], formula: s.formula }))}
-                        />
-                    </div>
-                    <AssemblySummary assemblies={assemblies as any} />
-                    <AssembliesTree assemblies={assemblies as any} projectId={cleanId} />
-                </TabsContent>
-
-                {/* Work Orders Tab */}
-                <TabsContent value="workorders" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Work Orders</h2>
-                    </div>
-                    <WorkOrderSummary workOrders={workOrders as any} />
-                    <WorkOrdersList workOrders={workOrders as any} />
-                </TabsContent>
-
-                {/* Quality Tab */}
-                <TabsContent value="quality" className="mt-6">
-                    <ProjectQualityTab
-                        projectId={cleanId}
-                        checks={qualityChecks as any}
-                        assemblies={assemblies as any}
-                    />
-                </TabsContent>
-
-                {/* Deliveries Tab */}
-                <TabsContent value="deliveries" className="mt-6">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-semibold">Delivery Schedule</h2>
-                    </div>
-                    <DeliveriesSummary deliveries={deliveries as any} />
-                    <DeliveriesList deliveries={deliveries as any} />
-                </TabsContent>
-
-                {/* Usage Tab */}
-                <TabsContent value="usage" className="mt-6">
-                    <UsageTab project={project} />
-                </TabsContent>
-            </Tabs>
-        </div>
-    )
-}
-
-// Original Usage content as a separate component
-function UsageTab({ project }: { project: any }) {
-    const {
-        totalProjectCost = 0,
-        totalScrapValue = 0,
-        totalScrapWeight = 0,
-        netCost = 0,
-        materialSummary = [],
-        scrapPrice = 0
-    } = project.stats || {}
-
-    return (
-        <div className="space-y-6">
-            {/* Cost Summary */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Cost Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-4 gap-4">
-                        <div>
-                            <p className="text-sm text-muted-foreground">Total Material</p>
-                            <p className="text-2xl font-bold">€{totalProjectCost.toFixed(2)}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">Scrap Value</p>
-                            <p className="text-2xl font-bold text-green-600">-€{totalScrapValue.toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">{totalScrapWeight.toFixed(1)}kg</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">Net Cost</p>
-                            <p className="text-2xl font-bold text-blue-600">€{netCost.toFixed(2)}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">Avg Scrap Price</p>
-                            <p className="text-2xl font-bold">€{scrapPrice.toFixed(2)}/kg</p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Material Summary */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Material Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {materialSummary.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-8">No materials used yet.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {materialSummary.map((stat: any) => (
-                                <div
-                                    key={stat.profile}
-                                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
-                                >
-                                    <span className="font-medium">{stat.profile}</span>
-                                    <div className="flex gap-8 text-sm">
-                                        <span>{stat.count} items</span>
-                                        <span>{stat.totalLength.toFixed(0)} mm</span>
-                                        <span className="font-medium">€{stat.totalCost.toFixed(2)}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
+        <ProjectDetailsView
+            project={project}
+            cleanId={cleanId}
+            overallProgress={overallProgress}
+            readyPieces={readyPieces}
+            totalPieces={totalPieces}
+            missingCertCount={missingCertCount}
+            inHouseItems={inHouseItems}
+            outsourcedItems={outsourcedItems}
+            assemblies={assemblies}
+            workOrders={workOrders}
+            qualityChecks={qualityChecks}
+            deliveries={deliveries}
+            profiles={profiles}
+            standardProfiles={standardProfiles}
+            grades={grades}
+            shapes={shapes}
+            inventoryMap={inventoryMap}
+            parts={parts}
+        />
     )
 }

@@ -3,13 +3,14 @@
 import { useLocale } from 'next-intl';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { Languages } from "lucide-react";
+    Menu,
+    MenuTrigger,
+    MenuList,
+    MenuItem,
+    MenuPopover,
+    Button,
+} from "@fluentui/react-components";
+import { LocalLanguageRegular } from "@fluentui/react-icons";
 
 export function LanguageSwitcher() {
     const locale = useLocale();
@@ -22,21 +23,22 @@ export function LanguageSwitcher() {
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="w-9 h-9">
-                    <Languages className="h-[1.2rem] w-[1.2rem]" />
-                    <span className="sr-only">Toggle language</span>
+        <Menu>
+            <MenuTrigger disableButtonEnhancement>
+                <Button appearance="subtle" icon={<LocalLanguageRegular />} aria-label="Switch language">
+                    <span style={{ display: 'none' }}>Switch language</span>
                 </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => toggleLanguage('en')}>
-                    English
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => toggleLanguage('lv')}>
-                    Latviešu
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+            </MenuTrigger>
+            <MenuPopover>
+                <MenuList>
+                    <MenuItem onClick={() => toggleLanguage('en')}>
+                        English
+                    </MenuItem>
+                    <MenuItem onClick={() => toggleLanguage('lv')}>
+                        Latviešu
+                    </MenuItem>
+                </MenuList>
+            </MenuPopover>
+        </Menu>
     );
 }

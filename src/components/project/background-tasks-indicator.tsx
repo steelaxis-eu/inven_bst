@@ -2,11 +2,24 @@
 
 import { useEffect, useState } from 'react'
 import { getProjectActiveJobs } from '@/app/actions/optimization'
-import { Loader2 } from 'lucide-react'
+import { Spinner, Text, makeStyles, tokens, shorthands } from '@fluentui/react-components'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
+const useStyles = makeStyles({
+    root: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '4px 12px',
+        backgroundColor: tokens.colorBrandBackground2,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        border: `1px solid ${tokens.colorBrandStroke2}`,
+    }
+})
+
 export function BackgroundTasksIndicator({ projectId }: { projectId: string }) {
+    const styles = useStyles()
     const [jobs, setJobs] = useState<any[]>([])
     const [prevCount, setPrevCount] = useState(0)
     const router = useRouter()
@@ -45,11 +58,11 @@ export function BackgroundTasksIndicator({ projectId }: { projectId: string }) {
     if (jobs.length === 0) return null
 
     return (
-        <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
-            <Loader2 className="h-3 w-3 animate-spin text-primary" />
-            <span className="text-xs font-medium text-primary">
+        <div className={styles.root}>
+            <Spinner size="extra-tiny" />
+            <Text size={200} weight="medium" style={{ color: tokens.colorBrandForeground2 }}>
                 {jobs.length} Task{jobs.length > 1 ? 's' : ''} Running...
-            </span>
+            </Text>
         </div>
     )
 }

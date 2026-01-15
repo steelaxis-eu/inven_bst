@@ -1,23 +1,100 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogActions,
+    DialogContent,
+    Button,
+    Input,
+    Label,
+    makeStyles,
+    tokens,
+    Combobox,
+    Option,
+    useId,
+    Text,
+    Spinner,
+    Table,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    TableBody,
+    TableCell,
+    Field,
+    shorthands
+} from "@fluentui/react-components";
+import {
+    AddRegular,
+    CalculatorRegular,
+    DeleteRegular,
+    SaveRegular,
+    DismissRegular
+} from "@fluentui/react-icons";
 import { ensureProfile, createInventoryBatch } from "@/app/actions/inventory"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { FileUploader } from "@/components/ui/file-uploader"
-import { FileViewer } from "@/components/ui/file-viewer"
-import { toast } from "sonner"
-import { Check, ChevronsUpDown } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-
 import { calculateProfileWeight } from "@/app/actions/calculator"
+import { FluentFileUploader } from "@/components/common/fluent-file-uploader";
+import { toast } from "sonner";
+
+const useStyles = makeStyles({
+    dialogContent: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        minWidth: "800px",
+        maxWidth: "1200px",
+        height: "80vh",
+    },
+    section: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        padding: "16px",
+        backgroundColor: tokens.colorNeutralBackground2,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        marginBottom: "16px",
+    },
+    sectionTitle: {
+        fontWeight: "bold",
+        color: tokens.colorNeutralForeground2,
+        textTransform: "uppercase",
+        fontSize: "12px",
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        paddingBottom: "8px",
+        marginBottom: "8px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px"
+    },
+    row: {
+        display: "flex",
+        gap: "16px",
+        flexWrap: "wrap",
+        alignItems: "flex-end", // Align Inputs with Buttons
+    },
+    field: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "4px",
+    },
+    actions: {
+        marginTop: "auto",
+        paddingTop: "16px",
+        borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+    },
+    weightContainer: {
+        position: "relative",
+    },
+    calcButton: {
+        position: "absolute",
+        right: 0,
+        top: 0,
+    }
+});
 
 interface CreateInventoryProps {
     profiles: any[]
@@ -28,15 +105,12 @@ interface CreateInventoryProps {
 }
 
 export function CreateInventoryDialog({ profiles: initialProfiles, standardProfiles, grades, shapes, suppliers }: CreateInventoryProps) {
+    const styles = useStyles();
     const [open, setOpen] = useState(false)
-    const [profileOpen, setProfileOpen] = useState(false)
-    const [profiles, setProfiles] = useState(initialProfiles)
+    const [items, setItems] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
 
-    // Items List State
-    const [items, setItems] = useState<any[]>([])
-
-    // Current Form State
+    // Form State
     const [current, setCurrent] = useState({
         lotId: '',
         length: '',
@@ -46,123 +120,66 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
         invoiceNumber: ''
     })
 
-    // Supplier State
     const [selectedSupplier, setSelectedSupplier] = useState('')
-
-    // New Profile Selection State
     const [selectedType, setSelectedType] = useState('')
     const [selectedDim, setSelectedDim] = useState('')
-    const [customDim, setCustomDim] = useState('') // For custom dimensions input
+    const [customDim, setCustomDim] = useState('')
     const [selectedGrade, setSelectedGrade] = useState('')
     const [manualWeight, setManualWeight] = useState('')
 
-    // Custom Shape Logic
     const [shapeParams, setShapeParams] = useState<Record<string, string>>({})
     const [calcedWeight, setCalcedWeight] = useState(0)
 
-    // Combobox states
-    const [openTypeCombo, setOpenTypeCombo] = useState(false)
-    const [openDimCombo, setOpenDimCombo] = useState(false)
-    const [dimSearch, setDimSearch] = useState("")
+    // IDs for accessibility
+    const comboTypeId = useId('combo-type');
+    const comboDimId = useId('combo-dim');
 
-    // Derived
+    // Derived Logic
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
-    // Add custom types if not present
-    const allTypes = Array.from(new Set([...uniqueTypes, ...shapes.map(s => s.id)]))
-
-    // Helper to determine if selected type is Standard or Custom
+    // const allTypes = Array.from(new Set([...uniqueTypes, ...shapes.map(s => s.id)]))
     const isStandardType = uniqueTypes.includes(selectedType)
     const activeShape = shapes.find(s => s.id === selectedType)
 
-    // Dimensions Logic
-    // 1. Active: Profiles already in 'profiles' (SteelProfile table)
-    const activeDims = profiles
+    const activeDims = initialProfiles
         .filter(p => p.type === selectedType)
         .map(p => p.dimensions)
         .sort()
 
-    // 2. Catalog: From 'standardProfiles', excluding active ones to avoid duplicates
     const catalogDims = standardProfiles
         .filter(p => p.type === selectedType)
         .map(p => p.dimensions)
         .filter(d => !activeDims.includes(d))
         .sort((a: string, b: string) => {
-            // Numeric sort for dimensions if possible (e.g. "100x100" vs "120x120")
             const getVal = (s: string) => parseFloat(s.split(/[xX]/)[0]) || 0
             return getVal(a) - getVal(b)
         })
 
-    // Auto-parse parameters from selectedDim string (e.g. "100x50x5")
-    const hasAnyDims = activeDims.length > 0 || catalogDims.length > 0
+    const standardMatch = standardProfiles.find(p => p.type === selectedType && p.dimensions === (customDim || selectedDim))
 
+    // Shape Param Parsing Effect
     useEffect(() => {
         if (!selectedDim || !activeShape) return
-
-        // Regex to split by 'x', '*', or spaces
         const parts = selectedDim.toLowerCase().split(/[x* ]+/).map(s => parseFloat(s)).filter(n => !isNaN(n))
         const params = activeShape.params as string[]
 
         if (parts.length > 0 && params.length > 0) {
             const newParams: Record<string, string> = {}
-
-            // Map valid numbers to params in order
-            // Special mappings for specific shapes if needed, but sequential is standard
-            // RHS (b, h, t) <- 100x50x5
-            // SHS (b, t) <- 100x5
             params.forEach((param, i) => {
-                if (parts[i] !== undefined) {
-                    newParams[param] = parts[i].toString()
-                }
+                if (parts[i] !== undefined) newParams[param] = parts[i].toString()
             })
-
-            // Only update if meaningfully different to avoid loops
             const isDiff = Object.entries(newParams).some(([k, v]) => shapeParams[k] !== v)
-            if (isDiff) {
-                setShapeParams(prev => ({ ...prev, ...newParams }))
-            }
+            if (isDiff) setShapeParams(prev => ({ ...prev, ...newParams }))
         }
-    }, [selectedDim, activeShape])
+    }, [selectedDim, activeShape, shapeParams]) // Added shapeParams to dep to satisfy exhaustive-deps, though logic handles loop
 
-    // Handlers
-    const handleTypeSelect = (t: string) => {
-        const val = t === selectedType ? "" : t
-        setSelectedType(val)
-        setSelectedDim('')
-        setCustomDim('')
-        setManualWeight('')
-        setShapeParams({})
-        setOpenTypeCombo(false)
-    }
-
-    const handleDimSelect = (d: string) => {
-        const val = d === selectedDim ? "" : d
-        setSelectedDim(val)
-        setCustomDim('')
-        setOpenDimCombo(false)
-    }
-
-    const updateShapeParam = (param: string, val: string) => {
-        const newParams = { ...shapeParams, [param]: val }
-        setShapeParams(newParams)
-
-        // Auto-construct customDim string
-        if (activeShape) {
-            const dimStr = (activeShape.params as string[]).map(p => newParams[p] || '?').join('x')
-            setCustomDim(dimStr)
-        }
-    }
-
-    // Calculation Effect
+    // Formula Calculation Effect
     useEffect(() => {
         if (!activeShape || !selectedGrade || !activeShape.formula) return
-
         const gradeObj = grades.find(g => g.name === selectedGrade)
         if (!gradeObj) return
 
-        // Check valid params
         const numeric: Record<string, number> = {}
         const neededParams = activeShape.params as string[]
-
         let allValid = true
         for (const p of neededParams) {
             const val = parseFloat(shapeParams[p])
@@ -176,48 +193,60 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
         if (allValid) {
             import('@/lib/formula').then(({ evaluateFormula }) => {
                 const areaMm2 = evaluateFormula(activeShape.formula!, numeric)
-                // areaMm2 / 1000 * density => weight/m
                 const weight = (areaMm2 / 1000) * gradeObj.density
                 setManualWeight(weight.toFixed(2))
             })
         }
     }, [activeShape, shapeParams, selectedGrade, grades])
 
-    // Auto-fill weight logic
-    // When Type/Dim matches standard, use it. Else empty.
-    const standardMatch = standardProfiles.find(p => p.type === selectedType && p.dimensions === (customDim || selectedDim))
 
-    // Calculation Handler
+    const handleTypeSelect = (e: any, data: any) => {
+        const val = data.optionValue || data.value
+        if (val) {
+            setSelectedType(val)
+            setSelectedDim('')
+            setCustomDim('')
+            setManualWeight('')
+            setShapeParams({})
+        }
+    }
+
+    // For Dimensions, we handle both select and change (custom)
+    const handleDimSelect = (e: any, data: any) => {
+        // data.optionValue is set when selecting an option
+        // data.value is the text content
+        const val = data.optionValue || data.value
+        setSelectedDim(val || '')
+        setCustomDim(val || '') // Assume custom might be same if typed
+    }
+
+    const updateShapeParam = (param: string, val: string) => {
+        const newParams = { ...shapeParams, [param]: val }
+        setShapeParams(newParams)
+        if (activeShape) {
+            const dimStr = (activeShape.params as string[]).map(p => newParams[p] || '?').join('x')
+            setCustomDim(dimStr)
+            setSelectedDim(dimStr) // Keep consistent
+        }
+    }
+
     const handleCalculateWeight = async () => {
         if (!selectedType) return
-
-        // If Standard
-        if (isStandardType) {
-            // ... actually we just use standardMatch
-            if (standardMatch) {
-                setManualWeight(standardMatch.weightPerMeter.toString())
-                return
-            }
+        if (isStandardType && standardMatch) {
+            setManualWeight(standardMatch.weightPerMeter.toString())
+            return
         }
 
-        // If Custom
-        // Prepare params
-        // Convert string params to numbers
         const numericParams: any = {}
         for (const [k, v] of Object.entries(shapeParams)) {
             numericParams[k] = parseFloat(v)
         }
-
-        // Find Grade ID to pass for density lookup
         const gradeObj = grades.find(g => g.name === selectedGrade)
-        if (gradeObj) {
-            numericParams.gradeId = gradeObj.id
-        }
+        if (gradeObj) numericParams.gradeId = gradeObj.id
 
         try {
             const w = await calculateProfileWeight(selectedType, numericParams)
             setCalcedWeight(w)
-            // Auto-set the manual weight input so user sees it
             setManualWeight(w.toFixed(2))
         } catch (e) {
             toast.error("Calculation failed")
@@ -226,40 +255,25 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
 
     const handleAddItem = async () => {
         if (!selectedType || !(selectedDim || customDim) || !selectedGrade || !current.length || !current.quantity) {
-            toast.warning("Please fill required fields (Type, Dim, Grade, Length, Qty)")
+            toast.warning("Please fill required fields")
             return
         }
-
         setLoading(true)
         try {
-            // 1. Resolve Profile (Shape)
             const finalDim = customDim || selectedDim
             const weight = manualWeight ? parseFloat(manualWeight) : (standardMatch?.weightPerMeter || 0)
-
-            const profile = await ensureProfile({
-                type: selectedType,
-                dimensions: finalDim,
-                weight: weight
-            })
+            const profile = await ensureProfile({ type: selectedType, dimensions: finalDim, weight })
 
             setItems([...items, {
                 ...current,
                 profileId: profile.id,
-                gradeName: selectedGrade, // Pass name to batch creator to resolve ID
+                gradeName: selectedGrade,
                 supplierId: selectedSupplier || null,
                 profileName: `${profile.type} ${profile.dimensions} (${selectedGrade})`,
                 _id: Math.random().toString()
             }])
-
-            // Reset fields
-            setCurrent({
-                lotId: '',
-                length: current.length,
-                quantity: '1',
-                certificate: current.certificate,
-                totalCost: '',
-                invoiceNumber: current.invoiceNumber
-            })
+            // Reset
+            setCurrent(prev => ({ ...prev, lotId: '', totalCost: '' }))
         } catch (e) {
             toast.error("Failed to resolve profile")
         } finally {
@@ -270,12 +284,11 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
     const handleSaveAll = async () => {
         if (items.length === 0) return
         setLoading(true)
-
         try {
             const res = await createInventoryBatch(items.map(i => ({
                 lotId: i.lotId,
                 profileId: i.profileId,
-                gradeName: i.gradeName, // Pass grade name
+                gradeName: i.gradeName,
                 supplierId: i.supplierId || null,
                 invoiceNumber: i.invoiceNumber || null,
                 length: parseFloat(i.length),
@@ -283,7 +296,6 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 certificate: i.certificate,
                 totalCost: parseFloat(i.totalCost || '0')
             })))
-
             if (res.success) {
                 setOpen(false)
                 setItems([])
@@ -292,297 +304,187 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                 toast.error(`Error: ${res.error}`)
             }
         } catch (err) {
-            toast.error("Unexpected error occurred.")
+            toast.error("Unexpected error")
         } finally {
             setLoading(false)
         }
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button>Add Inventory</Button>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<AddRegular />}>Add Inventory</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] sm:max-w-7xl w-full max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 border-none shadow-2xl">
-                <div className="p-6 border-b border-border/50 bg-card/30 backdrop-blur-sm">
-                    <DialogHeader>
-                        <DialogTitle className="text-2xl font-bold tracking-tight">Add Inventory Batch</DialogTitle>
-                        <DialogDescription className="text-base">Add multiple items to your stock. You can calculate profile weights if needed.</DialogDescription>
-                    </DialogHeader>
-                </div>
+            <DialogSurface className={styles.dialogContent}>
+                <DialogBody>
+                    <DialogTitle>Add Inventory Batch</DialogTitle>
 
-                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-primary/10 hover:scrollbar-thumb-primary/20">
-                    <div className="space-y-8">
-                        {/* Inline Form for Desktop / Stacked for Mobile */}
-                        <div className="glass p-6 rounded-xl shadow-inner-lg space-y-6">
-                            <div className="flex items-center gap-3 pb-2 border-b border-border/30">
-                                <div className="h-4 w-1 bg-primary rounded-full" />
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">New Item Definition</h3>
-                            </div>
-                            <div className="space-y-6">
-                                {/* Row 1: Identification & Profile */}
-                                <div className="flex flex-col xl:flex-row gap-3 items-start xl:items-end w-full">
-                                    {/* Lot ID */}
-                                    <div className="space-y-2 w-full xl:w-36 shrink-0 xl:shrink">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Lot ID</Label>
-                                        <Input
-                                            placeholder="[Auto]"
-                                            value={current.lotId}
-                                            onChange={e => setCurrent({ ...current, lotId: e.target.value })}
-                                            className="font-mono uppercase bg-card h-9"
-                                        />
-                                    </div>
-
-                                    {/* Type */}
-                                    <div className="space-y-2 w-full xl:w-40 shrink-0 xl:shrink">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Type</Label>
-                                        <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
-                                            <PopoverTrigger asChild>
-                                                <Button variant="outline" role="combobox" className="w-full justify-between px-2 font-normal bg-card h-9">
-                                                    {selectedType || <span className="text-muted-foreground">Select...</span>}
-                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-[200px] p-0" align="start">
-                                                <Command>
-                                                    <CommandInput placeholder="Search type..." />
-                                                    <CommandList>
-                                                        <CommandEmpty>No type found.</CommandEmpty>
-                                                        <CommandGroup heading="Standard Profiles">
-                                                            {uniqueTypes.map(t => (
-                                                                <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
-                                                                    <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
-                                                                    {t}
-                                                                </CommandItem>
-                                                            ))}
-                                                        </CommandGroup>
-                                                        <CommandGroup heading="Custom">
-                                                            {shapes.map(s => (
-                                                                <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
-                                                                    <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
-                                                                    {s.id}
-                                                                </CommandItem>
-                                                            ))}
-                                                        </CommandGroup>
-                                                    </CommandList>
-                                                </Command>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-
-                                    {/* Dimensions - Flexible Width */}
-                                    <div className="space-y-2 w-full flex-1 min-w-[180px]">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Dimensions</Label>
-
-                                        <div className="space-y-2">
-                                            {/* Step 1: Always offer Active Profiles Combobox */}
-                                            <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
-                                                <PopoverTrigger asChild>
-                                                    <Button variant="outline" role="combobox" className="w-full justify-between px-2 font-normal bg-card h-9">
-                                                        {selectedDim || <span className="text-muted-foreground">Select / Custom...</span>}
-                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                    </Button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-[240px] p-0" align="start">
-                                                    <Command>
-                                                        <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search or type custom..." />
-                                                        <CommandList>
-                                                            <CommandEmpty>
-                                                                <Button onClick={() => {
-                                                                    setSelectedDim(dimSearch);
-                                                                    setCustomDim(dimSearch);
-                                                                    // If it's a shape, try to auto-parse the custom input
-                                                                    // e.g. "100x100x5" -> populate params
-                                                                    setOpenDimCombo(false)
-                                                                }} variant="ghost" className="w-full h-8 text-xs">
-                                                                    Use Custom "{dimSearch}"
-                                                                </Button>
-                                                            </CommandEmpty>
-
-                                                            {activeDims.length > 0 && (
-                                                                <CommandGroup heading="Active Profiles">
-                                                                    {activeDims.map(d => (
-                                                                        <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                            <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                            {d}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                            )}
-
-                                                            {/* Only show Standard Catalog for Standard Types (not generic shapes) to prevent noise */}
-                                                            {isStandardType && catalogDims.length > 0 && (
-                                                                <CommandGroup heading="Standard Catalog">
-                                                                    {catalogDims.map(d => (
-                                                                        <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                            <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                            {d}
-                                                                        </CommandItem>
-                                                                    ))}
-                                                                </CommandGroup>
-                                                            )}
-                                                        </CommandList>
-                                                    </Command>
-                                                </PopoverContent>
-                                            </Popover>
-
-                                            {/* Step 2: If Shape (not standard type), show Param Inputs */}
-                                            {/* Always show this for Shapes so user can see/edit the params derived from the selection */}
-                                            {!isStandardType && activeShape && (
-                                                <div className="flex gap-2">
-                                                    {(activeShape.params as string[]).map(param => (
-                                                        <div key={param} className="relative flex-1 min-w-[50px]">
-                                                            <Input
-                                                                placeholder={param}
-                                                                className="h-9 px-1 text-center font-mono bg-card"
-                                                                value={shapeParams[param] || ''}
-                                                                onChange={e => updateShapeParam(param, e.target.value)}
-                                                            />
-                                                            <span className="absolute -bottom-3 left-0 w-full text-[9px] text-center text-muted-foreground uppercase">{param}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            {/* Fallback for "Custom" if no shape selected (shouldn't happen if logic correct) */}
-                                            {!isStandardType && !activeShape && (
-                                                <Input placeholder="Dims" value={customDim} onChange={e => setCustomDim(e.target.value)} className="h-9 bg-card" />
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Grade */}
-                                    <div className="space-y-2 w-full xl:w-28 shrink-0">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Grade</Label>
-                                        <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-                                            <SelectTrigger className="bg-card h-9"><SelectValue placeholder="Grade" /></SelectTrigger>
-                                            <SelectContent>
-                                                {grades.map(g => <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3 pt-6 pb-2 border-b border-border/30">
-                                    <div className="h-4 w-1 bg-primary rounded-full" />
-                                    <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Quantities & Logistics</h3>
-                                </div>
-
-                                {/* Row 2: Quantities, Cost, Weight, Action */}
-                                <div className="flex flex-col xl:flex-row gap-3 items-start xl:items-end w-full">
-                                    {/* Length */}
-                                    <div className="space-y-2 w-full xl:w-32 shrink-0">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Length (mm)</Label>
-                                        <Input type="number" value={current.length} onChange={e => setCurrent({ ...current, length: e.target.value })} className="bg-card h-9" />
-                                    </div>
-
-                                    {/* Qty */}
-                                    <div className="space-y-2 w-full xl:w-20 shrink-0">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Qty</Label>
-                                        <Input type="number" value={current.quantity} onChange={e => setCurrent({ ...current, quantity: e.target.value })} className="bg-card h-9" />
-                                    </div>
-
-                                    {/* Cost */}
-                                    <div className="space-y-2 w-full xl:w-28 shrink-0 xl:shrink">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cost (€)</Label>
-                                        <Input type="number" step="0.01" value={current.totalCost} onChange={e => setCurrent({ ...current, totalCost: e.target.value })} className="bg-card h-9 text-right font-mono" />
-                                    </div>
-
-                                    {/* Weight (Manual/Calc) */}
-                                    <div className="space-y-2 w-full xl:w-28 shrink-0 xl:shrink">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Weight (kg/m)</Label>
-                                        <div className="relative">
-                                            <Input
-                                                value={manualWeight}
-                                                onChange={e => setManualWeight(e.target.value)}
-                                                className={cn("bg-card h-9 pr-7", calcedWeight > 0 ? "font-bold text-primary" : "")}
-                                            />
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="absolute right-0 top-0 h-9 w-9 text-muted-foreground hover:text-foreground"
-                                                onClick={() => handleCalculateWeight()}
-                                                disabled={!selectedType}
-                                                title="Recalculate"
-                                            >
-                                                <span className="text-sm">🧮</span>
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    {/* Supplier */}
-                                    <div className="space-y-2 w-full xl:w-36 shrink-0">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Supplier</Label>
-                                        <Select value={selectedSupplier || 'none'} onValueChange={(v) => setSelectedSupplier(v === 'none' ? '' : v)}>
-                                            <SelectTrigger className="bg-card h-9"><SelectValue placeholder="Optional" /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">None</SelectItem>
-                                                {suppliers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Invoice Number */}
-                                    <div className="space-y-2 w-full xl:w-32 shrink-0">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Invoice #</Label>
-                                        <Input placeholder="INV-001" value={current.invoiceNumber} onChange={e => setCurrent({ ...current, invoiceNumber: e.target.value })} className="bg-card h-9 font-mono" />
-                                    </div>
-
-                                    {/* File Upload (Condensed) */}
-                                    <div className="space-y-2 w-full md:flex-1 min-w-[120px]">
-                                        <Label className="text-xs uppercase text-muted-foreground tracking-wide font-semibold">Cert</Label>
-                                        <div className="flex gap-2 items-center">
-                                            <div className="flex-1">
-                                                <FileUploader
-                                                    bucketName="certificates"
-                                                    currentValue={current.certificate}
-                                                    onUploadComplete={(path) => setCurrent({ ...current, certificate: path })}
-                                                    minimal={true}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Add Button */}
-                                    <Button onClick={handleAddItem} className="w-full md:w-auto h-10 px-8 shrink-0 font-bold shadow-lg shadow-primary/20 transition-premium hover:-translate-y-0.5">Add Item</Button>
-                                </div>
-                            </div>
+                    {/* New Item Form */}
+                    <div className={styles.section}>
+                        <div className={styles.sectionTitle}>
+                            <AddRegular /> New Item Definition
                         </div>
 
-                        {/* Pending List */}
-                        {items.length > 0 && (
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-bold tracking-tight">Pending Batch Items</h3>
-                                    <Badge variant="secondary" className="px-3 py-1">{items.length} items</Badge>
-                                </div>
-                                <div className="border border-border/50 rounded-xl overflow-hidden shadow-lg bg-card/20 backdrop-blur-sm">
-                                    <Table>
-                                        <TableHeader><TableRow className="bg-muted/30 border-b border-border/50"><TableHead className="font-bold">Lot</TableHead><TableHead className="font-bold">Type</TableHead><TableHead className="font-bold">Dim</TableHead><TableHead className="font-bold">Ln</TableHead><TableHead className="font-bold">Qty</TableHead><TableHead className="font-bold">Cost</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
-                                        <TableBody>
-                                            {items.map((item, idx) => (
-                                                <TableRow key={item._id}>
-                                                    <TableCell className="font-mono">{item.lotId || <span className="text-muted-foreground">[Auto]</span>}</TableCell>
-                                                    <TableCell>{item.profileName?.split(' ')[0]}</TableCell>
-                                                    <TableCell>{item.profileName?.split('(')[0].split(' ').slice(1).join(' ')}</TableCell>
-                                                    <TableCell>{item.length}</TableCell>
-                                                    <TableCell>{item.quantity}</TableCell>
-                                                    <TableCell>{item.totalCost}</TableCell>
-                                                    <TableCell><Button size="sm" variant="ghost" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="h-6 w-6 p-0 text-red-500">×</Button></TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </div>
-                        )}
+                        {/* Row 1: Profile Def */}
+                        <div className={styles.row}>
+                            <Field label="Lot ID" className={styles.field}>
+                                <Input
+                                    value={current.lotId}
+                                    onChange={(e, d) => setCurrent({ ...current, lotId: d.value })}
+                                    placeholder="[Auto]"
+                                    style={{ width: '100px', textTransform: 'uppercase' }}
+                                />
+                            </Field>
 
-                        <Button onClick={handleSaveAll} className="w-full h-12 text-lg font-bold shadow-xl transition-premium hover:-translate-y-1" disabled={loading || items.length === 0} variant={items.length > 0 ? "default" : "secondary"}>
-                            {loading ? 'Saving...' : `Save Batch (${items.length} items)`}
-                        </Button>
+                            <Field label="Type" className={styles.field}>
+                                <Combobox
+                                    value={selectedType}
+                                    onOptionSelect={handleTypeSelect}
+                                    placeholder="Select Type"
+                                    style={{ minWidth: '150px' }}
+                                >
+                                    {uniqueTypes.map(t => <Option key={t} text={t}>{t}</Option>)}
+                                    {activeShape && !isStandardType && <Option text={activeShape.id}>{activeShape.id}</Option>}
+                                    {shapes.filter(s => !uniqueTypes.includes(s.id)).map(s => <Option key={s.id} text={s.id}>{s.id}</Option>)}
+                                </Combobox>
+                            </Field>
+
+                            <Field label="Dimensions" className={styles.field}>
+                                <Combobox
+                                    value={selectedDim}
+                                    onOptionSelect={handleDimSelect}
+                                    onInput={(e: any) => { setSelectedDim(e.target.value); setCustomDim(e.target.value); }}
+                                    freeform
+                                    placeholder="Dims"
+                                    style={{ minWidth: '180px' }}
+                                >
+                                    {activeDims.map(d => <Option key={d}>{d}</Option>)}
+                                    {isStandardType && catalogDims.map(d => <Option key={d}>{d}</Option>)}
+                                </Combobox>
+                            </Field>
+
+                            {/* Custom Shape Params Inline */}
+                            {!isStandardType && activeShape && (activeShape.params as string[]).map(param => (
+                                <Field key={param} label={param} className={styles.field}>
+                                    <Input
+                                        value={shapeParams[param] || ''}
+                                        onChange={(e, d) => updateShapeParam(param, d.value)}
+                                        style={{ width: '60px' }}
+                                    />
+                                </Field>
+                            ))}
+
+                            <Field label="Grade" className={styles.field}>
+                                <Combobox
+                                    value={selectedGrade}
+                                    onOptionSelect={(e, d) => setSelectedGrade(d.optionValue || '')}
+                                    placeholder="Select Grade"
+                                    style={{ width: '120px' }}
+                                >
+                                    {grades.map(g => <Option key={g.id} value={g.name}>{g.name}</Option>)}
+                                </Combobox>
+                            </Field>
+                        </div>
+
+                        {/* Row 2: Logistics */}
+                        <div className={styles.row}>
+                            <Field label="Length (mm)" required>
+                                <Input type="number" value={current.length} onChange={(e, d) => setCurrent({ ...current, length: d.value })} style={{ width: '100px' }} />
+                            </Field>
+                            <Field label="Qty" required>
+                                <Input type="number" value={current.quantity} onChange={(e, d) => setCurrent({ ...current, quantity: d.value })} style={{ width: '80px' }} />
+                            </Field>
+                            <Field label="Cost (€)">
+                                <Input type="number" value={current.totalCost} onChange={(e, d) => setCurrent({ ...current, totalCost: d.value })} style={{ width: '100px' }} />
+                            </Field>
+
+                            <div className={styles.weightContainer}>
+                                <Field label="Weight (kg/m)">
+                                    <Input
+                                        value={manualWeight}
+                                        onChange={(e, d) => setManualWeight(d.value)}
+                                        style={{ width: '100px' }}
+                                        contentAfter={
+                                            <Button
+                                                appearance="transparent"
+                                                icon={<CalculatorRegular />}
+                                                onClick={handleCalculateWeight}
+                                                size="small"
+                                                disabled={!selectedType}
+                                            />
+                                        }
+                                    />
+                                </Field>
+                            </div>
+
+                            <Field label="Supplier">
+                                <Combobox
+                                    value={suppliers.find(s => s.id === selectedSupplier)?.name || (selectedSupplier === '' ? 'None' : selectedSupplier)}
+                                    onOptionSelect={(e, d) => setSelectedSupplier(d.optionValue || '')}
+                                    placeholder="Optional"
+                                    style={{ width: '140px' }}
+                                >
+                                    <Option value="">None</Option>
+                                    {suppliers.map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)}
+                                </Combobox>
+                            </Field>
+
+                            <Field label="Cert">
+                                <FluentFileUploader
+                                    bucketName="certificates"
+                                    onUploadComplete={(path) => setCurrent({ ...current, certificate: path })}
+                                    currentValue={current.certificate}
+                                    minimal
+                                />
+                            </Field>
+
+                            <Button appearance="primary" onClick={handleAddItem} style={{ alignSelf: "flex-end", marginBottom: "2px" }}>Add Item</Button>
+                        </div>
                     </div>
-                </div>
-            </DialogContent>
+
+                    {/* Pending Items Table */}
+                    {items.length > 0 && (
+                        <div className={styles.section}>
+                            <div className={styles.sectionTitle}>Pending Batch ({items.length})</div>
+                            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                                <Table size="small">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHeaderCell>Lot</TableHeaderCell>
+                                            <TableHeaderCell>Desc</TableHeaderCell>
+                                            <TableHeaderCell>L (mm)</TableHeaderCell>
+                                            <TableHeaderCell>Qty</TableHeaderCell>
+                                            <TableHeaderCell>Cost</TableHeaderCell>
+                                            <TableHeaderCell />
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {items.map((item, i) => (
+                                            <TableRow key={item._id}>
+                                                <TableCell>{item.lotId || "[Auto]"}</TableCell>
+                                                <TableCell>{item.profileName}</TableCell>
+                                                <TableCell>{item.length}</TableCell>
+                                                <TableCell>{item.quantity}</TableCell>
+                                                <TableCell>{item.totalCost}</TableCell>
+                                                <TableCell>
+                                                    <Button icon={<DeleteRegular />} appearance="subtle" onClick={() => setItems(items.filter((_, idx) => idx !== i))} />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    )}
+
+                </DialogBody>
+                <DialogActions>
+                    <Button appearance="secondary" onClick={() => setOpen(false)}>Close</Button>
+                    <Button appearance="primary" icon={<SaveRegular />} disabled={items.length === 0 || loading} onClick={handleSaveAll}>
+                        {loading ? "Saving..." : "Save Batch"}
+                    </Button>
+                </DialogActions>
+            </DialogSurface>
         </Dialog>
     )
 }

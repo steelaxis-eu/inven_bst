@@ -1,40 +1,73 @@
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+'use client'
+
+import { Skeleton, SkeletonItem, Card, CardHeader, makeStyles } from "@fluentui/react-components"
+
+const useStyles = makeStyles({
+    root: {
+        padding: '40px',
+        maxWidth: '1000px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '32px'
+    },
+    header: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        marginBottom: '24px'
+    },
+    tabs: {
+        display: 'flex',
+        gap: '8px',
+        marginBottom: '24px'
+    },
+    cardContent: {
+        padding: '0 24px 24px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px'
+    },
+    row: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '16px'
+    }
+})
 
 export default function SettingsLoading() {
+    const styles = useStyles()
+
     return (
-        <div className="container py-10">
-            <div className="flex items-center gap-4 mb-8">
-                <Skeleton className="h-10 w-20" />
-                <Skeleton className="h-9 w-32" />
+        <Skeleton className={styles.root}>
+            <div className={styles.header}>
+                <SkeletonItem style={{ height: '40px', width: '80px' }} />
+                <SkeletonItem style={{ height: '36px', width: '120px' }} />
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6">
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-32" />
+            <div className={styles.tabs}>
+                <SkeletonItem style={{ height: '40px', width: '100px' }} />
+                <SkeletonItem style={{ height: '40px', width: '100px' }} />
+                <SkeletonItem style={{ height: '40px', width: '120px' }} />
             </div>
 
             <Card>
-                <CardHeader>
-                    <Skeleton className="h-6 w-48" />
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-4 gap-4">
+                <CardHeader header={<SkeletonItem style={{ height: '24px', width: '200px' }} />} />
+                <div className={styles.cardContent}>
+                    <div className={styles.row}>
                         {Array.from({ length: 4 }).map((_, i) => (
-                            <Skeleton key={i} className="h-5 w-full" />
+                            <SkeletonItem key={i} style={{ height: '20px', width: '100%' }} />
                         ))}
                     </div>
                     {Array.from({ length: 5 }).map((_, rowIdx) => (
-                        <div key={rowIdx} className="grid grid-cols-4 gap-4">
+                        <div key={rowIdx} className={styles.row}>
                             {Array.from({ length: 4 }).map((_, colIdx) => (
-                                <Skeleton key={colIdx} className="h-8 w-full" />
+                                <SkeletonItem key={colIdx} style={{ height: '32px', width: '100%' }} />
                             ))}
                         </div>
                     ))}
-                </CardContent>
+                </div>
             </Card>
-        </div>
+        </Skeleton>
     )
 }

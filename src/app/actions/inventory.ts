@@ -43,6 +43,12 @@ export async function getGrades() {
     })
 }
 
+export async function getSuppliers() {
+    return await prisma.supplier.findMany({
+        orderBy: { name: 'asc' }
+    })
+}
+
 export async function getProfiles() {
     return await prisma.steelProfile.findMany({
         orderBy: { type: 'asc' }
@@ -226,12 +232,6 @@ export async function createInventoryBatch(items: {
                 if (!gradeId) throw new Error(`Grade not found for item ${data.lotId || 'Unknown'}`)
 
                 // Auto-generate Lot ID for EACH item if missing
-                // Note: we can't easily call generateNextId INSIDE a transaction loop safely if it modifies global settings separately
-                // But generating it sequentially is required.
-                // Assuming generateNextId updates the DB immediately, calling it in loop is okay but might be slow or lock content heavily.
-                // However, generateNextId accesses prisma.globalSettings.update... which is outside THIS transaction if we used `prisma` client.
-                // We should ideally pass `tx` to generateNextId or handle concurrency.
-                // For MVP: We will await it.
                 const lotId = data.lotId || await generateNextId('LOT')
 
                 await tx.inventory.create({

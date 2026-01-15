@@ -1,16 +1,35 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+    Dialog,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Label,
+    Dropdown,
+    Option,
+    Table,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    TableBody,
+    TableCell,
+    Badge,
+    Spinner,
+    makeStyles,
+    tokens,
+    Text
+} from "@fluentui/react-components"
+import {
+    WrenchRegular
+} from "@fluentui/react-icons"
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, Wrench } from 'lucide-react'
 import { createPartPrepWorkOrder } from '@/app/actions/workorders'
 
 interface SelectedPiece {
@@ -27,12 +46,41 @@ interface CreatePartWODialogProps {
     onOpenChange: (open: boolean) => void
 }
 
+const useStyles = makeStyles({
+    content: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+    },
+    grid: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+    },
+    field: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+    },
+    tableContainer: {
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+        borderRadius: tokens.borderRadiusMedium,
+        overflow: 'hidden',
+    },
+    badgeContainer: {
+        display: 'flex',
+        gap: '4px',
+        flexWrap: 'wrap',
+    }
+})
+
 export function CreatePartWODialog({
     projectId,
     selectedPieces,
     open,
     onOpenChange
 }: CreatePartWODialogProps) {
+    const styles = useStyles()
     const [loading, setLoading] = useState(false)
     const [title, setTitle] = useState('')
     const [woType, setWoType] = useState('CUTTING')
@@ -59,7 +107,6 @@ export function CreatePartWODialog({
                 return
             }
 
-            // Handles both simple creation and split/outsourced scenarios
             const woNum = (res as any).data?.mainWO?.workOrderNumber
                 || (res as any).data?.workOrderNumber
                 || (res as any).message
@@ -76,7 +123,6 @@ export function CreatePartWODialog({
         }
     }
 
-    // Group pieces by part
     const groupedPieces = selectedPieces.reduce((acc, piece) => {
         if (!acc[piece.partNumber]) {
             acc[piece.partNumber] = []
@@ -86,114 +132,117 @@ export function CreatePartWODialog({
     }, {} as Record<string, SelectedPiece[]>)
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <Wrench className="h-5 w-5" />
-                        Create Work Order for Parts
+        <Dialog open={open} onOpenChange={(e, data) => onOpenChange(data.open)}>
+            <DialogSurface>
+                <DialogBody>
+                    <DialogTitle>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <WrenchRegular />
+                            Create Work Order for Parts
+                        </div>
                     </DialogTitle>
-                    <DialogDescription>
-                        Create work order for {selectedPieces.length} selected pieces
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-6">
-                    {/* WO Details */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                            <Label className="text-xs uppercase text-muted-foreground">Title (optional)</Label>
-                            <Input
-                                value={title}
-                                onChange={e => setTitle(e.target.value)}
-                                placeholder="Auto-generated"
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label className="text-xs uppercase text-muted-foreground">Work Type</Label>
-                            <Select value={woType} onValueChange={setWoType}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="MATERIAL_PREP">Material Prep/Order</SelectItem>
-                                    <SelectItem value="CUTTING">Cutting</SelectItem>
-                                    <SelectItem value="MACHINING">Drilling/Machining</SelectItem>
-                                    <SelectItem value="FABRICATION">Fabrication</SelectItem>
-                                    <SelectItem value="WELDING">Welding</SelectItem>
-                                    <SelectItem value="COATING">Coating</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label className="text-xs uppercase text-muted-foreground">Priority</Label>
-                            <Select value={priority} onValueChange={setPriority}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="LOW">Low</SelectItem>
-                                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                                    <SelectItem value="HIGH">High</SelectItem>
-                                    <SelectItem value="URGENT">Urgent</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label className="text-xs uppercase text-muted-foreground">Scheduled Date</Label>
-                            <Input
-                                type="date"
-                                value={scheduledDate}
-                                onChange={e => setScheduledDate(e.target.value)}
-                            />
-                        </div>
+                    <div style={{ marginBottom: '12px' }}>
+                        <Text>Create work order for {selectedPieces.length} selected pieces</Text>
                     </div>
 
-                    {/* Selected Pieces Summary */}
-                    <div className="border rounded-lg overflow-hidden">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-muted/50">
-                                    <TableHead>Part #</TableHead>
-                                    <TableHead>Pieces</TableHead>
-                                    <TableHead className="text-center">Count</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {Object.entries(groupedPieces).map(([partNumber, pieces]) => (
-                                    <TableRow key={partNumber}>
-                                        <TableCell className="font-mono font-medium">{partNumber}</TableCell>
-                                        <TableCell>
-                                            <div className="flex gap-1 flex-wrap">
-                                                {pieces.map(p => (
-                                                    <Badge key={p.pieceId} variant="outline" className="text-xs">
-                                                        #{p.pieceNumber}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-center font-medium">{pieces.length}</TableCell>
+                    <DialogContent className={styles.content}>
+                        <div className={styles.grid}>
+                            <div className={styles.field}>
+                                <Label>Title (optional)</Label>
+                                <Input
+                                    value={title}
+                                    onChange={(e, d) => setTitle(d.value)}
+                                    placeholder="Auto-generated"
+                                />
+                            </div>
+                            <div className={styles.field}>
+                                <Label>Work Type</Label>
+                                <Dropdown
+                                    value={woType}
+                                    selectedOptions={[woType]}
+                                    onOptionSelect={(e, d) => setWoType(d.optionValue as string)}
+                                >
+                                    {[
+                                        { key: "MATERIAL_PREP", text: "Material Prep/Order" },
+                                        { key: "CUTTING", text: "Cutting" },
+                                        { key: "MACHINING", text: "Drilling/Machining" },
+                                        { key: "FABRICATION", text: "Fabrication" },
+                                        { key: "WELDING", text: "Welding" },
+                                        { key: "COATING", text: "Coating" }
+                                    ].map(opt => (
+                                        <Option key={opt.key} value={opt.key} text={opt.text}>
+                                            {opt.text}
+                                        </Option>
+                                    ))}
+                                </Dropdown>
+                            </div>
+                            <div className={styles.field}>
+                                <Label>Priority</Label>
+                                <Dropdown
+                                    value={priority}
+                                    selectedOptions={[priority]}
+                                    onOptionSelect={(e, d) => setPriority(d.optionValue as string)}
+                                >
+                                    {['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map(p => (
+                                        <Option key={p} value={p} text={p}>{p}</Option>
+                                    ))}
+                                </Dropdown>
+                            </div>
+                            <div className={styles.field}>
+                                <Label>Scheduled Date</Label>
+                                <Input
+                                    type="date"
+                                    value={scheduledDate}
+                                    onChange={(e, d) => setScheduledDate(d.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className={styles.tableContainer}>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHeaderCell>Part #</TableHeaderCell>
+                                        <TableHeaderCell>Pieces</TableHeaderCell>
+                                        <TableHeaderCell style={{ textAlign: 'center' }}>Count</TableHeaderCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {Object.entries(groupedPieces).map(([partNumber, pieces]) => (
+                                        <TableRow key={partNumber}>
+                                            <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>{partNumber}</TableCell>
+                                            <TableCell>
+                                                <div className={styles.badgeContainer}>
+                                                    {pieces.map(p => (
+                                                        <Badge key={p.pieceId} appearance="outline" size="small">
+                                                            #{p.pieceNumber}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell style={{ textAlign: 'center', fontWeight: 500 }}>
+                                                {pieces.length}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </DialogContent>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading || selectedPieces.length === 0}>
-                        {loading ? (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                Creating...
-                            </>
-                        ) : (
-                            <>Create Work Order</>
-                        )}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+                    <DialogActions>
+                        <Button appearance="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button
+                            appearance="primary"
+                            onClick={handleSubmit}
+                            disabled={loading || selectedPieces.length === 0}
+                            icon={loading ? <Spinner size="tiny" /> : undefined}
+                        >
+                            {loading ? "Creating..." : "Create Work Order"}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
         </Dialog>
     )
 }

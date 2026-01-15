@@ -1,454 +1,311 @@
 'use client'
 
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
-import { toast } from "sonner"
-import { CalendarIcon, Loader2, Scissors, Truck, Hammer, PaintBucket, ScanEye, Package } from "lucide-react"
-import { format } from "date-fns"
-
-import { Button } from "@/components/ui/button"
+import { useState } from 'react'
 import {
     Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
+    DialogSurface,
+    DialogBody,
     DialogTitle,
-} from "@/components/ui/dialog"
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Dropdown,
+    Option,
+    Textarea,
+    makeStyles,
+    tokens,
+    Field,
+    Spinner,
+    Combobox,
+    Switch,
+    Text
+} from "@fluentui/react-components";
 import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Calendar } from "@/components/ui/calendar"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
+    ClipboardTaskRegular,
+    DismissRegular,
+    SaveRegular,
+    CalendarRegular,
+    ScanRegular,
+    ArrowLeftRegular,
+    CheckmarkRegular
+} from "@fluentui/react-icons";
+import { toast } from 'sonner'
+import { createSmartWorkOrder, getOptimizationPreview } from '@/app/actions/workorders' // Use smart actions
+import { NestingVisualizer } from './nesting-visualizer'
 
-import { NestingVisualizer } from "./nesting-visualizer"
-import { createSmartWorkOrder, getOptimizationPreview } from "@/app/actions/workorders" // Imports
-// We need to export `getOptimizationPreview` from workorders.ts if not already
+const useStyles = makeStyles({
+    dialogContent: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "20px",
+        minWidth: "600px",
+        height: '80vh', // Fixed height for scrolling
+    },
+    section: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+    },
+    grid2: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "16px",
+    },
+    switchRow: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "12px",
+        borderRadius: tokens.borderRadiusMedium,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        backgroundColor: tokens.colorNeutralBackgroundAlpha
+    }
+});
 
-const formSchema = z.object({
-    title: z.string().min(1, "Title is required"),
-    type: z.string().min(1, "Type is required"),
-    priority: z.string(),
-    scheduledDate: z.date().optional(),
-    vendor: z.string().optional(), // For Outsourced
-    notes: z.string().optional(),
-    isOutsourced: z.boolean(),
-    supplyMaterial: z.boolean(), // For Outsourced
-})
+const WO_TYPES = [
+    { id: 'CUTTING', label: 'Material Cutting' },
+    { id: 'WELDING', label: 'Welding / Assembly' },
+    { id: 'FABRICATION', label: 'Fabrication' },
+    { id: 'PAINTING', label: 'Surface Treatment' },
+    { id: 'LOGISTICS', label: 'Transport / Delivery' },
+    { id: 'MACHINING', label: 'Machining' },
+    { id: 'INSPECTION', label: 'Inspection / QC' }
+]
+
+const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 interface CreateWorkOrderDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    pieceIds: string[] | { id: string, type: 'part' | 'plate' }[]
-    projectedType?: string
     projectId: string
+    selectedParts?: string[] // IDs of parts to include
+    selectedPlates?: string[] // IDs of plate pieces to include
     onSuccess?: () => void
 }
 
-export function CreateWorkOrderDialog({
-    open,
-    onOpenChange,
-    pieceIds,
-    projectedType,
-    projectId,
-    onSuccess
-}: CreateWorkOrderDialogProps) {
-    const [step, setStep] = useState(1) // 1 = Config, 2 = Review/Optimize
-    const [isLoading, setIsLoading] = useState(false)
-    const [optimizationResult, setOptimizationResult] = useState<any>(null) // Store backend plan
+export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedParts = [], selectedPlates = [], onSuccess }: CreateWorkOrderDialogProps) {
+    const styles = useStyles();
+    const [step, setStep] = useState(1); // 1 = Config, 2 = Optimization/Review
+    const [submitting, setSubmitting] = useState(false)
+    const [optimizationResult, setOptimizationResult] = useState<any>(null)
 
-    const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            title: "",
-            type: projectedType || "CUTTING",
-            priority: "MEDIUM",
-            isOutsourced: false,
-            supplyMaterial: false,
-        },
-    })
-
-    const watchType = form.watch("type")
-    const watchOutsourced = form.watch("isOutsourced")
-
-    // Intelligent Title update
-    // Update title when Type changes if not manually set? Simplified: User sets title.
+    // Form State
+    const [type, setType] = useState<string>('CUTTING')
+    const [title, setTitle] = useState('')
+    const [priority, setPriority] = useState('MEDIUM')
+    const [isOutsourced, setIsOutsourced] = useState(false)
+    const [supplyMaterial, setSupplyMaterial] = useState(false)
+    const [vendor, setVendor] = useState('')
+    const [notes, setNotes] = useState('')
+    const [dueDate, setDueDate] = useState('')
 
     const handleNext = async () => {
-        // Prepare for Review Step
-        const data = form.getValues()
-        if (!data.title) {
-            form.setError("title", { message: "Title is required" })
+        if (!title) {
+            toast.error("Please enter a title for the order")
             return
         }
 
-        setIsLoading(true)
-
-        try {
-            // ONLY RUN OPTIMIZATION IF: Type is CUTTING OR (Outsourced + Supply Material) AND we have profiles
-            // We'll run it for CUTTING default.
-            if (data.type === 'CUTTING' || (data.isOutsourced && data.supplyMaterial)) {
+        // Logic check: optimizing only makes sense for CUTTING or Outsourced+Supply
+        if (type === 'CUTTING' || (isOutsourced && supplyMaterial)) {
+            setSubmitting(true)
+            try {
+                // Combine IDs
+                const pieceIds = [...selectedParts, ...selectedPlates];
                 const res = await getOptimizationPreview(pieceIds)
+
                 if (res.success) {
                     setOptimizationResult(res.plans)
                     setStep(2)
                 } else {
-                    toast.error("Optimization failed: " + res.error)
+                    toast.error(res.error || "Optimization failed")
                 }
-            } else {
-                // No optimization needed (e.g. Welding, or Outsourced Vendor Supply)
-                // Just go to confirmation/create directly? 
-                // Let's create directly
-                await onSubmit(data)
+            } catch (e) {
+                toast.error("Failed to run optimization")
+            } finally {
+                setSubmitting(false)
             }
-        } catch (error) {
-            console.error(error)
-            toast.error("Failed to prepare work order")
-        } finally {
-            setIsLoading(false)
+        } else {
+            // Direct Submit
+            await handleSubmit()
         }
     }
 
-    const onSubmit = async (values: z.infer<typeof formSchema>) => {
-        setIsLoading(true)
+    const handleSubmit = async () => {
+        setSubmitting(true)
         try {
+            const pieceIds = [...selectedParts, ...selectedPlates];
             const res = await createSmartWorkOrder({
                 projectId,
-                pieceIds,
-                type: values.type,
-                title: values.title,
-                priority: values.priority as any,
-                scheduledDate: values.scheduledDate,
-                notes: values.notes,
-                isOutsourced: values.isOutsourced,
-                supplyMaterial: values.supplyMaterial,
-                vendor: values.vendor
+                type,
+                title,
+                priority: priority as any,
+                isOutsourced,
+                supplyMaterial,
+                vendor: vendor || undefined,
+                notes,
+                scheduledDate: dueDate ? new Date(dueDate) : undefined,
+                pieceIds
             })
 
             if (res.success) {
-                toast.success(res.message || "Work Order created successfully")
+                toast.success("Work Order created successfully")
+                if (onSuccess) onSuccess()
                 onOpenChange(false)
-                onSuccess?.()
-                // Reset form
-                form.reset()
+                // Reset
                 setStep(1)
                 setOptimizationResult(null)
             } else {
-                toast.error(res.error || "Failed to create Work Order")
+                toast.error(res.error || "Failed to create work order")
             }
-        } catch (error) {
-            toast.error("An error occurred")
+        } catch (e: any) {
+            toast.error(e.message || "An error occurred")
         } finally {
-            setIsLoading(false)
-        }
-    }
-
-    // Determine icon for type
-    const getTypeIcon = (t: string) => {
-        switch (t) {
-            case 'CUTTING': return <Scissors className="h-4 w-4" />
-            case 'WELDING': return <Hammer className="h-4 w-4" />
-            case 'PAINTING': return <PaintBucket className="h-4 w-4" />
-            case 'INSPECTION': return <ScanEye className="h-4 w-4" />
-            default: return <Package className="h-4 w-4" />
+            setSubmitting(false)
         }
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Create Work Order</DialogTitle>
-                    <DialogDescription>
-                        {pieceIds.length} items selected
-                    </DialogDescription>
-                </DialogHeader>
+        <Dialog open={open} onOpenChange={(e, data) => onOpenChange(data.open)}>
+            <DialogSurface style={{ maxWidth: '900px', width: '100%' }}>
+                <DialogBody>
+                    <DialogTitle>{step === 1 ? "Create Work Order" : "Review Optimization Plan"}</DialogTitle>
+                    <DialogContent className={styles.dialogContent}>
+                        {step === 1 ? (
+                            // STEP 1: CONFIGURATION
+                            <div className={styles.section}>
+                                <div className={styles.grid2}>
+                                    <Field label="Order Type" required>
+                                        <Dropdown
+                                            value={WO_TYPES.find(t => t.id === type)?.label}
+                                            selectedOptions={[type]}
+                                            onOptionSelect={(e, d) => setType(d.optionValue as string)}
+                                        >
+                                            {WO_TYPES.map(t => (
+                                                <Option key={t.id} value={t.id} text={t.label}>{t.label}</Option>
+                                            ))}
+                                        </Dropdown>
+                                    </Field>
+                                    <Field label="Priority" required>
+                                        <Dropdown
+                                            value={priority}
+                                            selectedOptions={[priority]}
+                                            onOptionSelect={(e, d) => setPriority(d.optionValue as string)}
+                                        >
+                                            {PRIORITIES.map(p => <Option key={p} value={p}>{p}</Option>)}
+                                        </Dropdown>
+                                    </Field>
+                                </div>
 
-                {step === 1 && (
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(handleNext)} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField
-                                    control={form.control}
-                                    name="title"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Title</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="e.g. Phase 1 Cutting" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                                <Field label="Order Title" required>
+                                    <Input
+                                        value={title}
+                                        onChange={(e, d) => setTitle(d.value)}
+                                        placeholder="e.g. Phase 1 Cutting"
+                                    />
+                                </Field>
 
-                                <FormField
-                                    control={form.control}
-                                    name="type"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Type</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select type" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="CUTTING">Cutting</SelectItem>
-                                                    <SelectItem value="WELDING">Welding</SelectItem>
-                                                    <SelectItem value="PAINTING">Painting / HDG</SelectItem>
-                                                    <SelectItem value="MACHINING">Machining</SelectItem>
-                                                    <SelectItem value="ASSEMBLY">Assembly</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
+                                <Field label="Due Date">
+                                    <Input
+                                        type="date"
+                                        value={dueDate}
+                                        onChange={(e, d) => setDueDate(d.value)}
+                                        contentAfter={<CalendarRegular />}
+                                    />
+                                </Field>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField
-                                    control={form.control}
-                                    name="priority"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Priority</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select priority" />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="LOW">Low</SelectItem>
-                                                    <SelectItem value="MEDIUM">Medium</SelectItem>
-                                                    <SelectItem value="HIGH">High</SelectItem>
-                                                    <SelectItem value="URGENT">Urgent</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="scheduledDate"
-                                    render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Scheduled Date</FormLabel>
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <FormControl>
-                                                        <Button
-                                                            variant={"outline"}
-                                                            className={cn(
-                                                                "w-full pl-3 text-left font-normal",
-                                                                !field.value && "text-muted-foreground"
-                                                            )}
-                                                        >
-                                                            {field.value ? (
-                                                                format(field.value, "PPP")
-                                                            ) : (
-                                                                <span>Pick a date</span>
-                                                            )}
-                                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                                        </Button>
-                                                    </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0" align="start">
-                                                    <Calendar
-                                                        mode="single"
-                                                        selected={field.value}
-                                                        onSelect={field.onChange}
-                                                        initialFocus
-                                                    />
-                                                </PopoverContent>
-                                            </Popover>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </div>
+                                {/* Outsourcing Section */}
+                                <div style={{ border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div className={styles.switchRow}>
+                                        <div>
+                                            <div style={{ fontWeight: 'bold' }}>Outsource Work</div>
+                                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Is this work performed by an external vendor?</Text>
+                                        </div>
+                                        <Switch checked={isOutsourced} onChange={(e, d) => setIsOutsourced(d.checked)} />
+                                    </div>
 
-                            {/* OUTSOURCING OPTIONS */}
-                            <div className="p-4 border rounded-md bg-muted/20 space-y-4">
-                                <FormField
-                                    control={form.control}
-                                    name="isOutsourced"
-                                    render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                                            <div className="space-y-0.5">
-                                                <FormLabel>Outsource Work</FormLabel>
-                                                <div className="text-[0.8rem] text-muted-foreground">
-                                                    Is this work performed by an external vendor?
+                                    {isOutsourced && (
+                                        <>
+                                            <Field label="Vendor Name">
+                                                <Input value={vendor} onChange={(e, d) => setVendor(d.value)} placeholder="e.g. Laser Co." />
+                                            </Field>
+
+                                            <div className={styles.switchRow}>
+                                                <div>
+                                                    <div style={{ fontWeight: 'bold' }}>Supply Material Internally?</div>
+                                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>If checked, we will create a Material Prep WO.</Text>
                                                 </div>
+                                                <Switch checked={supplyMaterial} onChange={(e, d) => setSupplyMaterial(d.checked)} />
                                             </div>
-                                            <FormControl>
-                                                <Switch
-                                                    checked={field.value}
-                                                    onCheckedChange={field.onChange}
-                                                />
-                                            </FormControl>
-                                        </FormItem>
+                                        </>
                                     )}
-                                />
+                                </div>
 
-                                {watchOutsourced && (
-                                    <>
-                                        <FormField
-                                            control={form.control}
-                                            name="vendor"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Vendor Name</FormLabel>
-                                                    <FormControl>
-                                                        <Input placeholder="e.g. Laser Co." {...field} />
-                                                    </FormControl>
-                                                </FormItem>
-                                            )}
-                                        />
+                                <Field label="Notes">
+                                    <Textarea value={notes} onChange={(e, d) => setNotes(d.value)} rows={3} />
+                                </Field>
+                            </div>
+                        ) : (
+                            // STEP 2: VISUALIZATION
+                            <div className={styles.section}>
+                                <div style={{ padding: '16px', backgroundColor: tokens.colorBrandBackground2, borderRadius: tokens.borderRadiusMedium, color: tokens.colorBrandForeground2 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', marginBottom: '4px' }}>
+                                        <ScanRegular /> Optimization Preview
+                                    </div>
+                                    <Text>
+                                        Review how we plan to cut these parts. We will create <strong>Immediate Cutting WOs</strong> for available stock and <strong>Material Prep WOs</strong> for what needs to be bought.
+                                    </Text>
+                                </div>
 
-                                        <FormField
-                                            control={form.control}
-                                            name="supplyMaterial"
-                                            render={({ field }) => (
-                                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background">
-                                                    <div className="space-y-0.5">
-                                                        <FormLabel className="flex items-center gap-2">
-                                                            <Truck className="h-4 w-4" />
-                                                            Supply Material Internally?
-                                                        </FormLabel>
-                                                        <div className="text-[0.8rem] text-muted-foreground">
-                                                            If checked, we will create a <strong>Material Prep WO</strong> to prepare stock for the vendor.
-                                                            <br />
-                                                            If unchecked, vendor supplies material.
-                                                        </div>
+                                <div style={{ overflowY: 'auto', flex: 1, paddingRight: '8px' }}>
+                                    {optimizationResult && optimizationResult.map((plan: any, i: number) => {
+                                        if (plan.type === 'profile' && plan.canOptimize) {
+                                            return <NestingVisualizer key={i} plan={plan} />
+                                        } else if (plan.type === 'plate') {
+                                            return (
+                                                <div key={i} style={{ padding: '12px', marginBottom: '8px', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium }}>
+                                                    <div style={{ fontWeight: 'bold' }}>{plan.profile} ({plan.grade})</div>
+                                                    <div style={{ fontSize: '12px', color: tokens.colorNeutralForeground3 }}>
+                                                        {plan.summary.count} Pieces &bull; {plan.summary.totalAreaM2}m² Total
                                                     </div>
-                                                    <FormControl>
-                                                        <Switch
-                                                            checked={field.value}
-                                                            onCheckedChange={field.onChange}
-                                                        />
-                                                    </FormControl>
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </>
-                                )}
+                                                </div>
+                                            )
+                                        } else {
+                                            return (
+                                                <div key={i} style={{ padding: '12px', marginBottom: '8px', backgroundColor: tokens.colorPaletteYellowBackground1, borderRadius: tokens.borderRadiusMedium }}>
+                                                    <strong>{plan.materialKey}</strong>: {plan.error || "Cannot optimize."}
+                                                </div>
+                                            )
+                                        }
+                                    })}
+                                </div>
                             </div>
+                        )}
+                    </DialogContent>
+                    <DialogActions>
+                        {step === 2 && (
+                            <Button appearance="subtle" icon={<ArrowLeftRegular />} onClick={() => setStep(1)} disabled={submitting}>Back</Button>
+                        )}
+                        <Button
+                            appearance={step === 1 ? "secondary" : "subtle"} // If step 1, cancel button style. If step 2, we have back button so this can be hidden/changed. 
+                            onClick={() => onOpenChange(false)}
+                            disabled={submitting}
+                        >
+                            Cancel
+                        </Button>
 
-                            <FormField
-                                control={form.control}
-                                name="notes"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Notes</FormLabel>
-                                        <FormControl>
-                                            <Textarea placeholder="Instructions..." {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-
-                            <DialogFooter>
-                                <Button type="submit" disabled={isLoading}>
-                                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    {watchType === 'CUTTING' || (watchOutsourced && form.getValues().supplyMaterial) ? 'Next: Optimization' : 'Create Work Order'}
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </Form>
-                )}
-
-                {step === 2 && optimizationResult && (
-                    <div className="space-y-4">
-                        <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-md border border-blue-200 dark:border-blue-900">
-                            <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-                                <ScanEye className="h-5 w-5" />
-                                Optimization Preview
-                            </h3>
-                            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                                Review how we plan to cut these parts.
-                                We will create <strong>Immediate Cutting WOs</strong> for available stock
-                                and <strong>Material Prep WOs</strong> for what needs to be bought/prepped.
-                            </p>
-                        </div>
-
-                        <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-3">
-                            {optimizationResult.map((plan: any, i: number) => {
-                                if (plan.type === 'profile' && plan.canOptimize) {
-                                    return <NestingVisualizer key={i} plan={plan} />
-                                } else if (plan.type === 'plate') {
-                                    // Render Plate Summary
-                                    return (
-                                        <div key={i} className="p-4 border rounded-md bg-card/50 flex items-center justify-between">
-                                            <div>
-                                                <h4 className="font-semibold flex items-center gap-2">
-                                                    <Scissors className="h-4 w-4" />
-                                                    {plan.profile}
-                                                    <span className="text-muted-foreground font-normal text-sm">({plan.grade})</span>
-                                                </h4>
-                                                <div className="text-sm text-muted-foreground mt-1">
-                                                    {plan.summary.count} Pieces &bull; {plan.summary.totalAreaM2}m² Total Area
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-xs font-mono bg-muted px-2 py-1 rounded">
-                                                    {plan.materialKey}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                } else {
-                                    return (
-                                        <div key={i} className="p-4 border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 rounded-md">
-                                            <p className="font-semibold text-yellow-800 dark:text-yellow-200">{plan.materialKey}</p>
-                                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                                                {plan.error || "Cannot optimize (Missing Data). Will be added to manual block."}
-                                            </p>
-                                        </div>
-                                    )
-                                }
-                            })}
-                        </div>
-
-                        <DialogFooter className="gap-2">
-                            <Button variant="outline" onClick={() => setStep(1)} disabled={isLoading}>
-                                Back
+                        {step === 1 ? (
+                            <Button appearance="primary" onClick={handleNext} disabled={submitting} icon={submitting ? <Spinner size="small" /> : <ScanRegular />}>
+                                {(type === 'CUTTING' || (isOutsourced && supplyMaterial)) ? "Next: Optimization" : "Create Order"}
                             </Button>
-                            <Button onClick={() => onSubmit(form.getValues())} disabled={isLoading}>
-                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirm & Create WOs
+                        ) : (
+                            <Button appearance="primary" onClick={handleSubmit} disabled={submitting} icon={submitting ? <Spinner size="small" /> : <CheckmarkRegular />}>
+                                {submitting ? "Creating..." : "Confirm & Create"}
                             </Button>
-                        </DialogFooter>
-                    </div>
-                )}
-            </DialogContent>
+                        )}
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
         </Dialog>
     )
 }

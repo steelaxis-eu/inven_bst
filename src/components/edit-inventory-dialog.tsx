@@ -2,14 +2,33 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogActions,
+    DialogContent,
+    Button,
+    Input,
+    Field,
+    makeStyles,
+    Dropdown,
+    Option,
+    tokens
+} from "@fluentui/react-components";
+import { EditRegular, SaveRegular } from "@fluentui/react-icons";
 import { updateInventory } from '@/app/actions/inventory'
-import { Pencil } from 'lucide-react'
 import { toast } from "sonner"
+
+const useStyles = makeStyles({
+    content: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+    },
+});
 
 interface EditInventoryProps {
     item: {
@@ -24,6 +43,7 @@ interface EditInventoryProps {
 }
 
 export function EditInventoryDialog({ item }: EditInventoryProps) {
+    const styles = useStyles();
     const router = useRouter()
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -32,6 +52,7 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
     const [length, setLength] = useState(item.length.toString())
     const [quantity, setQuantity] = useState(item.quantityAtHand.toString())
     const [status, setStatus] = useState(item.status)
+
     // Calculate initial total cost
     const initialTotalCost = (item.length * item.quantityAtHand / 1000) * (item.costPerMeter || 0)
     const [totalCost, setTotalCost] = useState(initialTotalCost.toFixed(2))
@@ -61,53 +82,45 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6">
-                    <Pencil className="h-4 w-4" />
-                </Button>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button appearance="subtle" icon={<EditRegular />} />
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
+            <DialogSurface>
+                <DialogBody>
                     <DialogTitle>Edit Inventory Item</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                        <Label>Lot ID</Label>
-                        <Input value={lotId} onChange={e => setLotId(e.target.value)} />
+                    <div className={styles.content}>
+                        <Field label="Lot ID">
+                            <Input value={lotId} onChange={(e, d) => setLotId(d.value)} />
+                        </Field>
+                        <Field label="Length (mm)">
+                            <Input type="number" value={length} onChange={(e, d) => setLength(d.value)} />
+                        </Field>
+                        <Field label="Quantity At Hand">
+                            <Input type="number" value={quantity} onChange={(e, d) => setQuantity(d.value)} />
+                        </Field>
+                        <Field label="Total Cost (€)">
+                            <Input type="number" value={totalCost} onChange={(e, d) => setTotalCost(d.value)} />
+                        </Field>
+                        <Field label="Status">
+                            <Dropdown
+                                value={status}
+                                onOptionSelect={(e, d) => setStatus(d.optionValue || status)}
+                                placeholder="Select Status"
+                            >
+                                <Option value="ACTIVE">ACTIVE</Option>
+                                <Option value="EXHAUSTED">EXHAUSTED</Option>
+                            </Dropdown>
+                        </Field>
                     </div>
-                    <div className="grid gap-2">
-                        <Label>Length (mm)</Label>
-                        <Input type="number" value={length} onChange={e => setLength(e.target.value)} />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label>Quantity At Hand</Label>
-                        <Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label>Total Cost (€)</Label>
-                        {/* TODO: maybe auto-update when len/qty changes? For now, manual is fine or let user override */}
-                        <Input type="number" step="0.01" value={totalCost} onChange={e => setTotalCost(e.target.value)} />
-                    </div>
-                    <div className="grid gap-2">
-                        <Label>Status</Label>
-                        <Select value={status} onValueChange={setStatus}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                                <SelectItem value="EXHAUSTED">EXHAUSTED</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleSubmit} disabled={loading}>
+                </DialogBody>
+                <DialogActions>
+                    <Button appearance="secondary" onClick={() => setOpen(false)}>Close</Button>
+                    <Button appearance="primary" icon={<SaveRegular />} disabled={loading} onClick={handleSubmit}>
                         {loading ? 'Saving...' : 'Save Changes'}
                     </Button>
-                </DialogFooter>
-            </DialogContent>
+                </DialogActions>
+            </DialogSurface>
         </Dialog>
     )
 }

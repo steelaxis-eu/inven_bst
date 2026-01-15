@@ -1,22 +1,133 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import {
+    Dialog,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Label,
+    makeStyles,
+    shorthands,
+    tokens,
+    TabList,
+    Tab,
+    Combobox,
+    Option,
+    Dropdown,
+    useId,
+    Text,
+    Spinner,
+    Switch,
+    Field,
+    Divider
+} from '@fluentui/react-components'
+import {
+    AddRegular,
+    BoxRegular,
+    CutRegular,
+    WarningRegular,
+    CheckmarkCircleRegular,
+    CalculatorRegular
+} from '@fluentui/react-icons'
 import { useRouter } from 'next/navigation'
 import { createPart } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
 import { ensureProfile } from '@/app/actions/inventory'
 import { calculateProfileWeight } from '@/app/actions/calculator'
 import { toast } from 'sonner'
-import { Plus, Package, Scissors, AlertTriangle, Check, ChevronsUpDown } from 'lucide-react'
-import { cn } from '@/lib/utils'
+
+const useStyles = makeStyles({
+    root: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    section: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        padding: '16px',
+        backgroundColor: tokens.colorNeutralBackground1,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+    },
+    gridThree: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '16px',
+    },
+    gridTwo: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+    },
+    gridFour: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '16px',
+    },
+    header: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '8px',
+        ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke3),
+        paddingBottom: '8px',
+    },
+    headerIcon: {
+        color: tokens.colorBrandForeground1,
+    },
+    headerTitle: {
+        fontWeight: 'bold',
+        color: tokens.colorNeutralForeground2,
+        textTransform: 'uppercase',
+        fontSize: '11px',
+        letterSpacing: '1px',
+    },
+    label: {
+        marginBottom: '4px',
+        display: 'block',
+    },
+    calcBox: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px',
+        backgroundColor: tokens.colorPaletteGreenBackground1,
+        ...shorthands.border('1px', 'solid', tokens.colorPaletteGreenBorder1),
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    },
+    warningBox: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '12px',
+        backgroundColor: tokens.colorPaletteRedBackground1,
+        ...shorthands.border('1px', 'solid', tokens.colorPaletteRedBorder1),
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        marginTop: '8px',
+    },
+    successBox: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '12px',
+        backgroundColor: tokens.colorPaletteGreenBackground1,
+        ...shorthands.border('1px', 'solid', tokens.colorPaletteGreenBorder1),
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        marginTop: '8px',
+    },
+    paramGrid: {
+        display: 'flex',
+        gap: '12px',
+        marginTop: '8px',
+    }
+})
 
 interface CreatePartDialogProps {
     projectId: string
@@ -35,10 +146,12 @@ export function CreatePartDialog({
     shapes = [],
     inventory = []
 }: CreatePartDialogProps) {
+    const styles = useStyles();
     const [open, setOpen] = useState(false)
     const [loading, setLoading] = useState(false)
     const [tab, setTab] = useState<'profile' | 'plate'>('profile')
     const router = useRouter()
+    const comboId = useId()
 
     // Shared fields
     const [partNumber, setPartNumber] = useState('')
@@ -46,17 +159,12 @@ export function CreatePartDialog({
     const [gradeId, setGradeId] = useState('')
     const [quantity, setQuantity] = useState('1')
 
-    // Profile selection state (matching inventory dialog pattern)
+    // Profile selection state
     const [selectedType, setSelectedType] = useState('')
     const [selectedDim, setSelectedDim] = useState('')
     const [customDim, setCustomDim] = useState('')
     const [shapeParams, setShapeParams] = useState<Record<string, string>>({})
     const [manualWeight, setManualWeight] = useState('')
-
-    // Combobox open states
-    const [openTypeCombo, setOpenTypeCombo] = useState(false)
-    const [openDimCombo, setOpenDimCombo] = useState(false)
-    const [dimSearch, setDimSearch] = useState('')
 
     // Other profile fields
     const [length, setLength] = useState('')
@@ -75,6 +183,7 @@ export function CreatePartDialog({
 
     // Derived values
     const uniqueTypes = Array.from(new Set(standardProfiles.map(p => p.type)))
+    // Combine standard types with shape IDs
     const allTypes = Array.from(new Set([...uniqueTypes, ...shapes.map(s => s.id)]))
     const isStandardType = uniqueTypes.includes(selectedType)
     const activeShape = shapes.find(s => s.id === selectedType)
@@ -94,6 +203,9 @@ export function CreatePartDialog({
             const getVal = (s: string) => parseFloat(s.split(/[xX]/)[0]) || 0
             return getVal(a) - getVal(b)
         })
+
+    // Combine for combobox
+    const dimOptions = [...new Set([...activeDims, ...catalogDims])]
 
     // Find matching standard profile for weight
     const standardMatch = standardProfiles.find(
@@ -142,23 +254,6 @@ export function CreatePartDialog({
             setManualWeight(activeProfile.weightPerMeter.toFixed(2))
         }
     }, [standardMatch, activeProfile])
-
-    // Handlers
-    const handleTypeSelect = (t: string) => {
-        const val = t === selectedType ? '' : t
-        setSelectedType(val)
-        setSelectedDim('')
-        setCustomDim('')
-        setManualWeight('')
-        setShapeParams({})
-        setOpenTypeCombo(false)
-    }
-
-    const handleDimSelect = (d: string) => {
-        setSelectedDim(d)
-        setCustomDim('')
-        setOpenDimCombo(false)
-    }
 
     const updateShapeParam = (param: string, val: string) => {
         const newParams = { ...shapeParams, [param]: val }
@@ -210,7 +305,6 @@ export function CreatePartDialog({
                     return
                 }
 
-                // Ensure profile exists
                 const finalDim = customDim || selectedDim
                 const weight = manualWeight ? parseFloat(manualWeight) : (standardMatch?.weightPerMeter || 0)
 
@@ -297,423 +391,248 @@ export function CreatePartDialog({
     }
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button size="sm" className="gap-1">
-                    <Plus className="h-4 w-4" /> Add Part
-                </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl">
-                <div className="p-6 pb-4 bg-card/30 backdrop-blur-sm border-b border-border/50">
-                    <DialogTitle className="text-2xl font-bold tracking-tight">Add New Part</DialogTitle>
-                    <DialogDescription className="mt-1">
-                        Define specifications for profile components or plate parts.
-                    </DialogDescription>
-                </div>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogSurface style={{ minWidth: '650px', maxWidth: '800px' }}>
+                <DialogBody>
+                    <DialogTitle>Add New Part</DialogTitle>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    <Tabs value={tab} onValueChange={(v) => setTab(v as 'profile' | 'plate')} className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 h-11 bg-muted/50 p-1 rounded-xl">
-                            <TabsTrigger value="profile" className="gap-2 rounded-lg transition-premium data-[state=active]:shadow-lg">
-                                <Package className="h-4 w-4" /> Profile Part
-                            </TabsTrigger>
-                            <TabsTrigger value="plate" className="gap-2 rounded-lg transition-premium data-[state=active]:shadow-lg">
-                                <Scissors className="h-4 w-4" /> Plate Part
-                            </TabsTrigger>
-                        </TabsList>
+                    <div style={{ margin: '16px 0' }}>
+                        <TabList
+                            selectedValue={tab}
+                            onTabSelect={(_, data) => setTab(data.value as 'profile' | 'plate')}
+                        >
+                            <Tab id="profile" value="profile" icon={<BoxRegular />}>Profile Part</Tab>
+                            <Tab id="plate" value="plate" icon={<CutRegular />}>Plate Part</Tab>
+                        </TabList>
+                    </div>
 
-                        {/* Common Fields Section */}
-                        <div className="glass p-5 rounded-xl space-y-5">
-                            <div className="flex items-center gap-3 pb-2 border-b border-border/30">
-                                <div className="h-4 w-1 bg-primary rounded-full" />
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">General Information</h3>
+                    <DialogContent className={styles.root}>
+                        {/* Common Fields */}
+                        <div className={styles.section}>
+                            <div className={styles.header}>
+                                <div className={styles.headerIcon}><BoxRegular /></div>
+                                <Text className={styles.headerTitle}>General Information</Text>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Part Number *</Label>
-                                    <Input
-                                        value={partNumber}
-                                        onChange={e => setPartNumber(e.target.value)}
-                                        placeholder={tab === 'profile' ? 'B-101' : 'PL-001'}
-                                        className="font-mono uppercase h-10 bg-background/50"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Quantity *</Label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        value={quantity}
-                                        onChange={e => setQuantity(e.target.value)}
-                                        className="h-10 bg-background/50 font-bold"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Grade</Label>
-                                    <Select value={gradeId} onValueChange={setGradeId}>
-                                        <SelectTrigger className="h-10 bg-background/50">
-                                            <SelectValue placeholder="Select grade" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {grades.map(g => (
-                                                <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                            <div className={styles.gridThree}>
+                                <Field label="Part Number" required>
+                                    <Input value={partNumber} onChange={(e, d) => setPartNumber(d.value)} placeholder={tab === 'profile' ? 'B-101' : 'PL-001'} />
+                                </Field>
+                                <Field label="Quantity" required>
+                                    <Input type="number" min="1" value={quantity} onChange={(e, d) => setQuantity(d.value)} />
+                                </Field>
+                                <Field label="Grade">
+                                    <Dropdown
+                                        value={grades.find(g => g.id === gradeId)?.name || ''}
+                                        selectedOptions={gradeId ? [gradeId] : []}
+                                        onOptionSelect={(_, data) => setGradeId(data.optionValue as string)}
+                                        placeholder="Select grade"
+                                    >
+                                        {grades.map(g => (
+                                            <Option key={g.id} value={g.id}>{g.name}</Option>
+                                        ))}
+                                    </Dropdown>
+                                </Field>
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Description</Label>
-                                <Input
-                                    value={description}
-                                    onChange={e => setDescription(e.target.value)}
-                                    placeholder="e.g. Main beam section"
-                                    className="h-10 bg-background/50"
-                                />
-                            </div>
+                            <Field label="Description">
+                                <Input value={description} onChange={(e, d) => setDescription(d.value)} placeholder="e.g. Main beam section" />
+                            </Field>
                         </div>
 
-                        {/* Profile Part Tab */}
-                        <TabsContent value="profile" className="space-y-4 mt-0">
-                            {/* Profile Specs Section */}
-                            <div className="glass p-5 rounded-xl space-y-6">
-                                <div className="flex items-center gap-3 pb-2 border-b border-border/30">
-                                    <div className="h-4 w-1 bg-primary rounded-full" />
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Profile Specification</h3>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Type</Label>
-                                        <Popover open={openTypeCombo} onOpenChange={setOpenTypeCombo}>
-                                            <PopoverTrigger asChild>
-                                                <Button variant="outline" role="combobox" className="w-full justify-between h-10 bg-background/50">
-                                                    {selectedType || <span className="text-muted-foreground">Select type...</span>}
-                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-[200px] p-0" align="start">
-                                                <Command>
-                                                    <CommandInput placeholder="Search type..." />
-                                                    <CommandList>
-                                                        <CommandEmpty>No type found.</CommandEmpty>
-                                                        <CommandGroup heading="Standard Profiles">
-                                                            {uniqueTypes.map(t => (
-                                                                <CommandItem key={t} value={t} onSelect={() => handleTypeSelect(t)}>
-                                                                    <Check className={cn("mr-2 h-4 w-4", selectedType === t ? "opacity-100" : "opacity-0")} />
-                                                                    {t}
-                                                                </CommandItem>
-                                                            ))}
-                                                        </CommandGroup>
-                                                        {shapes.length > 0 && (
-                                                            <CommandGroup heading="Custom Shapes">
-                                                                {shapes.map(s => (
-                                                                    <CommandItem key={s.id} value={s.id} onSelect={() => handleTypeSelect(s.id)}>
-                                                                        <Check className={cn("mr-2 h-4 w-4", selectedType === s.id ? "opacity-100" : "opacity-0")} />
-                                                                        {s.id}
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        )}
-                                                    </CommandList>
-                                                </Command>
-                                            </PopoverContent>
-                                        </Popover>
+                        {tab === 'profile' && (
+                            <>
+                                <div className={styles.section}>
+                                    <div className={styles.header}>
+                                        <div className={styles.headerIcon}><BoxRegular /></div>
+                                        <Text className={styles.headerTitle}>Profile Specification</Text>
+                                    </div>
+                                    <div className={styles.gridTwo}>
+                                        <Field label="Type" required>
+                                            <Combobox
+                                                value={selectedType}
+                                                onOptionSelect={(_, data) => {
+                                                    setSelectedType(data.optionValue || '')
+                                                    setSelectedDim('')
+                                                    setCustomDim('')
+                                                    setManualWeight('')
+                                                    setShapeParams({})
+                                                }}
+                                                placeholder="Select type"
+                                            >
+                                                {allTypes.map(t => (
+                                                    <Option key={t} value={t}>{t}</Option>
+                                                ))}
+                                            </Combobox>
+                                        </Field>
+                                        <Field label="Dimensions" required>
+                                            <Combobox
+                                                value={customDim || selectedDim}
+                                                onOptionSelect={(_, data) => {
+                                                    const val = data.optionValue
+                                                    if (val) {
+                                                        setSelectedDim(val)
+                                                        setCustomDim('')
+                                                    }
+                                                }}
+                                                onInput={(e) => setCustomDim(e.currentTarget.value)}
+                                                freeform
+                                                placeholder="Select or type custom"
+                                                disabled={!selectedType}
+                                            >
+                                                {dimOptions.map(d => (
+                                                    <Option key={d} value={d}>{d}</Option>
+                                                ))}
+                                            </Combobox>
+                                        </Field>
                                     </div>
 
-                                    {/* Dimensions Selection */}
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Dimensions</Label>
-                                        <Popover open={openDimCombo} onOpenChange={setOpenDimCombo}>
-                                            <PopoverTrigger asChild>
-                                                <Button variant="outline" role="combobox" className="w-full justify-between h-10 bg-background/50" disabled={!selectedType}>
-                                                    {customDim || selectedDim || <span className="text-muted-foreground">Select / Custom...</span>}
-                                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-[240px] p-0" align="start">
-                                                <Command>
-                                                    <CommandInput value={dimSearch} onValueChange={setDimSearch} placeholder="Search or type custom..." />
-                                                    <CommandList>
-                                                        <CommandEmpty>
-                                                            <Button
-                                                                onClick={() => {
-                                                                    setSelectedDim(dimSearch)
-                                                                    setCustomDim(dimSearch)
-                                                                    setOpenDimCombo(false)
-                                                                }}
-                                                                variant="ghost"
-                                                                className="w-full h-8 text-xs"
-                                                            >
-                                                                Use Custom "{dimSearch}"
-                                                            </Button>
-                                                        </CommandEmpty>
-
-                                                        {activeDims.length > 0 && (
-                                                            <CommandGroup heading="Active Profiles">
-                                                                {activeDims.map(d => (
-                                                                    <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                        <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                        {d}
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        )}
-
-                                                        {isStandardType && catalogDims.length > 0 && (
-                                                            <CommandGroup heading="Standard Catalog">
-                                                                {catalogDims.map(d => (
-                                                                    <CommandItem key={d} value={d} onSelect={() => handleDimSelect(d)}>
-                                                                        <Check className={cn("mr-2 h-4 w-4", selectedDim === d ? "opacity-100" : "opacity-0")} />
-                                                                        {d}
-                                                                    </CommandItem>
-                                                                ))}
-                                                            </CommandGroup>
-                                                        )}
-                                                    </CommandList>
-                                                </Command>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-                                </div>
-
-                                {/* Shape Parameter Inputs */}
-                                {!isStandardType && activeShape && (
-                                    <div className="space-y-3 p-4 bg-muted/40 rounded-lg border border-border/50">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Parameters</Label>
-                                        <div className="flex gap-4">
-                                            {(activeShape.params as string[]).map(param => (
-                                                <div key={param} className="relative flex-1">
-                                                    <Input
-                                                        placeholder={param}
-                                                        className="h-10 bg-background/80 text-center font-mono focus-visible:ring-primary/30"
-                                                        value={shapeParams[param] || ''}
-                                                        onChange={e => updateShapeParam(param, e.target.value)}
-                                                    />
-                                                    <span className="absolute -bottom-4 left-0 w-full text-[9px] text-center text-muted-foreground/60 uppercase font-bold">{param}</span>
-                                                </div>
-                                            ))}
+                                    {/* Parameters for custom shapes */}
+                                    {!isStandardType && activeShape && (
+                                        <div style={{ marginTop: '12px' }}>
+                                            <Label weight="semibold">Parameters</Label>
+                                            <div className={styles.paramGrid}>
+                                                {(activeShape.params as string[]).map(param => (
+                                                    <Field key={param} label={param} size="small">
+                                                        <Input
+                                                            value={shapeParams[param] || ''}
+                                                            onChange={(e, d) => updateShapeParam(param, d.value)}
+                                                            style={{ maxWidth: '80px', textAlign: 'center' }}
+                                                        />
+                                                    </Field>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* Length & Weight Section */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-                                    <div className="space-y-2 text-center md:text-left">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold block">Length (mm)</Label>
-                                        <Input
-                                            type="number"
-                                            value={length}
-                                            onChange={e => setLength(e.target.value)}
-                                            placeholder="e.g. 6000"
-                                            className="h-10 bg-background/50 text-center md:text-left font-mono"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold text-center md:text-left block">Weight (kg/m)</Label>
-                                        <div className="relative">
+                                    <div className={styles.gridThree} style={{ marginTop: '12px' }}>
+                                        <Field label="Length (mm)">
+                                            <Input type="number" value={length} onChange={(e, d) => setLength(d.value)} placeholder="6000" />
+                                        </Field>
+                                        <Field label="Weight (kg/m)">
                                             <Input
                                                 value={manualWeight}
-                                                onChange={e => setManualWeight(e.target.value)}
-                                                className={cn("h-10 bg-background/50 pr-8 font-mono text-center md:text-left", manualWeight ? "font-bold text-primary" : "")}
+                                                onChange={(e, d) => setManualWeight(d.value)}
+                                                contentAfter={
+                                                    <Button
+                                                        icon={<CalculatorRegular />}
+                                                        appearance="subtle"
+                                                        onClick={handleCalculateWeight}
+                                                        disabled={!selectedType}
+                                                        title="Calculate weight"
+                                                    />
+                                                }
                                                 placeholder="Auto"
                                             />
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:text-primary transition-colors"
-                                                onClick={handleCalculateWeight}
-                                                disabled={!selectedType}
-                                                title="Calculate weight"
-                                            >
-                                                <span className="text-sm">🧮</span>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold text-center md:text-left block">Requires Welding</Label>
-                                        <Select value={requiresWelding ? 'yes' : 'no'} onValueChange={v => setRequiresWelding(v === 'yes')}>
-                                            <SelectTrigger className="h-10 bg-background/50">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="no">No</SelectItem>
-                                                <SelectItem value="yes">Yes</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        </Field>
+                                        <Field label="Requires Welding">
+                                            <Switch
+                                                checked={requiresWelding}
+                                                onChange={(e, d) => setRequiresWelding(d.checked)}
+                                                label={requiresWelding ? "Yes" : "No"}
+                                            />
+                                        </Field>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Inventory & Outsourcing Section */}
-                            <div className="space-y-4">
+                                {/* Stock Status & Outsourcing */}
                                 {inventoryStatus !== 'unknown' && (
-                                    <div className={cn("flex items-center gap-3 text-xs font-bold uppercase tracking-wider p-4 rounded-xl border animate-in fade-in slide-in-from-top-2 duration-300",
-                                        inventoryStatus === 'available' ? 'bg-green-500/10 text-green-600 border-green-500/20' :
-                                            inventoryStatus === 'insufficient' ? 'bg-orange-500/10 text-orange-600 border-orange-500/20' : 'bg-red-500/10 text-red-600 border-red-500/20'
-                                    )}>
-                                        <div className={cn("h-6 w-6 rounded-full flex items-center justify-center",
-                                            inventoryStatus === 'available' ? 'bg-green-500 text-white' :
-                                                inventoryStatus === 'insufficient' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
-                                        )}>
-                                            {inventoryStatus === 'available' ? <Check className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-                                        </div>
-                                        <div className="flex-1">
-                                            {inventoryStatus === 'available' ? (
-                                                <span>Full allocation possible: {available} in stock</span>
-                                            ) : inventoryStatus === 'insufficient' ? (
-                                                <span>Insufficient stock: {available} available (need {needed})</span>
-                                            ) : (
-                                                <span>Material not in stock – Procure via RFQ</span>
-                                            )}
-                                        </div>
+                                    <div className={inventoryStatus === 'available' ? styles.successBox : styles.warningBox}>
+                                        {inventoryStatus === 'available' ? <CheckmarkCircleRegular /> : <WarningRegular />}
+                                        <Text>
+                                            {inventoryStatus === 'available'
+                                                ? `Full allocation possible: ${available} in stock`
+                                                : inventoryStatus === 'insufficient'
+                                                    ? `Insufficient stock: ${available} available (need {needed})`
+                                                    : 'Material not in stock – Procure via RFQ'
+                                            }
+                                        </Text>
                                     </div>
                                 )}
 
-                                <div className="glass p-5 rounded-xl space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                                <Scissors className="h-3.5 w-3.5" />
-                                            </div>
-                                            <Label htmlFor="outsourcedCut" className="text-sm font-bold cursor-pointer">Outsourced Cutting</Label>
-                                        </div>
-                                        <input
-                                            type="checkbox"
-                                            id="outsourcedCut"
+                                <div className={styles.section}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Label weight="semibold">Outsourced Cutting?</Label>
+                                        <Switch
                                             checked={isOutsourcedCut}
-                                            onChange={e => setIsOutsourcedCut(e.target.checked)}
-                                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary transition-premium cursor-pointer"
+                                            onChange={(e, d) => setIsOutsourcedCut(d.checked)}
                                         />
                                     </div>
                                     {isOutsourcedCut && (
-                                        <div className="space-y-2 animate-in fade-in slide-in-from-right-2 duration-300">
-                                            <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Cutting Vendor</Label>
-                                            <Input
-                                                value={cutVendor}
-                                                onChange={e => setCutVendor(e.target.value)}
-                                                placeholder="e.g. LaserCut Ltd"
-                                                className="h-10 bg-background/50"
-                                            />
-                                        </div>
+                                        <Field label="Cutting Vendor" style={{ marginTop: '8px' }}>
+                                            <Input value={cutVendor} onChange={(e, d) => setCutVendor(d.value)} placeholder="Vendor Name" />
+                                        </Field>
                                     )}
                                 </div>
-                            </div>
-                        </TabsContent>
+                            </>
+                        )}
 
-                        {/* Plate Part Tab */}
-                        <TabsContent value="plate" className="space-y-6 mt-0">
-                            <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl text-[13px] flex items-center gap-3 text-primary font-medium">
-                                <Scissors className="h-5 w-5 shrink-0" />
-                                <span>Plate parts represent items to be cut from sheet material, typically outsourced.</span>
-                            </div>
-
-                            <div className="glass p-5 rounded-xl space-y-6">
-                                <div className="flex items-center gap-3 pb-2 border-b border-border/30">
-                                    <div className="h-4 w-1 bg-primary rounded-full" />
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Dimensions & Material</h3>
+                        {tab === 'plate' && (
+                            <div className={styles.section}>
+                                <div className={styles.header}>
+                                    <div className={styles.headerIcon}><CutRegular /></div>
+                                    <Text className={styles.headerTitle}>Plate Specification</Text>
                                 </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Material</Label>
-                                        <Input
-                                            value={material}
-                                            onChange={e => setMaterial(e.target.value)}
-                                            placeholder="S355"
-                                            className="h-10 bg-background/50 font-bold"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Thick (mm)</Label>
-                                        <Input
-                                            type="number"
-                                            value={thickness}
-                                            onChange={e => setThickness(e.target.value)}
-                                            placeholder="10"
-                                            className="h-10 bg-background/50 font-mono"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Width (mm)</Label>
-                                        <Input
-                                            type="number"
-                                            value={plateWidth}
-                                            onChange={e => setPlateWidth(e.target.value)}
-                                            placeholder="200"
-                                            className="h-10 bg-background/50 font-mono"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Length (mm)</Label>
-                                        <Input
-                                            type="number"
-                                            value={plateLength}
-                                            onChange={e => setPlateLength(e.target.value)}
-                                            placeholder="400"
-                                            className="h-10 bg-background/50 font-mono"
-                                        />
-                                    </div>
+                                <div className={styles.gridFour}>
+                                    <Field label="Material">
+                                        <Input value={material} onChange={(e, d) => setMaterial(d.value)} placeholder="S355" />
+                                    </Field>
+                                    <Field label="Thick (mm)">
+                                        <Input type="number" value={thickness} onChange={(e, d) => setThickness(d.value)} placeholder="10" />
+                                    </Field>
+                                    <Field label="Width (mm)">
+                                        <Input type="number" value={plateWidth} onChange={(e, d) => setPlateWidth(d.value)} placeholder="200" />
+                                    </Field>
+                                    <Field label="Length (mm)">
+                                        <Input type="number" value={plateLength} onChange={(e, d) => setPlateLength(d.value)} placeholder="400" />
+                                    </Field>
                                 </div>
 
-                                {/* Auto-calculated weight preview */}
+                                {/* Calculated Weight Preview */}
                                 {thickness && plateWidth && plateLength && (
-                                    <div className="flex items-center justify-between p-4 bg-green-500/5 border border-green-500/20 rounded-xl animate-in zoom-in-95 duration-300">
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                                            <span className="text-xs font-bold uppercase tracking-wider text-green-700">Calculated Weight</span>
+                                    <div className={styles.calcBox}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <CalculatorRegular />
+                                            <Text weight="semibold" style={{ color: tokens.colorPaletteGreenForeground1, textTransform: 'uppercase', fontSize: '11px' }}>Calculated Weight</Text>
                                         </div>
-                                        <div className="text-xl font-mono font-black text-green-600">
-                                            {((parseFloat(thickness) / 1000) * (parseFloat(plateWidth) / 1000) * (parseFloat(plateLength) / 1000) * 7850).toFixed(3)} <span className="text-xs font-normal">kg</span>
-                                        </div>
+                                        <Text font="monospace" size={400} weight="bold" style={{ color: tokens.colorPaletteGreenForeground1 }}>
+                                            {((parseFloat(thickness) / 1000) * (parseFloat(plateWidth) / 1000) * (parseFloat(plateLength) / 1000) * 7850).toFixed(3)} kg
+                                        </Text>
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold text-center md:text-left block">Weight Override (kg)</Label>
-                                        <Input
-                                            type="number"
-                                            value={unitWeight}
-                                            onChange={e => setUnitWeight(e.target.value)}
-                                            placeholder="Auto-calculated if blank"
-                                            className="h-10 bg-background/50 font-mono"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold text-center md:text-left block">Preferred Supplier</Label>
-                                        <Input
-                                            value={supplier}
-                                            onChange={e => setSupplier(e.target.value)}
-                                            placeholder="LaserParts Co"
-                                            className="h-10 bg-background/50"
-                                        />
-                                    </div>
+                                <div className={styles.gridTwo}>
+                                    <Field label="Weight Override (kg)">
+                                        <Input type="number" value={unitWeight} onChange={(e, d) => setUnitWeight(d.value)} placeholder="Auto if blank" />
+                                    </Field>
+                                    <Field label="Preferred Supplier">
+                                        <Input value={supplier} onChange={(e, d) => setSupplier(d.value)} placeholder="Vendor Name" />
+                                    </Field>
                                 </div>
 
-                                <div className="p-4 border border-border/50 rounded-xl bg-muted/20 flex items-center justify-between">
-                                    <div className="space-y-0.5">
-                                        <Label htmlFor="plateOutsourced" className="text-sm font-bold cursor-pointer">Outsourced Process</Label>
-                                        <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">Toggle between External and Internal production</p>
+                                <Divider />
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <Label weight="semibold">Outsourced Process</Label>
+                                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Toggle between External and Internal production</Text>
                                     </div>
-                                    <input
-                                        type="checkbox"
-                                        id="plateOutsourced"
+                                    <Switch
                                         checked={isPlateOutsourced}
-                                        onChange={e => setIsPlateOutsourced(e.target.checked)}
-                                        className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer transition-premium"
+                                        onChange={(e, d) => setIsPlateOutsourced(d.checked)}
                                     />
                                 </div>
                             </div>
-                        </TabsContent>
-                    </Tabs>
-                </div>
+                        )}
+                    </DialogContent>
 
-                <div className="p-6 bg-card/30 backdrop-blur-md border-t border-border/50 flex justify-end gap-3">
-                    <Button variant="ghost" onClick={() => setOpen(false)} disabled={loading} className="transition-premium px-6">Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading || !partNumber || !quantity} className="min-w-[160px] shadow-xl shadow-primary/20 transition-premium active:scale-95 font-bold h-11">
-                        {loading ? 'Processing...' : tab === 'profile' ? 'Create Profile Part' : 'Create Plate Part'}
-                    </Button>
-                </div>
-            </DialogContent>
+                    <DialogActions>
+                        <Button appearance="secondary" onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+                        <Button appearance="primary" onClick={handleSubmit} disabled={loading || !partNumber || !quantity} icon={!loading ? <AddRegular /> : <Spinner size="tiny" />}>
+                            {loading ? 'Processing...' : tab === 'profile' ? 'Create Profile Part' : 'Create Plate Part'}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
+            <Button onClick={() => setOpen(true)} icon={<AddRegular />}>Add Part</Button>
         </Dialog>
     )
 }

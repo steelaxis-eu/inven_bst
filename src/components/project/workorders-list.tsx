@@ -1,18 +1,58 @@
 'use client'
 
 import { useState } from 'react'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
+    Button,
+    Card,
+    CardHeader,
+    Badge,
+    ProgressBar,
+    Checkbox,
+    Dialog,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogContent,
+    DialogActions,
+    Text,
+    Title3,
+    makeStyles,
+    tokens,
+    shorthands
+} from "@fluentui/react-components"
+import {
+    PlayRegular,
+    CheckmarkCircleRegular,
+    ClockRegular,
+    ArrowRotateClockwiseRegular,
+    DeleteRegular,
+    DismissCircleFilled,
+    RulerRegular,
+    WrenchRegular,
+    PrintRegular,
+    ChevronDownRegular,
+    ChevronRightRegular,
+    ClipboardTaskRegular,
+    CheckmarkRegular,
+    DocumentRegular,
+    ReceiptPlayRegular
+} from "@fluentui/react-icons"
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Play, CheckCircle, Clock, RotateCw, AlertTriangle, AlertCircle, Trash2, XCircle, Ruler, Wrench, Printer, ChevronDown, ChevronRight, Layers, ClipboardList, Check, FileText } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { updateWorkOrderStatus, updateWorkOrderItemStatus, activateWorkOrder, completeWorkOrder, completeCuttingWOWithWorkflow } from '@/app/actions/workorders'
-import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import {
+    updateWorkOrderStatus,
+    updateWorkOrderItemStatus,
+    activateWorkOrder,
+    completeWorkOrder,
+    completeCuttingWOWithWorkflow
+} from '@/app/actions/workorders'
 import { BatchCutDialog } from "./batch-cut-dialog"
 import { MaterialPrepDialog } from "./material-prep-dialog"
 import { DownloadDrawingsButton } from '@/components/work-order/download-drawings-button'
@@ -65,13 +105,13 @@ interface WorkOrdersListProps {
 // --- Constants ---
 
 const TYPE_COLORS: Record<string, string> = {
-    'MATERIAL_PREP': 'bg-amber-100 text-amber-800',
-    'CUTTING': 'bg-blue-100 text-blue-800',
-    'MACHINING': 'bg-cyan-100 text-cyan-800',
-    'FABRICATION': 'bg-yellow-100 text-yellow-800',
-    'WELDING': 'bg-orange-100 text-orange-800',
-    'PAINTING': 'bg-purple-100 text-purple-800',
-    'ASSEMBLY': 'bg-green-100 text-green-800',
+    'MATERIAL_PREP': tokens.colorPaletteBerryBackground2,
+    'CUTTING': tokens.colorPaletteBlueBackground2,
+    'MACHINING': tokens.colorPaletteTealBackground2,
+    'FABRICATION': tokens.colorPaletteYellowBackground2,
+    'WELDING': tokens.colorPaletteDarkOrangeBackground2,
+    'PAINTING': tokens.colorPalettePurpleBackground2,
+    'ASSEMBLY': tokens.colorPaletteGreenBackground2,
 }
 
 const ORDERED_PROCESSES = [
@@ -86,7 +126,109 @@ const ORDERED_PROCESSES = [
     'PACKAGING'
 ]
 
+const useStyles = makeStyles({
+    root: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+    },
+    processCard: {
+        transition: 'all 0.2s',
+        borderLeft: '4px solid transparent',
+        ':hover': {
+            boxShadow: tokens.shadow4,
+        }
+    },
+    cardExpanded: {
+        ...shorthands.borderColor(tokens.colorBrandStroke1),
+    },
+    cardHeader: {
+        padding: '16px',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(200px, 1fr) 2fr 1fr 40px',
+        gap: '16px',
+        alignItems: 'center',
+        cursor: 'pointer',
+    },
+    iconBox: {
+        padding: '8px',
+        borderRadius: tokens.borderRadiusMedium,
+        backgroundColor: tokens.colorNeutralBackground3,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statsGrid: {
+        display: 'flex',
+        gap: '24px',
+        justifyContent: 'center',
+    },
+    statItem: {
+        textAlign: 'center',
+    },
+    progressSection: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+    },
+    tableContainer: {
+        backgroundColor: tokens.colorNeutralBackground2,
+        padding: '16px',
+        borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    },
+    groupTitle: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        fontSize: tokens.fontSizeBase300,
+        fontWeight: tokens.fontWeightSemibold,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        marginTop: '16px',
+        marginBottom: '8px',
+    },
+    actionButtons: {
+        display: 'flex',
+        gap: '8px',
+    },
+    nestedTable: {
+        paddingLeft: '16px',
+        borderLeft: `4px solid ${tokens.colorBrandStroke2}`,
+        margin: '8px 0',
+        backgroundColor: tokens.colorNeutralBackground1,
+    },
+    summaryCard: {
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+    }
+})
+
 // --- Sub-Components ---
+
+export function WorkOrderSummary({ workOrders }: { workOrders: WorkOrder[] }) {
+    const styles = useStyles()
+    const total = workOrders.length
+    const active = workOrders.filter(w => w.status === 'IN_PROGRESS').length
+    const completed = workOrders.filter(w => w.status === 'COMPLETED').length
+    const highPriority = workOrders.filter(w => w.priority === 'HIGH' && w.status !== 'COMPLETED').length
+
+    const SummaryCard = ({ title, value, color }: { title: string, value: number, color?: string }) => (
+        <Card className={styles.summaryCard}>
+            <Text size={200} weight="semibold" style={{ color: tokens.colorNeutralForeground3, textTransform: 'uppercase' }}>{title}</Text>
+            <Title3 style={{ marginTop: '8px', color: color }}>{value}</Title3>
+        </Card>
+    )
+
+    return (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
+            <SummaryCard title="Total Orders" value={total} />
+            <SummaryCard title="Active" value={active} color={tokens.colorPaletteBlueForeground2} />
+            <SummaryCard title="Completed" value={completed} color={tokens.colorPaletteGreenForeground1} />
+            <SummaryCard title="High Priority" value={highPriority} color={highPriority > 0 ? tokens.colorPaletteRedForeground1 : undefined} />
+        </div>
+    )
+}
 
 function WorkOrderTable({
     workOrders,
@@ -97,6 +239,7 @@ function WorkOrderTable({
     type: string,
     projectId: string
 }) {
+    const styles = useStyles()
     const router = useRouter()
     const [loading, setLoading] = useState<string | null>(null)
     const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<string[]>([])
@@ -191,17 +334,16 @@ function WorkOrderTable({
         .flatMap(w => w.items.filter(i => i.status !== 'COMPLETED'))
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-top-2 duration-200">
+        <div className={styles.root}>
             {/* Batch Cut Actions */}
             {type === 'CUTTING' && inProgress.length > 0 && (
-                <div className="bg-muted/30 p-2 rounded-md flex justify-between items-center">
-                    <div className="text-xs text-muted-foreground ml-2">
+                <div style={{ backgroundColor: tokens.colorNeutralBackground3, padding: '8px', borderRadius: tokens.borderRadiusMedium, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginLeft: '8px' }}>
                         Select individual items from active cutting orders below
-                    </div>
+                    </Text>
                     <div>
                         {selectedBatchItemIds.length > 0 && (
-                            <Button size="sm" onClick={() => setBatchCutDialogOpen(true)}>
-                                <Ruler className="h-4 w-4 mr-2" />
+                            <Button size="small" onClick={() => setBatchCutDialogOpen(true)} icon={<RulerRegular />}>
                                 Record Usage / Cut ({selectedBatchItemIds.length})
                             </Button>
                         )}
@@ -211,137 +353,117 @@ function WorkOrderTable({
 
             {/* renderGroup helper */}
             {[
-                { title: 'Active', data: inProgress, color: 'text-blue-600' },
-                { title: 'Pending', data: pending, color: 'text-gray-600' },
-                { title: 'Completed', data: completed, color: 'text-green-600' }
+                { title: 'Active', data: inProgress, color: tokens.colorPaletteBlueForeground2, icon: <PlayRegular /> },
+                { title: 'Pending', data: pending, color: tokens.colorNeutralForeground3, icon: <ClockRegular /> },
+                { title: 'Completed', data: completed, color: tokens.colorPaletteGreenForeground1, icon: <CheckmarkCircleRegular /> }
             ].map(group => {
                 if (group.data.length === 0) return null
                 return (
-                    <div key={group.title} className="space-y-2">
-                        <h4 className={`text-sm font-bold uppercase tracking-wider ${group.color} flex items-center gap-2`}>
-                            {group.title === 'Active' && <Play className="h-4 w-4" />}
-                            {group.title === 'Pending' && <Clock className="h-4 w-4" />}
-                            {group.title === 'Completed' && <CheckCircle className="h-4 w-4" />}
+                    <div key={group.title}>
+                        <div className={styles.groupTitle} style={{ color: group.color }}>
+                            {group.icon}
                             {group.title} ({group.data.length})
-                        </h4>
-                        <div className="rounded-md border bg-card">
+                        </div>
+                        <Card>
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-10"></TableHead>
-                                        <TableHead className="w-[140px]">WO #</TableHead>
-                                        <TableHead>Title</TableHead>
-                                        <TableHead>Prioriy</TableHead>
-                                        <TableHead>Items</TableHead>
-                                        <TableHead>Action</TableHead>
+                                        <TableHeaderCell style={{ width: '40px' }}></TableHeaderCell>
+                                        <TableHeaderCell style={{ width: '120px' }}>WO #</TableHeaderCell>
+                                        <TableHeaderCell>Title</TableHeaderCell>
+                                        <TableHeaderCell>Prioriy</TableHeaderCell>
+                                        <TableHeaderCell>Items</TableHeaderCell>
+                                        <TableHeaderCell>Action</TableHeaderCell>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {group.data.map(wo => (
                                         <>
-                                            <TableRow key={wo.id} className="hover:bg-muted/50">
+                                            <TableRow key={wo.id} style={{ backgroundColor: tokens.colorNeutralBackground1 }}>
                                                 <TableCell>
-                                                    {/* Status Indicator */}
-                                                    <div className={`w-2 h-2 rounded-full ${wo.status === 'IN_PROGRESS' ? 'bg-blue-500 animate-pulse' :
-                                                        wo.status === 'COMPLETED' ? 'bg-green-500' : 'bg-gray-300'
-                                                        }`} />
+                                                    <div style={{
+                                                        width: '8px', height: '8px', borderRadius: '50%',
+                                                        backgroundColor: wo.status === 'IN_PROGRESS' ? tokens.colorPaletteBlueBackground2 :
+                                                            wo.status === 'COMPLETED' ? tokens.colorPaletteGreenBackground1 : tokens.colorNeutralBackground4
+                                                    }} />
                                                 </TableCell>
-                                                <TableCell className="font-mono font-medium">{wo.workOrderNumber}</TableCell>
+                                                <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>{wo.workOrderNumber}</TableCell>
                                                 <TableCell>
-                                                    <div className="font-medium">{wo.title}</div>
-                                                    {wo.description && <div className="text-xs text-muted-foreground">{wo.description}</div>}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline" className="text-xs">{wo.priority}</Badge>
+                                                    <div style={{ fontWeight: 500 }}>{wo.title}</div>
+                                                    {wo.description && <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{wo.description}</Text>}
                                                 </TableCell>
                                                 <TableCell>
-                                                    {/* Items Summary or Expansion? 
-                                                    User said "table with two groups... and only WO related to process"
-                                                    But also "underneath it shows table...".
-                                                    If I list WOs here, I should probably show their items too? 
-                                                    Or just list WOs? 
-                                                    "shows table... with two groups pending and active" -> List of WOs.
-                                                    The items are likely needed to be seen to be worked on.
-                                                    I'll render items inline or provide a sub-expand.
-                                                 */}
-                                                    <div className="text-xs bg-slate-100 rounded px-2 py-1 inline-block">
-                                                        {wo.items.filter(i => i.status === 'COMPLETED').length} / {wo.items.length} Items done
-                                                    </div>
+                                                    <Badge appearance="outline">{wo.priority}</Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {/* Actions */}
-                                                    <div className="flex gap-2">
+                                                    <Badge shape="rounded" appearance="tint" color="brand">
+                                                        {wo.items.filter(i => i.status === 'COMPLETED').length} / {wo.items.length} done
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className={styles.actionButtons}>
                                                         {wo.status === 'PENDING' && (
-                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-blue-600" onClick={() => handleStatusChange(wo, 'IN_PROGRESS')}>
-                                                                <Play className="h-4 w-4" />
-                                                            </Button>
+                                                            <Button appearance="subtle" icon={<PlayRegular />} onClick={() => handleStatusChange(wo, 'IN_PROGRESS')} title="Start" />
                                                         )}
                                                         {wo.status === 'IN_PROGRESS' && (
                                                             <>
-                                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-green-600" onClick={() => handleStatusChange(wo, 'COMPLETED')}>
-                                                                    <CheckCircle className="h-4 w-4" />
-                                                                </Button>
-                                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-600" onClick={() => handleStatusChange(wo, 'CANCELLED')}>
-                                                                    <XCircle className="h-4 w-4" />
-                                                                </Button>
+                                                                <Button appearance="subtle" icon={<CheckmarkCircleRegular />} style={{ color: tokens.colorPaletteGreenForeground1 }} onClick={() => handleStatusChange(wo, 'COMPLETED')} title="Complete" />
+                                                                <Button appearance="subtle" icon={<DeleteRegular />} style={{ color: tokens.colorPaletteRedForeground1 }} onClick={() => handleStatusChange(wo, 'CANCELLED')} title="Cancel" />
                                                             </>
                                                         )}
                                                         <Link href={`/projects/${projectId}/work-orders/${wo.id}`} title="View Details">
-                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-600" type="button">
-                                                                <FileText className="h-4 w-4" />
-                                                            </Button>
+                                                            <Button appearance="subtle" icon={<DocumentRegular />} />
                                                         </Link>
                                                         <Link href={`/projects/${projectId}/work-orders/${wo.id}/print`} target="_blank" title="Print Work Order">
-                                                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-gray-600" type="button">
-                                                                <Printer className="h-4 w-4" />
-                                                            </Button>
+                                                            <Button appearance="subtle" icon={<PrintRegular />} />
                                                         </Link>
                                                         <DownloadDrawingsButton
                                                             workOrderId={wo.id}
                                                             workOrderNumber={wo.workOrderNumber}
-                                                            className="h-8 w-8 p-0 text-gray-600"
                                                             showText={false}
+                                                            iconOnly
                                                         />
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
-                                            {/* Inline Items Table if Active? User wants to see items to cut presumably. */}
+
                                             {(wo.status === 'IN_PROGRESS' || wo.status === 'PENDING') && (
-                                                <TableRow className="bg-muted/10">
-                                                    <TableCell colSpan={6} className="p-0">
-                                                        <div className="px-4 py-2 border-l-4 border-l-transparent hover:border-l-blue-200 transition-colors">
+                                                <TableRow key={`${wo.id}-items`}>
+                                                    <TableCell colSpan={6} style={{ padding: 0 }}>
+                                                        <div className={styles.nestedTable}>
                                                             <Table>
-                                                                <TableHeader className="invisible h-0"><TableRow><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead></TableRow></TableHeader>
                                                                 <TableBody>
                                                                     {wo.items.map((item, idx) => (
-                                                                        <TableRow key={item.id} className="border-0 h-8">
-                                                                            <TableCell className="py-1 w-10">
+                                                                        <TableRow key={item.id} style={{ borderBottom: 'none' }}>
+                                                                            <TableCell style={{ width: '40px' }}>
                                                                                 {wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS' && item.status !== 'COMPLETED' && (
                                                                                     <Checkbox
                                                                                         checked={selectedBatchItemIds.includes(item.id)}
-                                                                                        onCheckedChange={(checked) => {
-                                                                                            if (checked) setSelectedBatchItemIds(prev => [...prev, item.id])
+                                                                                        onChange={(e, d) => {
+                                                                                            if (d.checked) setSelectedBatchItemIds(prev => [...prev, item.id])
                                                                                             else setSelectedBatchItemIds(prev => prev.filter(id => id !== item.id))
                                                                                         }}
                                                                                     />
                                                                                 )}
                                                                             </TableCell>
-                                                                            <TableCell className="py-1 font-mono text-xs w-8">{idx + 1}</TableCell>
-                                                                            <TableCell className="py-1 text-sm">
+                                                                            <TableCell style={{ width: '40px', fontFamily: 'monospace', fontSize: '12px' }}>{idx + 1}</TableCell>
+                                                                            <TableCell>
                                                                                 {item.piece
-                                                                                    ? <span className="font-semibold">{item.piece.part.partNumber} #{item.piece.pieceNumber}</span>
+                                                                                    ? <span style={{ fontWeight: 600 }}>{item.piece.part.partNumber} #{item.piece.pieceNumber}</span>
                                                                                     : item.assembly ? item.assembly.name
                                                                                         : item.platePart ? item.platePart.partNumber
                                                                                             : '-'}
                                                                             </TableCell>
-                                                                            <TableCell className="py-1 text-xs text-muted-foreground">{item.notes}</TableCell>
-                                                                            <TableCell className="py-1 text-right w-24">
+                                                                            <TableCell>
+                                                                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{item.notes || '-'}</Text>
+                                                                            </TableCell>
+                                                                            <TableCell style={{ textAlign: 'right', width: '100px' }}>
                                                                                 {item.status !== 'COMPLETED' && wo.status === 'IN_PROGRESS' && (
-                                                                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleItemComplete(item.id)}>
-                                                                                        {loading === item.id ? "..." : <Check className="h-3 w-3" />}
+                                                                                    <Button appearance="subtle" size="small" icon={loading === item.id ? undefined : <CheckmarkRegular />} onClick={() => handleItemComplete(item.id)}>
+                                                                                        {loading === item.id ? "..." : ""}
                                                                                     </Button>
                                                                                 )}
-                                                                                {item.status === 'COMPLETED' && <Check className="h-3 w-3 text-green-500 ml-auto" />}
+                                                                                {item.status === 'COMPLETED' && <CheckmarkRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
                                                                             </TableCell>
                                                                         </TableRow>
                                                                     ))}
@@ -355,72 +477,60 @@ function WorkOrderTable({
                                     ))}
                                 </TableBody>
                             </Table>
-                        </div>
+                        </Card>
                     </div>
                 )
             })}
 
             {activeWoForComplete && (
-                <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
-                    <DialogContent className="max-w-lg">
-                        <DialogHeader>
+                <Dialog open={completeDialogOpen} onOpenChange={(e, data) => setCompleteDialogOpen(data.open)}>
+                    <DialogSurface>
+                        <DialogBody>
                             <DialogTitle>Complete Cutting Work Order</DialogTitle>
-                            {/* Same Dialog Content as before */}
-                            <DialogDescription>
-                                Select pieces that need drilling/machining. Other pieces will go directly to welding.
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                            <div className="text-sm text-muted-foreground">
-                                {activeWoForComplete.items.filter(i => i.piece).length} pieces in this work order
+                            <div style={{ margin: '12px 0' }}>
+                                <Text>Select pieces that need drilling/machining. Other pieces will go directly to welding.</Text>
                             </div>
-
-                            <div className="space-y-2">
-                                {activeWoForComplete.items.filter(i => i.piece).map(item => (
-                                    <div
-                                        key={item.id}
-                                        className={`flex items-center gap-3 p-3 rounded-lg border ${machinedPieceIds.includes(item.id)
-                                            ? 'bg-cyan-50 border-cyan-300'
-                                            : 'bg-background'
-                                            }`}
-                                    >
-                                        <Checkbox
-                                            checked={machinedPieceIds.includes(item.id)}
-                                            onCheckedChange={() => toggleMachining(item.id)}
-                                        />
-                                        <div className="flex-1">
-                                            <span className="font-mono font-medium">
-                                                {item.piece!.part.partNumber} #{item.piece!.pieceNumber}
-                                            </span>
+                            <DialogContent>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                                        {activeWoForComplete.items.filter(i => i.piece).length} pieces in this work order
+                                    </Text>
+                                    {activeWoForComplete.items.filter(i => i.piece).map(item => (
+                                        <div
+                                            key={item.id}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: tokens.borderRadiusMedium,
+                                                border: `1px solid ${machinedPieceIds.includes(item.id) ? tokens.colorPaletteTealBorderActive : tokens.colorNeutralStroke1}`,
+                                                backgroundColor: machinedPieceIds.includes(item.id) ? tokens.colorPaletteRedBackground1 : undefined
+                                            }}
+                                        >
+                                            <Checkbox
+                                                checked={machinedPieceIds.includes(item.id)}
+                                                onChange={() => toggleMachining(item.id)}
+                                            />
+                                            <div style={{ flex: 1 }}>
+                                                <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>
+                                                    {item.piece!.part.partNumber} #{item.piece!.pieceNumber}
+                                                </span>
+                                            </div>
+                                            <Badge appearance="outline" color={machinedPieceIds.includes(item.id) ? 'brand' : 'important'}>
+                                                {machinedPieceIds.includes(item.id) ? '→ Machining' : '→ Welding'}
+                                            </Badge>
                                         </div>
-                                        <Badge variant="outline" className={
-                                            machinedPieceIds.includes(item.id)
-                                                ? 'bg-cyan-100 text-cyan-800'
-                                                : 'bg-orange-100 text-orange-800'
-                                        }>
-                                            {machinedPieceIds.includes(item.id) ? '→ Machining' : '→ Welding'}
-                                        </Badge>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setCompleteDialogOpen(false)}>Cancel</Button>
-                            <Button onClick={handleCompleteCuttingWO} disabled={loading === activeWoForComplete.id}>
-                                Complete & Create WOs
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
+                                    ))}
+                                </div>
+                            </DialogContent>
+                            <DialogActions>
+                                <Button appearance="secondary" onClick={() => setCompleteDialogOpen(false)}>Cancel</Button>
+                                <Button appearance="primary" onClick={handleCompleteCuttingWO} disabled={loading === activeWoForComplete.id}>
+                                    Complete & Create WOs
+                                </Button>
+                            </DialogActions>
+                        </DialogBody>
+                    </DialogSurface>
                 </Dialog>
             )}
 
-            {
-                // Note: We need to find *which* items correspond to the selected IDs for the Dialog
-                // Since we filtered `allActiveCuttingItems` above, we can pass relevant ones.
-                // But for `projectId` we can pick one (assuming same project in context).
-            }
             <BatchCutDialog
                 open={batchCutDialogOpen}
                 onOpenChange={setBatchCutDialogOpen}
@@ -432,7 +542,6 @@ function WorkOrderTable({
                 }}
             />
 
-            {/* Material Prep Dialog */}
             {activeWoForComplete && (
                 <MaterialPrepDialog
                     open={materialPrepDialogOpen}
@@ -449,6 +558,7 @@ function WorkOrderTable({
 }
 
 function ProcessCard({ type, workOrders, projectId }: { type: string, workOrders: WorkOrder[], projectId: string }) {
+    const styles = useStyles()
     const [expanded, setExpanded] = useState(false)
 
     // Stats
@@ -457,68 +567,61 @@ function ProcessCard({ type, workOrders, projectId }: { type: string, workOrders
     const active = workOrders.filter(w => w.status === 'IN_PROGRESS').length
     const completed = workOrders.filter(w => w.status === 'COMPLETED').length
 
-    // Overall Process Completion (based on item status?) Or WO status? 
-    // User said "percentage of total process finished". Usually Item completion is more accurate.
     const totalItems = workOrders.reduce((sum, w) => sum + w.items.length, 0)
     const completedItems = workOrders.reduce((sum, w) => sum + w.items.filter(i => i.status === 'COMPLETED').length, 0)
     const progress = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
 
-    const colorClass = TYPE_COLORS[type] || 'bg-gray-100 text-gray-800'
+    const colorBg = TYPE_COLORS[type] || tokens.colorNeutralBackground3
 
     return (
-        <Card className={`bg-muted/5 border-l-4 overflow-hidden transition-all duration-200 ${expanded ? 'ring-2 ring-primary ring-offset-2' : 'hover:shadow-md'}`}>
-            <div
-                className="cursor-pointer"
-                onClick={() => setExpanded(!expanded)}
-            >
-                <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                    {/* 1. Title */}
-                    <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${colorClass} bg-opacity-20`}>
-                            <Layers className="h-6 w-6" />
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-lg">{type.replace('_', ' ')}</h3>
-                            <p className="text-xs text-muted-foreground">{total} Orders</p>
-                        </div>
+        <Card className={`${styles.processCard} ${expanded ? styles.cardExpanded : ''}`} style={{ padding: 0 }}>
+            <div className={styles.cardHeader} onClick={() => setExpanded(!expanded)}>
+                {/* 1. Title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div className={styles.iconBox} style={{ backgroundColor: colorBg }}>
+                        <ClipboardTaskRegular fontSize={24} />
                     </div>
+                    <div>
+                        <Title3>{type.replace('_', ' ')}</Title3>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{total} Orders</Text>
+                    </div>
+                </div>
 
-                    {/* 2. Stats Grid */}
-                    <div className="flex gap-6 justify-center text-sm">
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-gray-500">{pending}</div>
-                            <div className="text-xs text-muted-foreground uppercase">Pending</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-blue-600">{active}</div>
-                            <div className="text-xs text-muted-foreground uppercase">Active</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="font-bold text-lg text-green-600">{completed}</div>
-                            <div className="text-xs text-muted-foreground uppercase">Done</div>
-                        </div>
+                {/* 2. Stats Grid */}
+                <div className={styles.statsGrid}>
+                    <div className={styles.statItem}>
+                        <div style={{ fontWeight: 700, fontSize: '18px', color: tokens.colorNeutralForeground3 }}>{pending}</div>
+                        <Text size={100} style={{ textTransform: 'uppercase' }}>Pending</Text>
                     </div>
+                    <div className={styles.statItem}>
+                        <div style={{ fontWeight: 700, fontSize: '18px', color: tokens.colorPaletteBlueForeground2 }}>{active}</div>
+                        <Text size={100} style={{ textTransform: 'uppercase' }}>Active</Text>
+                    </div>
+                    <div className={styles.statItem}>
+                        <div style={{ fontWeight: 700, fontSize: '18px', color: tokens.colorPaletteGreenForeground1 }}>{completed}</div>
+                        <Text size={100} style={{ textTransform: 'uppercase' }}>Done</Text>
+                    </div>
+                </div>
 
-                    {/* 3. Progress */}
-                    <div className="space-y-1">
-                        <div className="flex justify-between text-xs font-medium">
-                            <span>Process Completion</span>
-                            <span>{progress}%</span>
-                        </div>
-                        <Progress value={progress} className="h-2" />
-                        <p className="text-xs text-muted-foreground text-right">{completedItems} / {totalItems} items</p>
+                {/* 3. Progress */}
+                <div className={styles.progressSection}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 500 }}>
+                        <span>Completion</span>
+                        <span>{progress}%</span>
                     </div>
+                    <ProgressBar value={progress / 100} thickness="medium" color="brand" />
+                    <Text size={100} align="end" style={{ color: tokens.colorNeutralForeground3 }}>{completedItems} / {totalItems} items</Text>
+                </div>
 
-                    {/* 4. Icon */}
-                    <div className="flex justify-end">
-                        {expanded ? <ChevronDown className="h-6 w-6 text-muted-foreground" /> : <ChevronRight className="h-6 w-6 text-muted-foreground" />}
-                    </div>
+                {/* 4. Icon */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    {expanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
                 </div>
             </div>
 
             {/* Expanded Content */}
             {expanded && (
-                <div className="bg-muted/50 border-t p-4">
+                <div className={styles.tableContainer}>
                     <WorkOrderTable workOrders={workOrders} type={type} projectId={projectId} />
                 </div>
             )}
@@ -531,9 +634,9 @@ function ProcessCard({ type, workOrders, projectId }: { type: string, workOrders
 export function WorkOrdersList({ workOrders }: WorkOrdersListProps) {
     if (workOrders.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground border rounded-lg border-dashed">
-                <ClipboardList className="mx-auto h-12 w-12 text-gray-300 opacity-50" />
-                <h3 className="mt-2 text-sm font-semibold">No work orders</h3>
+            <div style={{ textAlign: 'center', padding: '48px', border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
+                <ClipboardTaskRegular fontSize={48} style={{ opacity: 0.5, color: tokens.colorNeutralForeground3 }} />
+                <div style={{ marginTop: '8px', fontWeight: 600 }}>No work orders</div>
             </div>
         )
     }
@@ -545,10 +648,7 @@ export function WorkOrdersList({ workOrders }: WorkOrdersListProps) {
         grouped[wo.type].push(wo)
     })
 
-    // Sort types or iterate specific order?
-    // Use ORDERED_PROCESSES and filter
     const sortedTypes = ORDERED_PROCESSES.filter(t => grouped[t])
-    // Add any remaining types
     Object.keys(grouped).forEach(t => {
         if (!sortedTypes.includes(t)) sortedTypes.push(t)
     })
@@ -556,16 +656,10 @@ export function WorkOrdersList({ workOrders }: WorkOrdersListProps) {
     const projectId = workOrders[0]?.projectId || ''
 
     return (
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {sortedTypes.map(type => (
                 <ProcessCard key={type} type={type} workOrders={grouped[type]} projectId={projectId} />
             ))}
         </div>
     )
-}
-
-// Optional: Keep Summary if needed, or remove? 
-// User asked for stats IN the cards. So main summary might be redundant but okay to keep.
-export function WorkOrderSummary({ workOrders }: WorkOrdersListProps) {
-    return null // Disabled as requested stats are now in cards
 }

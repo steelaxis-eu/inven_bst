@@ -1,40 +1,42 @@
 "use client"
 
 import * as React from "react"
-import { Moon, Sun } from "lucide-react"
+import { WeatherMoonRegular, WeatherSunnyRegular, LaptopRegular } from "@fluentui/react-icons"
 import { useTheme } from "next-themes"
-
-import { Button } from "@/components/ui/button"
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+    Menu,
+    MenuTrigger,
+    MenuList,
+    MenuItem,
+    MenuPopover,
+    Button,
+} from "@fluentui/react-components"
 
 export function ModeToggle() {
-    const { setTheme } = useTheme()
+    const { setTheme, theme } = useTheme()
+
+    const icon = theme === 'dark' ? <WeatherMoonRegular /> : <WeatherSunnyRegular />
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                    <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                    <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                    <span className="sr-only">Toggle theme</span>
+        <Menu>
+            <MenuTrigger disableButtonEnhancement>
+                <Button appearance="subtle" icon={icon} aria-label="Toggle theme">
+                    <span style={{ display: 'none' }}>Toggle theme</span>
                 </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTheme("light")}>
-                    Light
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("dark")}>
-                    Dark
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTheme("system")}>
-                    System
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+            </MenuTrigger>
+            <MenuPopover>
+                <MenuList>
+                    <MenuItem icon={<WeatherSunnyRegular />} onClick={() => setTheme("light")}>
+                        Light
+                    </MenuItem>
+                    <MenuItem icon={<WeatherMoonRegular />} onClick={() => setTheme("dark")}>
+                        Dark
+                    </MenuItem>
+                    <MenuItem icon={<LaptopRegular />} onClick={() => setTheme("system")}>
+                        System
+                    </MenuItem>
+                </MenuList>
+            </MenuPopover>
+        </Menu>
     )
 }

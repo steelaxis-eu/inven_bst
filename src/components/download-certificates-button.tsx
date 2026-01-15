@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { Button, Spinner } from "@fluentui/react-components"
 import { toast } from "sonner"
-import { Loader2, Download } from "lucide-react"
+import { ArrowDownloadRegular } from "@fluentui/react-icons"
 
 interface DownloadCertificatesButtonProps {
     projectId: string
@@ -47,18 +47,12 @@ export function DownloadCertificatesButton({ projectId, projectNumber, disabled 
     }
 
     return (
-        <Button onClick={handleDownload} disabled={disabled || isLoading}>
-            {isLoading ? (
-                <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Preparing...
-                </>
-            ) : (
-                <>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Certs (ZIP)
-                </>
-            )}
+        <Button
+            onClick={handleDownload}
+            disabled={disabled || isLoading}
+            icon={isLoading ? <Spinner size="tiny" /> : <ArrowDownloadRegular />}
+        >
+            {isLoading ? "Preparing..." : "Download Certs (ZIP)"}
         </Button>
     )
 }

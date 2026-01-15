@@ -1,23 +1,90 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
+import {
+    Button,
+    Input,
+    Card,
+    CardHeader,
+    CardPreview,
+    Text,
+    Title3,
+    makeStyles,
+    tokens,
+    TabList,
+    Tab,
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Table,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    TableBody,
+    TableCell,
+    Field,
+    Badge,
+    SelectTabEventHandler,
+    TabValue
+} from "@fluentui/react-components"
+import {
+    AddRegular,
+    DeleteRegular,
+    EditRegular,
+    SaveRegular
+} from "@fluentui/react-icons"
 import { createStandardProfile, deleteStandardProfile } from "@/app/actions/inventory"
 import { createSteelProfile, deleteSteelProfile } from "@/app/actions/profiles"
 import { createProfileShape, deleteProfileShape } from "@/app/actions/shapes"
 import { updateGrade } from "@/app/actions/grades"
 import { createSupplier, updateSupplier, deleteSupplier } from "@/app/actions/suppliers"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { toast } from "sonner"
-import { Pencil, Trash2 } from "lucide-react"
-
 import { updateGlobalSettings } from "@/app/actions/settings"
+import { toast } from "sonner"
+
+const useStyles = makeStyles({
+    root: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+        padding: '24px',
+    },
+    card: {
+        height: 'fit-content',
+    },
+    tableContainer: {
+        overflowX: 'auto',
+    },
+    actions: {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '8px',
+        paddingTop: '16px',
+    },
+    dialogContent: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    gridTwo: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+    },
+    codeSnippet: {
+        backgroundColor: tokens.colorNeutralBackground3,
+        padding: '2px 6px',
+        borderRadius: tokens.borderRadiusSmall,
+        fontFamily: 'monospace',
+    },
+    tabList: {
+        overflowX: 'auto',
+        paddingBottom: '4px',
+    }
+})
 
 interface SettingsClientProps {
     initialShapes: any[]
@@ -29,6 +96,9 @@ interface SettingsClientProps {
 }
 
 export function SettingsClient({ initialShapes, initialGrades, initialStandardProfiles, initialSteelProfiles, initialSuppliers, initialGlobalSettings }: SettingsClientProps) {
+    const styles = useStyles()
+    const [selectedTab, setSelectedTab] = useState<TabValue>("profiles")
+
     // Standard Profile State
     const [profileDialogOpen, setProfileDialogOpen] = useState(false)
     const [newProfile, setNewProfile] = useState({ type: '', dimensions: '', weight: '', area: '' })
@@ -59,6 +129,10 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
     // Global Settings State
     const [settings, setSettings] = useState(initialGlobalSettings || {})
     const [savingSettings, setSavingSettings] = useState(false)
+
+    const handleTabSelect: SelectTabEventHandler = (e, data) => {
+        setSelectedTab(data.value)
+    }
 
     const handleSaveGlobalSettings = async () => {
         setSavingSettings(true)
@@ -252,403 +326,475 @@ export function SettingsClient({ initialShapes, initialGrades, initialStandardPr
     }
 
     return (
-        <Tabs defaultValue="profiles" className="space-y-4">
-            <TabsList className="flex w-full overflow-x-auto md:grid md:grid-cols-6 h-auto">
-                <TabsTrigger value="profiles">Active Profiles</TabsTrigger>
-                <TabsTrigger value="shapes">Shapes</TabsTrigger>
-                <TabsTrigger value="catalog">Standard Catalog</TabsTrigger>
-                <TabsTrigger value="grades">Grades</TabsTrigger>
-                <TabsTrigger value="suppliers">Suppliers</TabsTrigger>
-                <TabsTrigger value="system">Numbering & System</TabsTrigger>
-            </TabsList>
+        <div className={styles.root}>
+            <TabList
+                selectedValue={selectedTab}
+                onTabSelect={handleTabSelect}
+                className={styles.tabList}
+            >
+                <Tab value="profiles">Active Profiles</Tab>
+                <Tab value="shapes">Shapes</Tab>
+                <Tab value="catalog">Standard Catalog</Tab>
+                <Tab value="grades">Grades</Tab>
+                <Tab value="suppliers">Suppliers</Tab>
+                <Tab value="system">Numbering & System</Tab>
+            </TabList>
 
-            <TabsContent value="profiles">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Active Profiles</CardTitle>
-                        <CardDescription>Profiles currently used in your inventory.</CardDescription>
-                        <div className="flex justify-end">
-                            <Dialog open={steelProfileDialogOpen} onOpenChange={setSteelProfileDialogOpen}>
-                                <DialogTrigger asChild><Button size="sm">Add Manual Profile</Button></DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader><DialogTitle>Add Manual Profile</DialogTitle></DialogHeader>
-                                    <div className="grid gap-4 py-4">
-                                        <div className="grid gap-2"><Label>Type</Label><Input placeholder="e.g. HEA" value={newSteelProfile.type} onChange={e => setNewSteelProfile({ ...newSteelProfile, type: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Dimensions</Label><Input placeholder="e.g. 100" value={newSteelProfile.dimensions} onChange={e => setNewSteelProfile({ ...newSteelProfile, dimensions: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Weight (kg/m)</Label><Input type="number" step="0.01" value={newSteelProfile.weight} onChange={e => setNewSteelProfile({ ...newSteelProfile, weight: e.target.value })} /></div>
-                                    </div>
-                                    <DialogFooter><Button onClick={handleAddSteelProfile} disabled={loadingSteelProfile}>{loadingSteelProfile ? 'Saving...' : 'Add'}</Button></DialogFooter>
-                                </DialogContent>
+            {selectedTab === "profiles" && (
+                <Card className={styles.card}>
+                    <CardHeader
+                        header={<Title3>Active Profiles</Title3>}
+                        description={<Text>Profiles currently used in your inventory.</Text>}
+                        action={
+                            <Dialog open={steelProfileDialogOpen} onOpenChange={(e, data) => setSteelProfileDialogOpen(data.open)}>
+                                <DialogTrigger disableButtonEnhancement>
+                                    <Button appearance="primary" icon={<AddRegular />}>Add Manual Profile</Button>
+                                </DialogTrigger>
+                                <DialogSurface>
+                                    <DialogBody>
+                                        <DialogTitle>Add Manual Profile</DialogTitle>
+                                        <DialogContent className={styles.dialogContent}>
+                                            <Field label="Type">
+                                                <Input placeholder="e.g. HEA" value={newSteelProfile.type} onChange={(e, d) => setNewSteelProfile({ ...newSteelProfile, type: d.value })} />
+                                            </Field>
+                                            <Field label="Dimensions">
+                                                <Input placeholder="e.g. 100" value={newSteelProfile.dimensions} onChange={(e, d) => setNewSteelProfile({ ...newSteelProfile, dimensions: d.value })} />
+                                            </Field>
+                                            <Field label="Weight (kg/m)">
+                                                <Input type="number" step="0.01" value={newSteelProfile.weight} onChange={(e, d) => setNewSteelProfile({ ...newSteelProfile, weight: d.value })} />
+                                            </Field>
+                                        </DialogContent>
+                                        <DialogActions>
+                                            <Button appearance="secondary" onClick={() => setSteelProfileDialogOpen(false)}>Cancel</Button>
+                                            <Button appearance="primary" onClick={handleAddSteelProfile} disabled={loadingSteelProfile}>
+                                                {loadingSteelProfile ? 'Saving...' : 'Add'}
+                                            </Button>
+                                        </DialogActions>
+                                    </DialogBody>
+                                </DialogSurface>
                             </Dialog>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="max-h-[600px] overflow-y-auto border rounded">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight (kg/m)</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                                    <TableBody>
-                                        {initialSteelProfiles.map(p => (
-                                            <TableRow key={p.id}>
-                                                <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter}</TableCell>
-                                                <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteSteelProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </TabsContent>
+                        }
+                    />
 
-            <TabsContent value="shapes">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Profile Shapes</CardTitle>
-                        <CardDescription>Define custom shapes with variables.</CardDescription>
-                        <div className="flex justify-end">
-                            <Dialog open={shapeDialogOpen} onOpenChange={setShapeDialogOpen}>
-                                <DialogTrigger asChild><Button size="sm">Add Shape</Button></DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader><DialogTitle>Add Custom Shape</DialogTitle></DialogHeader>
-                                    <div className="grid gap-4 py-4">
-                                        <div className="grid gap-2"><Label>ID (Unique)</Label><Input placeholder="TRIANGLE" value={newShape.id} onChange={e => setNewShape({ ...newShape, id: e.target.value.toUpperCase() })} /></div>
-                                        <div className="grid gap-2"><Label>Name</Label><Input placeholder="Triangular Prism" value={newShape.name} onChange={e => setNewShape({ ...newShape, name: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Params (comma sep)</Label><Input placeholder="b, h" value={newShape.params} onChange={e => setNewShape({ ...newShape, params: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Formula</Label><Input placeholder="0.5 * b * h" value={newShape.formula} onChange={e => setNewShape({ ...newShape, formula: e.target.value })} /></div>
-                                    </div>
-                                    <DialogFooter><Button onClick={handleAddShape} disabled={loadingShape}>{loadingShape ? 'Saving...' : 'Add'}</Button></DialogFooter>
-                                </DialogContent>
-                            </Dialog>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Params</TableHead><TableHead>Formula</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                                <TableBody>
-                                    {initialShapes
-                                        // Hide system standard shapes (RHS, SHS, CHS and their variants)
-                                        .filter(s => !['RHS', 'SHS', 'CHS'].some(prefix => s.id.startsWith(prefix)))
-                                        .map(shape => (
-                                            <TableRow key={shape.id}>
-                                                <TableCell>{shape.id}</TableCell><TableCell>{shape.name}</TableCell>
-                                                <TableCell><div className="flex gap-1 flex-wrap">{(shape.params as string[]).map(p => <Badge key={p} variant="secondary" className="font-mono text-xs">{p}</Badge>)}</div></TableCell>
-                                                <TableCell className="font-mono text-sm">{shape.formula || '-'}</TableCell>
-                                                <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteShape(shape.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                            </TableRow>
-                                        ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-
-            <TabsContent value="catalog">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Standard Profile Catalog</CardTitle>
-                        <CardDescription>Predefined dimensions and weights.</CardDescription>
-                        <div className="flex justify-end">
-                            <Dialog open={profileDialogOpen} onOpenChange={setProfileDialogOpen}>
-                                <DialogTrigger asChild><Button size="sm">Add Profile</Button></DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader><DialogTitle>Add Standard Profile</DialogTitle></DialogHeader>
-                                    <div className="grid gap-4 py-4">
-                                        <div className="grid gap-2"><Label>Type</Label><Input placeholder="HEA" value={newProfile.type} onChange={e => setNewProfile({ ...newProfile, type: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Dimensions</Label><Input placeholder="e.g. 100" value={newProfile.dimensions} onChange={e => setNewProfile({ ...newProfile, dimensions: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Weight (kg/m)</Label><Input type="number" step="0.01" value={newProfile.weight} onChange={e => setNewProfile({ ...newProfile, weight: e.target.value })} /></div>
-                                        <div className="grid gap-2"><Label>Area (mm²)</Label><Input type="number" placeholder="Optional" value={newProfile.area} onChange={e => setNewProfile({ ...newProfile, area: e.target.value })} /></div>
-                                    </div>
-                                    <DialogFooter><Button onClick={handleAddProfile} disabled={loadingProfile}>{loadingProfile ? 'Saving...' : 'Add'}</Button></DialogFooter>
-                                </DialogContent>
-                            </Dialog>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="max-h-[600px] overflow-y-auto border rounded">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader><TableRow><TableHead>Type</TableHead><TableHead>Dimensions</TableHead><TableHead>Weight</TableHead><TableHead>Area</TableHead><TableHead></TableHead></TableRow></TableHeader>
-                                    <TableBody>
-                                        {initialStandardProfiles.map(p => (
-                                            <TableRow key={p.id}>
-                                                <TableCell>{p.type}</TableCell><TableCell>{p.dimensions}</TableCell><TableCell>{p.weightPerMeter ? p.weightPerMeter.toFixed(2) : '-'}</TableCell><TableCell>{p.crossSectionArea ? p.crossSectionArea.toFixed(2) : '-'}</TableCell>
-                                                <TableCell><Button variant="ghost" size="sm" onClick={() => handleDeleteProfile(p.id)} className="text-red-500 h-8 w-8 p-0">×</Button></TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </TabsContent>
-
-            <TabsContent value="grades">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Material Grades</CardTitle>
-                        <CardDescription>Define grades, densities, and scrap prices.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Grade Name</TableHead>
-                                        <TableHead>Density (kg/dm³)</TableHead>
-                                        <TableHead>Scrap Price (€/kg)</TableHead>
-                                        <TableHead>Action</TableHead>
+                    <div className={styles.tableContainer}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHeaderCell>Type</TableHeaderCell>
+                                    <TableHeaderCell>Dimensions</TableHeaderCell>
+                                    <TableHeaderCell>Weight (kg/m)</TableHeaderCell>
+                                    <TableHeaderCell>Action</TableHeaderCell>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {initialSteelProfiles.map(p => (
+                                    <TableRow key={p.id}>
+                                        <TableCell>{p.type}</TableCell>
+                                        <TableCell>{p.dimensions}</TableCell>
+                                        <TableCell>{p.weightPerMeter}</TableCell>
+                                        <TableCell>
+                                            <Button
+                                                appearance="subtle"
+                                                icon={<DeleteRegular />}
+                                                onClick={() => handleDeleteSteelProfile(p.id)}
+                                                style={{ color: tokens.colorPaletteRedForeground1 }}
+                                            />
+                                        </TableCell>
                                     </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {initialGrades.map(grade => (
-                                        <TableRow key={grade.id}>
-                                            <TableCell className="font-medium">{grade.name}</TableCell>
-                                            <TableCell>{grade.density}</TableCell>
-                                            <TableCell>{grade.scrapPrice ? `€${grade.scrapPrice.toFixed(2)}` : '-'}</TableCell>
-                                            <TableCell>
-                                                <Button variant="ghost" size="sm" onClick={() => handleEditGrade(grade)}>
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-
-                        <Dialog open={gradeDialogOpen} onOpenChange={setGradeDialogOpen}>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Edit Grade: {editingGrade?.name}</DialogTitle>
-                                </DialogHeader>
-                                <div className="grid gap-4 py-4">
-                                    <div className="grid gap-2">
-                                        <Label>Density (kg/dm³)</Label>
-                                        <Input type="number" step="0.01" value={gradeForm.density} onChange={e => setGradeForm({ ...gradeForm, density: e.target.value })} />
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label>Scrap Price (€/kg)</Label>
-                                        <Input type="number" step="0.01" value={gradeForm.scrapPrice} onChange={e => setGradeForm({ ...gradeForm, scrapPrice: e.target.value })} />
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button onClick={handleSaveGrade} disabled={loadingGrade}>
-                                        {loadingGrade ? 'Saving...' : 'Save Changes'}
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </CardContent>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </Card>
-            </TabsContent>
+            )}
 
-            <TabsContent value="suppliers">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Suppliers</CardTitle>
-                        <CardDescription>Manage material suppliers for inventory tracking.</CardDescription>
-                        <div className="flex justify-end">
-                            <Button size="sm" onClick={() => handleOpenSupplierDialog()}>Add Supplier</Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Code</TableHead>
-                                        <TableHead>Contact</TableHead>
-                                        <TableHead>Email</TableHead>
-                                        <TableHead>Phone</TableHead>
-                                        <TableHead></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {initialSuppliers.map(supplier => (
-                                        <TableRow key={supplier.id}>
-                                            <TableCell className="font-medium">{supplier.name}</TableCell>
-                                            <TableCell>{supplier.code || '-'}</TableCell>
-                                            <TableCell>{supplier.contact || '-'}</TableCell>
-                                            <TableCell>{supplier.email || '-'}</TableCell>
-                                            <TableCell>{supplier.phone || '-'}</TableCell>
+            {selectedTab === "shapes" && (
+                <Card className={styles.card}>
+                    <CardHeader
+                        header={<Title3>Profile Shapes</Title3>}
+                        description={<Text>Define custom shapes with variables.</Text>}
+                        action={
+                            <Dialog open={shapeDialogOpen} onOpenChange={(e, data) => setShapeDialogOpen(data.open)}>
+                                <DialogTrigger disableButtonEnhancement>
+                                    <Button appearance="primary" icon={<AddRegular />}>Add Shape</Button>
+                                </DialogTrigger>
+                                <DialogSurface>
+                                    <DialogBody>
+                                        <DialogTitle>Add Custom Shape</DialogTitle>
+                                        <DialogContent className={styles.dialogContent}>
+                                            <Field label="ID (Unique)">
+                                                <Input placeholder="TRIANGLE" value={newShape.id} onChange={(e, d) => setNewShape({ ...newShape, id: d.value.toUpperCase() })} />
+                                            </Field>
+                                            <Field label="Name">
+                                                <Input placeholder="Triangular Prism" value={newShape.name} onChange={(e, d) => setNewShape({ ...newShape, name: d.value })} />
+                                            </Field>
+                                            <Field label="Params (comma sep)">
+                                                <Input placeholder="b, h" value={newShape.params} onChange={(e, d) => setNewShape({ ...newShape, params: d.value })} />
+                                            </Field>
+                                            <Field label="Formula">
+                                                <Input placeholder="0.5 * b * h" value={newShape.formula} onChange={(e, d) => setNewShape({ ...newShape, formula: d.value })} />
+                                            </Field>
+                                        </DialogContent>
+                                        <DialogActions>
+                                            <Button appearance="secondary" onClick={() => setShapeDialogOpen(false)}>Cancel</Button>
+                                            <Button appearance="primary" onClick={handleAddShape} disabled={loadingShape}>
+                                                {loadingShape ? 'Saving...' : 'Add'}
+                                            </Button>
+                                        </DialogActions>
+                                    </DialogBody>
+                                </DialogSurface>
+                            </Dialog>
+                        }
+                    />
+
+                    <div className={styles.tableContainer}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHeaderCell>ID</TableHeaderCell>
+                                    <TableHeaderCell>Name</TableHeaderCell>
+                                    <TableHeaderCell>Params</TableHeaderCell>
+                                    <TableHeaderCell>Formula</TableHeaderCell>
+                                    <TableHeaderCell>Action</TableHeaderCell>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {initialShapes
+                                    .filter(s => !['RHS', 'SHS', 'CHS'].some(prefix => s.id.startsWith(prefix)))
+                                    .map(shape => (
+                                        <TableRow key={shape.id}>
+                                            <TableCell>{shape.id}</TableCell>
+                                            <TableCell>{shape.name}</TableCell>
                                             <TableCell>
-                                                <div className="flex gap-1">
-                                                    <Button variant="ghost" size="sm" onClick={() => handleOpenSupplierDialog(supplier)}>
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="sm" onClick={() => handleDeleteSupplier(supplier.id)} className="text-destructive">
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                                    {(shape.params as string[]).map(p => (
+                                                        <Badge key={p} appearance="filled" color="brand">{p}</Badge>
+                                                    ))}
                                                 </div>
                                             </TableCell>
-                                        </TableRow>
-                                    ))}
-                                    {initialSuppliers.length === 0 && (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                                No suppliers configured. Add one to get started.
+                                            <TableCell style={{ fontFamily: 'monospace' }}>{shape.formula || '-'}</TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    appearance="subtle"
+                                                    icon={<DeleteRegular />}
+                                                    onClick={() => handleDeleteShape(shape.id)}
+                                                    style={{ color: tokens.colorPaletteRedForeground1 }}
+                                                />
                                             </TableCell>
                                         </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                    ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </Card>
+            )}
 
-                        <Dialog open={supplierDialogOpen} onOpenChange={setSupplierDialogOpen}>
-                            <DialogContent className="sm:max-w-[500px]">
-                                <DialogHeader>
-                                    <DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle>
-                                </DialogHeader>
-                                <div className="grid gap-4 py-4">
-                                    <div className="grid gap-2">
-                                        <Label>Name *</Label>
-                                        <Input placeholder="Supplier name" value={supplierForm.name} onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })} />
+            {selectedTab === "catalog" && (
+                <Card className={styles.card}>
+                    <CardHeader
+                        header={<Title3>Standard Profile Catalog</Title3>}
+                        description={<Text>Predefined dimensions and weights.</Text>}
+                        action={
+                            <Dialog open={profileDialogOpen} onOpenChange={(e, data) => setProfileDialogOpen(data.open)}>
+                                <DialogTrigger disableButtonEnhancement>
+                                    <Button appearance="primary" icon={<AddRegular />}>Add Profile</Button>
+                                </DialogTrigger>
+                                <DialogSurface>
+                                    <DialogBody>
+                                        <DialogTitle>Add Standard Profile</DialogTitle>
+                                        <DialogContent className={styles.dialogContent}>
+                                            <Field label="Type">
+                                                <Input placeholder="HEA" value={newProfile.type} onChange={(e, d) => setNewProfile({ ...newProfile, type: d.value })} />
+                                            </Field>
+                                            <Field label="Dimensions">
+                                                <Input placeholder="e.g. 100" value={newProfile.dimensions} onChange={(e, d) => setNewProfile({ ...newProfile, dimensions: d.value })} />
+                                            </Field>
+                                            <Field label="Weight (kg/m)">
+                                                <Input type="number" step="0.01" value={newProfile.weight} onChange={(e, d) => setNewProfile({ ...newProfile, weight: d.value })} />
+                                            </Field>
+                                            <Field label="Area (mm²)">
+                                                <Input type="number" placeholder="Optional" value={newProfile.area} onChange={(e, d) => setNewProfile({ ...newProfile, area: d.value })} />
+                                            </Field>
+                                        </DialogContent>
+                                        <DialogActions>
+                                            <Button appearance="secondary" onClick={() => setProfileDialogOpen(false)}>Cancel</Button>
+                                            <Button appearance="primary" onClick={handleAddProfile} disabled={loadingProfile}>
+                                                {loadingProfile ? 'Saving...' : 'Add'}
+                                            </Button>
+                                        </DialogActions>
+                                    </DialogBody>
+                                </DialogSurface>
+                            </Dialog>
+                        }
+                    />
+
+                    <div className={styles.tableContainer}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHeaderCell>Type</TableHeaderCell>
+                                    <TableHeaderCell>Dimensions</TableHeaderCell>
+                                    <TableHeaderCell>Weight</TableHeaderCell>
+                                    <TableHeaderCell>Area</TableHeaderCell>
+                                    <TableHeaderCell>Action</TableHeaderCell>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {initialStandardProfiles.map(p => (
+                                    <TableRow key={p.id}>
+                                        <TableCell>{p.type}</TableCell>
+                                        <TableCell>{p.dimensions}</TableCell>
+                                        <TableCell>{p.weightPerMeter ? p.weightPerMeter.toFixed(2) : '-'}</TableCell>
+                                        <TableCell>{p.crossSectionArea ? p.crossSectionArea.toFixed(2) : '-'}</TableCell>
+                                        <TableCell>
+                                            <Button
+                                                appearance="subtle"
+                                                icon={<DeleteRegular />}
+                                                onClick={() => handleDeleteProfile(p.id)}
+                                                style={{ color: tokens.colorPaletteRedForeground1 }}
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </Card>
+            )}
+
+            {selectedTab === "grades" && (
+                <Card className={styles.card}>
+                    <CardHeader
+                        header={<Title3>Material Grades</Title3>}
+                        description={<Text>Define grades, densities, and scrap prices.</Text>}
+                    />
+                    <div className={styles.tableContainer}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHeaderCell>Grade Name</TableHeaderCell>
+                                    <TableHeaderCell>Density (kg/dm³)</TableHeaderCell>
+                                    <TableHeaderCell>Scrap Price (€/kg)</TableHeaderCell>
+                                    <TableHeaderCell>Action</TableHeaderCell>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {initialGrades.map(grade => (
+                                    <TableRow key={grade.id}>
+                                        <TableCell>{grade.name}</TableCell>
+                                        <TableCell>{grade.density}</TableCell>
+                                        <TableCell>{grade.scrapPrice ? `€${grade.scrapPrice.toFixed(2)}` : '-'}</TableCell>
+                                        <TableCell>
+                                            <Button appearance="subtle" icon={<EditRegular />} onClick={() => handleEditGrade(grade)} />
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    <Dialog open={gradeDialogOpen} onOpenChange={(e, data) => setGradeDialogOpen(data.open)}>
+                        <DialogSurface>
+                            <DialogBody>
+                                <DialogTitle>Edit Grade: {editingGrade?.name}</DialogTitle>
+                                <DialogContent className={styles.dialogContent}>
+                                    <Field label="Density (kg/dm³)">
+                                        <Input type="number" step="0.01" value={gradeForm.density} onChange={(e, d) => setGradeForm({ ...gradeForm, density: d.value })} />
+                                    </Field>
+                                    <Field label="Scrap Price (€/kg)">
+                                        <Input type="number" step="0.01" value={gradeForm.scrapPrice} onChange={(e, d) => setGradeForm({ ...gradeForm, scrapPrice: d.value })} />
+                                    </Field>
+                                </DialogContent>
+                                <DialogActions>
+                                    <Button appearance="secondary" onClick={() => setGradeDialogOpen(false)}>Cancel</Button>
+                                    <Button appearance="primary" onClick={handleSaveGrade} disabled={loadingGrade}>
+                                        {loadingGrade ? 'Saving...' : 'Save Changes'}
+                                    </Button>
+                                </DialogActions>
+                            </DialogBody>
+                        </DialogSurface>
+                    </Dialog>
+                </Card>
+            )}
+
+            {selectedTab === "suppliers" && (
+                <Card className={styles.card}>
+                    <CardHeader
+                        header={<Title3>Suppliers</Title3>}
+                        description={<Text>Manage material suppliers for inventory tracking.</Text>}
+                        action={
+                            <Button appearance="primary" icon={<AddRegular />} onClick={() => handleOpenSupplierDialog()}>Add Supplier</Button>
+                        }
+                    />
+                    <div className={styles.tableContainer}>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHeaderCell>Name</TableHeaderCell>
+                                    <TableHeaderCell>Code</TableHeaderCell>
+                                    <TableHeaderCell>Contact</TableHeaderCell>
+                                    <TableHeaderCell>Email</TableHeaderCell>
+                                    <TableHeaderCell>Phone</TableHeaderCell>
+                                    <TableHeaderCell>Action</TableHeaderCell>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {initialSuppliers.map(supplier => (
+                                    <TableRow key={supplier.id}>
+                                        <TableCell>{supplier.name}</TableCell>
+                                        <TableCell>{supplier.code || '-'}</TableCell>
+                                        <TableCell>{supplier.contact || '-'}</TableCell>
+                                        <TableCell>{supplier.email || '-'}</TableCell>
+                                        <TableCell>{supplier.phone || '-'}</TableCell>
+                                        <TableCell>
+                                            <div style={{ display: 'flex', gap: '4px' }}>
+                                                <Button appearance="subtle" icon={<EditRegular />} onClick={() => handleOpenSupplierDialog(supplier)} />
+                                                <Button appearance="subtle" icon={<DeleteRegular />} onClick={() => handleDeleteSupplier(supplier.id)} style={{ color: tokens.colorPaletteRedForeground1 }} />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {initialSuppliers.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={6} style={{ textAlign: 'center', padding: '32px' }}>
+                                            No suppliers configured. Add one to get started.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+
+                    <Dialog open={supplierDialogOpen} onOpenChange={(e, data) => setSupplierDialogOpen(data.open)}>
+                        <DialogSurface>
+                            <DialogBody>
+                                <DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle>
+                                <DialogContent className={styles.dialogContent}>
+                                    <Field label="Name *" required>
+                                        <Input placeholder="Supplier name" value={supplierForm.name} onChange={(e, d) => setSupplierForm({ ...supplierForm, name: d.value })} />
+                                    </Field>
+                                    <div className={styles.gridTwo}>
+                                        <Field label="Code">
+                                            <Input placeholder="SUP001" value={supplierForm.code} onChange={(e, d) => setSupplierForm({ ...supplierForm, code: d.value })} />
+                                        </Field>
+                                        <Field label="Contact">
+                                            <Input placeholder="Contact name" value={supplierForm.contact} onChange={(e, d) => setSupplierForm({ ...supplierForm, contact: d.value })} />
+                                        </Field>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="grid gap-2">
-                                            <Label>Code</Label>
-                                            <Input placeholder="SUP001" value={supplierForm.code} onChange={e => setSupplierForm({ ...supplierForm, code: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Contact</Label>
-                                            <Input placeholder="Contact name" value={supplierForm.contact} onChange={e => setSupplierForm({ ...supplierForm, contact: e.target.value })} />
-                                        </div>
+                                    <div className={styles.gridTwo}>
+                                        <Field label="Email">
+                                            <Input type="email" placeholder="email@example.com" value={supplierForm.email} onChange={(e, d) => setSupplierForm({ ...supplierForm, email: d.value })} />
+                                        </Field>
+                                        <Field label="Phone">
+                                            <Input placeholder="+371..." value={supplierForm.phone} onChange={(e, d) => setSupplierForm({ ...supplierForm, phone: d.value })} />
+                                        </Field>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="grid gap-2">
-                                            <Label>Email</Label>
-                                            <Input type="email" placeholder="email@example.com" value={supplierForm.email} onChange={e => setSupplierForm({ ...supplierForm, email: e.target.value })} />
-                                        </div>
-                                        <div className="grid gap-2">
-                                            <Label>Phone</Label>
-                                            <Input placeholder="+371..." value={supplierForm.phone} onChange={e => setSupplierForm({ ...supplierForm, phone: e.target.value })} />
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2">
-                                        <Label>Notes</Label>
-                                        <Input placeholder="Optional notes" value={supplierForm.notes} onChange={e => setSupplierForm({ ...supplierForm, notes: e.target.value })} />
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button onClick={handleSaveSupplier} disabled={loadingSupplier}>
+                                    <Field label="Notes">
+                                        <Input placeholder="Optional notes" value={supplierForm.notes} onChange={(e, d) => setSupplierForm({ ...supplierForm, notes: d.value })} />
+                                    </Field>
+                                </DialogContent>
+                                <DialogActions>
+                                    <Button appearance="secondary" onClick={() => setSupplierDialogOpen(false)}>Cancel</Button>
+                                    <Button appearance="primary" onClick={handleSaveSupplier} disabled={loadingSupplier}>
                                         {loadingSupplier ? 'Saving...' : (editingSupplier ? 'Update' : 'Create')}
                                     </Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </CardContent>
+                                </DialogActions>
+                            </DialogBody>
+                        </DialogSurface>
+                    </Dialog>
                 </Card>
-            </TabsContent>
+            )}
 
-            <TabsContent value="system">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Auto-Numbering & System Configuration</CardTitle>
-                        <CardDescription>
-                            Define formats for auto-generated IDs and global parameters. Use placeholders:
-                            <code className="bg-muted px-1 rounded mx-1">{'{YYYY}'}</code>
-                            <code className="bg-muted px-1 rounded mx-1">{'{YY}'}</code>
-                            <code className="bg-muted px-1 rounded mx-1">{'{MM}'}</code>
-                            <code className="bg-muted px-1 rounded mx-1">{'{DD}'}</code>
-                            <code className="bg-muted px-1 rounded mx-1">{'{SEQ}'}</code>
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
+            {selectedTab === "system" && (
+                <Card className={styles.card}>
+                    <CardHeader
+                        header={<Title3>Auto-Numbering & System Configuration</Title3>}
+                        description={
+                            <Text>
+                                Define formats for auto-generated IDs and global parameters. Use placeholders:
+                                <span className={styles.codeSnippet}>{'{YYYY}'}</span>
+                                <span className={styles.codeSnippet}>{'{YY}'}</span>
+                                <span className={styles.codeSnippet}>{'{MM}'}</span>
+                                <span className={styles.codeSnippet}>{'{DD}'}</span>
+                                <span className={styles.codeSnippet}>{'{SEQ}'}</span>
+                            </Text>
+                        }
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingTop: '16px' }}>
                         {/* NCR Settings */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
-                            <div className="col-span-1">
-                                <Label className="font-semibold text-lg">NCR Numbers</Label>
-                                <p className="text-sm text-muted-foreground">For Quality issues.</p>
-                            </div>
-                            <div className="col-span-1 md:col-span-2 grid gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Format</Label>
+                        <div style={{ paddingBottom: '16px', borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                            <Title3>NCR Numbers</Title3>
+                            <Text size={200} style={{ display: 'block', marginBottom: '8px' }}>For Quality issues.</Text>
+                            <div className={styles.gridTwo}>
+                                <Field label="Format">
                                     <Input
                                         value={settings.ncrFormat || ''}
-                                        onChange={(e) => setSettings({ ...settings, ncrFormat: e.target.value })}
+                                        onChange={(e, d) => setSettings({ ...settings, ncrFormat: d.value })}
                                         placeholder="NCR-{YYYY}-{SEQ}"
                                     />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Next Sequence Number</Label>
+                                </Field>
+                                <Field label="Next Sequence Number">
                                     <Input
                                         type="number"
                                         value={settings.ncrNextSeq || 1}
-                                        onChange={(e) => setSettings({ ...settings, ncrNextSeq: e.target.value })}
+                                        onChange={(e, d) => setSettings({ ...settings, ncrNextSeq: d.value })}
                                     />
-                                </div>
+                                </Field>
                             </div>
                         </div>
 
                         {/* Lot Settings */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
-                            <div className="col-span-1">
-                                <Label className="font-semibold text-lg">Lot IDs</Label>
-                                <p className="text-sm text-muted-foreground">For Inventory batches.</p>
-                            </div>
-                            <div className="col-span-1 md:col-span-2 grid gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Format</Label>
+                        <div style={{ paddingBottom: '16px', borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                            <Title3>Lot IDs</Title3>
+                            <Text size={200} style={{ display: 'block', marginBottom: '8px' }}>For Inventory batches.</Text>
+                            <div className={styles.gridTwo}>
+                                <Field label="Format">
                                     <Input
                                         value={settings.lotFormat || ''}
-                                        onChange={(e) => setSettings({ ...settings, lotFormat: e.target.value })}
+                                        onChange={(e, d) => setSettings({ ...settings, lotFormat: d.value })}
                                         placeholder="LOT-{YY}{MM}-{SEQ}"
                                     />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Next Sequence Number</Label>
+                                </Field>
+                                <Field label="Next Sequence Number">
                                     <Input
                                         type="number"
                                         value={settings.lotNextSeq || 1}
-                                        onChange={(e) => setSettings({ ...settings, lotNextSeq: e.target.value })}
+                                        onChange={(e, d) => setSettings({ ...settings, lotNextSeq: d.value })}
                                     />
-                                </div>
+                                </Field>
                             </div>
                         </div>
 
                         {/* Project Settings */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b pb-4">
-                            <div className="col-span-1">
-                                <Label className="font-semibold text-lg">Project Numbers</Label>
-                                <p className="text-sm text-muted-foreground">For new Projects.</p>
-                            </div>
-                            <div className="col-span-1 md:col-span-2 grid gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Format</Label>
+                        <div style={{ paddingBottom: '16px', borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                            <Title3>Project Numbers</Title3>
+                            <Text size={200} style={{ display: 'block', marginBottom: '8px' }}>For new Projects.</Text>
+                            <div className={styles.gridTwo}>
+                                <Field label="Format">
                                     <Input
                                         value={settings.projectFormat || ''}
-                                        onChange={(e) => setSettings({ ...settings, projectFormat: e.target.value })}
+                                        onChange={(e, d) => setSettings({ ...settings, projectFormat: d.value })}
                                         placeholder="P-{YY}-{SEQ}"
                                     />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Next Sequence Number</Label>
+                                </Field>
+                                <Field label="Next Sequence Number">
                                     <Input
                                         type="number"
                                         value={settings.projectNextSeq || 1}
-                                        onChange={(e) => setSettings({ ...settings, projectNextSeq: e.target.value })}
+                                        onChange={(e, d) => setSettings({ ...settings, projectNextSeq: d.value })}
                                     />
-                                </div>
+                                </Field>
                             </div>
                         </div>
 
-
-
-                        <div className="flex justify-end pt-4">
-                            <Button onClick={handleSaveGlobalSettings} disabled={savingSettings}>
+                        <div className={styles.actions}>
+                            <Button appearance="primary" icon={<SaveRegular />} onClick={handleSaveGlobalSettings} disabled={savingSettings}>
                                 {savingSettings ? 'Saving...' : 'Save Configuration'}
                             </Button>
                         </div>
-                    </CardContent>
+                    </div>
                 </Card>
-            </TabsContent>
-        </Tabs>
+            )}
+        </div>
     )
 }
-

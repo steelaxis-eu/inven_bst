@@ -1,11 +1,47 @@
 'use client'
 
-import { Button } from "@/components/ui/button"
+import { Button, makeStyles, tokens, Card, CardHeader, CardFooter, Text, Spinner, Title2, Caption1 } from '@fluentui/react-components'
+
 import { supabase } from "@/lib/supabase"
 import { useState } from "react"
-import { Loader2 } from "lucide-react"
+
+// If SocialIcons doesn't have Microsoft, we can use a generic icon or Image. 
+// For now, let's use a simple SVG or just text if icon is not readily available in standard set without extra install.
+// Actually, standard fluent icons might not have "MicrosoftLogo". 
+// I'll stick to text or a generic icon to be safe, or just the standard Button.
+
+const useStyles = makeStyles({
+    container: {
+        display: 'flex',
+        height: '100vh',
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: tokens.colorNeutralBackground2,
+    },
+    card: {
+        width: '100%',
+        maxWidth: '360px',
+        padding: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '24px',
+    },
+    header: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        gap: '8px',
+    },
+    button: {
+        width: '100%',
+    }
+})
 
 export default function LoginPage() {
+    const styles = useStyles()
     const [loading, setLoading] = useState(false)
 
     const handleLogin = async () => {
@@ -31,20 +67,24 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="flex h-screen w-full items-center justify-center bg-background">
-            <div className="w-full max-w-sm p-6 bg-card rounded-lg shadow-md border text-center">
-                <h1 className="text-2xl font-bold mb-2">Inventory System</h1>
-                <p className="text-sm text-muted-foreground mb-6">Sign in to access the dashboard</p>
+        <div className={styles.container}>
+            <Card className={styles.card}>
+                <div className={styles.header}>
+                    <Title2>Inventory System</Title2>
+                    <Caption1>Sign in to access the dashboard</Caption1>
+                </div>
 
                 <Button
+                    appearance="primary"
+                    size="large"
+                    className={styles.button}
                     onClick={handleLogin}
-                    className="w-full bg-[#0078D4] hover:bg-[#005a9e]"
                     disabled={loading}
+                    icon={loading ? <Spinner size="tiny" /> : undefined}
                 >
-                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Sign in with Microsoft
+                    {loading ? 'Signing in...' : 'Sign in with Microsoft'}
                 </Button>
-            </div>
+            </Card>
         </div>
     )
 }

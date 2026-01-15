@@ -1,16 +1,88 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
+import {
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogActions,
+    DialogContent,
+    Button,
+    Input,
+    Field,
+    makeStyles,
+    Table,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    TableBody,
+    TableCell,
+    Badge,
+    tokens,
+    shorthands,
+    Text,
+    Spinner
+} from "@fluentui/react-components";
+import {
+    ArrowUploadRegular,
+    ArrowDownloadRegular,
+    TableSimpleRegular,
+    CheckmarkCircleRegular,
+    DismissCircleRegular,
+    DocumentRegular
+} from "@fluentui/react-icons";
 import { toast } from 'sonner'
-import { Upload, Download, AlertTriangle, CheckCircle, FileSpreadsheet } from 'lucide-react'
 import { generateCSVTemplate, generateExcelTemplate, parseCSV, parseExcel, ParsedInventoryRow } from '@/lib/csv-parser'
 import { importInventoryBatch } from '@/app/actions/import'
 
+const useStyles = makeStyles({
+    dialogContent: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        minWidth: "800px",
+        maxWidth: "1200px",
+        height: "90vh",
+    },
+    controls: {
+        display: "flex",
+        gap: "8px",
+        alignItems: "center",
+        flexWrap: "wrap",
+        padding: "16px",
+        backgroundColor: tokens.colorNeutralBackground2,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    },
+    divider: {
+        width: "1px",
+        height: "24px",
+        backgroundColor: tokens.colorNeutralStroke2,
+        margin: "0 8px"
+    },
+    previewArea: {
+        flex: 1,
+        overflowY: "auto",
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    },
+    statusRow: {
+        display: "flex",
+        gap: "12px",
+        marginBottom: "8px",
+    },
+    hiddenInput: {
+        display: "none"
+    },
+    errorText: {
+        color: tokens.colorPaletteRedForeground1,
+        fontSize: "12px"
+    }
+});
+
 export function CSVImportDialog() {
+    const styles = useStyles();
     const [open, setOpen] = useState(false)
     const [parsedRows, setParsedRows] = useState<ParsedInventoryRow[]>([])
     const [loading, setLoading] = useState(false)
@@ -109,96 +181,79 @@ export function CSVImportDialog() {
     const invalidCount = parsedRows.filter(r => !r.valid).length
 
     return (
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setParsedRows([]); setFileName('') } }}>
-            <DialogTrigger asChild>
-                <Button variant="outline">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Import
-                </Button>
+        <Dialog open={open} onOpenChange={(e, data) => { setOpen(data.open); if (!data.open) { setParsedRows([]); setFileName('') } }}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<ArrowUploadRegular />}>Import</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-                <DialogHeader>
+            <DialogSurface className={styles.dialogContent}>
+                <DialogBody>
                     <DialogTitle>Import Inventory from CSV/Excel</DialogTitle>
-                </DialogHeader>
 
-                <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-                    <div className="flex flex-wrap gap-2 items-center">
-                        <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
-                            <Download className="mr-2 h-4 w-4" />
+                    <div className={styles.controls}>
+                        <Button appearance="outline" size="small" icon={<ArrowDownloadRegular />} onClick={handleDownloadCSV}>
                             CSV Template
                         </Button>
-                        <Button variant="outline" size="sm" onClick={handleDownloadExcel}>
-                            <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        <Button appearance="outline" size="small" icon={<TableSimpleRegular />} onClick={handleDownloadExcel}>
                             Excel Template
                         </Button>
 
-                        <div className="h-6 border-l mx-2" />
+                        <div className={styles.divider} />
 
                         <input
                             ref={fileInputRef}
                             type="file"
                             accept=".csv,.xlsx,.xls"
                             onChange={handleFileSelect}
-                            className="hidden"
+                            className={styles.hiddenInput}
                         />
-                        <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
-                            <Upload className="mr-2 h-4 w-4" />
+                        <Button appearance="secondary" size="small" icon={<DocumentRegular />} onClick={() => fileInputRef.current?.click()}>
                             Select File
                         </Button>
-
-                        {fileName && (
-                            <span className="text-sm text-muted-foreground">{fileName}</span>
-                        )}
+                        {fileName && <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{fileName}</Text>}
                     </div>
 
                     {parsedRows.length > 0 && (
                         <>
-                            <div className="flex gap-4 items-center text-sm">
-                                <Badge variant="default" className="bg-green-600">
-                                    <CheckCircle className="mr-1 h-3 w-3" />
+                            <div className={styles.statusRow}>
+                                <Badge appearance="filled" color="success" icon={<CheckmarkCircleRegular />}>
                                     {validCount} valid
                                 </Badge>
                                 {invalidCount > 0 && (
-                                    <Badge variant="destructive">
-                                        <AlertTriangle className="mr-1 h-3 w-3" />
+                                    <Badge appearance="filled" color="danger" icon={<DismissCircleRegular />}>
                                         {invalidCount} invalid
                                     </Badge>
                                 )}
                             </div>
 
-                            <div className="border rounded-md overflow-auto flex-1 max-h-[400px]">
-                                <Table>
+                            <div className={styles.previewArea}>
+                                <Table size="small">
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-8"></TableHead>
-                                            <TableHead>Lot ID</TableHead>
-                                            <TableHead>Profile</TableHead>
-                                            <TableHead>Grade</TableHead>
-                                            <TableHead>Length</TableHead>
-                                            <TableHead>Qty</TableHead>
-                                            <TableHead>Cost</TableHead>
-                                            <TableHead>Invoice</TableHead>
-                                            <TableHead>Errors</TableHead>
+                                            <TableHeaderCell style={{ width: '32px' }} />
+                                            <TableHeaderCell>Lot ID</TableHeaderCell>
+                                            <TableHeaderCell>Profile</TableHeaderCell>
+                                            <TableHeaderCell>Grade</TableHeaderCell>
+                                            <TableHeaderCell>Length</TableHeaderCell>
+                                            <TableHeaderCell>Qty</TableHeaderCell>
+                                            <TableHeaderCell>Cost</TableHeaderCell>
+                                            <TableHeaderCell>Invoice</TableHeaderCell>
+                                            <TableHeaderCell>Errors</TableHeaderCell>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {parsedRows.map((row, idx) => (
-                                            <TableRow key={idx} className={!row.valid ? 'bg-destructive/10' : ''}>
+                                            <TableRow key={idx} style={{ backgroundColor: !row.valid ? tokens.colorPaletteRedBackground1 : undefined }}>
                                                 <TableCell>
-                                                    {row.valid ? (
-                                                        <CheckCircle className="h-4 w-4 text-green-600" />
-                                                    ) : (
-                                                        <AlertTriangle className="h-4 w-4 text-destructive" />
-                                                    )}
+                                                    {row.valid ? <CheckmarkCircleRegular color="green" /> : <DismissCircleRegular color="red" />}
                                                 </TableCell>
-                                                <TableCell className="font-mono">{row.lotId || '-'}</TableCell>
+                                                <TableCell style={{ fontFamily: 'monospace' }}>{row.lotId || '-'}</TableCell>
                                                 <TableCell>{row.profileType} {row.dimensions}</TableCell>
                                                 <TableCell>{row.grade}</TableCell>
                                                 <TableCell>{row.lengthMm}</TableCell>
                                                 <TableCell>{row.quantity}</TableCell>
                                                 <TableCell>€{row.totalCost.toFixed(2)}</TableCell>
-                                                <TableCell className="font-mono text-xs">{row.invoiceNumber || '-'}</TableCell>
-                                                <TableCell className="text-destructive text-xs">
+                                                <TableCell style={{ fontSize: '10px' }}>{row.invoiceNumber || '-'}</TableCell>
+                                                <TableCell className={styles.errorText}>
                                                     {row.errors.join(', ')}
                                                 </TableCell>
                                             </TableRow>
@@ -208,18 +263,19 @@ export function CSVImportDialog() {
                             </div>
                         </>
                     )}
-                </div>
-
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                </DialogBody>
+                <DialogActions>
+                    <Button appearance="secondary" onClick={() => setOpen(false)}>Cancel</Button>
                     <Button
+                        appearance="primary"
                         onClick={handleImport}
                         disabled={loading || validCount === 0}
+                        icon={loading ? <Spinner size="tiny" /> : <ArrowUploadRegular />}
                     >
                         {loading ? 'Importing...' : `Import ${validCount} Item(s)`}
                     </Button>
-                </DialogFooter>
-            </DialogContent>
+                </DialogActions>
+            </DialogSurface>
         </Dialog>
     )
 }

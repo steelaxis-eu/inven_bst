@@ -1,12 +1,28 @@
 'use client'
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ChevronDown, ChevronRight, Package, Wrench } from 'lucide-react'
 import { useState } from 'react'
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
+    Badge,
+    Button,
+    ProgressBar,
+    Checkbox,
+    makeStyles,
+    tokens,
+    Text,
+    shorthands
+} from "@fluentui/react-components"
+import {
+    ChevronDownRegular,
+    ChevronRightRegular,
+    BoxRegular,
+    WrenchRegular
+} from "@fluentui/react-icons"
 import { CreatePartWODialog } from './create-part-wo-dialog'
 
 interface Part {
@@ -28,13 +44,54 @@ interface PartsTableProps {
     onPieceStatusChange?: (pieceId: string, status: string) => void
 }
 
+const useStyles = makeStyles({
+    root: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    selectionToolbar: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '12px',
+        backgroundColor: tokens.colorPaletteBlueBackground2,
+        borderRadius: tokens.borderRadiusMedium,
+        ...shorthands.border('1px', 'solid', tokens.colorBrandStroke1),
+    },
+    expandableRow: {
+        backgroundColor: tokens.colorNeutralBackground2,
+    },
+    piecesGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(40px, 1fr))',
+        gap: '4px',
+        marginTop: '8px',
+    },
+    pieceBadge: {
+        cursor: 'pointer',
+        textAlign: 'center',
+        fontSize: '12px',
+        padding: '4px',
+        borderRadius: '4px',
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        ':hover': {
+            backgroundColor: tokens.colorNeutralBackground1Hover,
+        }
+    },
+    selectedPiece: {
+        ring: `2px solid ${tokens.colorBrandStroke1}`,
+        zIndex: 1,
+    }
+})
+
 const STATUS_COLORS: Record<string, string> = {
-    'NOT_STARTED': 'bg-gray-100 text-gray-800 border-gray-300',
-    'CUT': 'bg-blue-100 text-blue-800 border-blue-300',
-    'FABRICATED': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    'WELDED': 'bg-orange-100 text-orange-800 border-orange-300',
-    'PAINTED': 'bg-purple-100 text-purple-800 border-purple-300',
-    'READY': 'bg-green-100 text-green-800 border-green-300',
+    'NOT_STARTED': tokens.colorNeutralBackground3,
+    'CUT': tokens.colorPaletteBlueBackground2,
+    'FABRICATED': tokens.colorPaletteYellowBackground2,
+    'WELDED': tokens.colorPaletteDarkOrangeBackground2,
+    'PAINTED': tokens.colorPalettePurpleBackground2,
+    'READY': tokens.colorPaletteGreenBackground2,
 }
 
 interface SelectedPiece {
@@ -45,6 +102,7 @@ interface SelectedPiece {
 }
 
 export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTableProps) {
+    const styles = useStyles()
     const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set())
     const [selectedPieces, setSelectedPieces] = useState<SelectedPiece[]>([])
     const [woDialogOpen, setWoDialogOpen] = useState(false)
@@ -92,10 +150,8 @@ export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTable
         const allSelected = partPieceIds.every(id => selectedPieces.some(sp => sp.pieceId === id))
 
         if (allSelected) {
-            // Deselect all pieces for this part
             setSelectedPieces(selectedPieces.filter(sp => !partPieceIds.includes(sp.pieceId)))
         } else {
-            // Select all pieces for this part
             const newSelections = part.pieces
                 .filter(p => !selectedPieces.some(sp => sp.pieceId === p.id))
                 .map(p => ({
@@ -112,62 +168,56 @@ export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTable
         return part.pieces.every(p => selectedPieces.some(sp => sp.pieceId === p.id))
     }
 
-    const isPartPartiallySelected = (part: Part) => {
-        const someSelected = part.pieces.some(p => selectedPieces.some(sp => sp.pieceId === p.id))
-        return someSelected && !isPartFullySelected(part)
-    }
-
     if (parts.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                <Package className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p>No parts added yet.</p>
-                <p className="text-sm">Add your first BOM part to get started.</p>
+            <div style={{ textAlign: 'center', padding: '48px', border: `1px dashed ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
+                <BoxRegular fontSize={48} style={{ opacity: 0.5, color: tokens.colorNeutralForeground3 }} />
+                <div style={{ marginTop: '8px', fontWeight: 600 }}>No parts added yet</div>
+                <Text>Add your first BOM part to get started.</Text>
             </div>
         )
     }
 
     return (
-        <div className="space-y-4">
+        <div className={styles.root}>
             {/* Selection Toolbar */}
             {selectedPieces.length > 0 && (
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <span className="text-sm text-blue-800">
+                <div className={styles.selectionToolbar}>
+                    <span style={{ color: tokens.colorPaletteBlueForeground2, fontWeight: 500 }}>
                         {selectedPieces.length} piece{selectedPieces.length !== 1 ? 's' : ''} selected
                     </span>
-                    <div className="flex gap-2">
+                    <div style={{ display: 'flex', gap: '8px' }}>
                         <Button
-                            size="sm"
-                            variant="outline"
+                            size="small"
                             onClick={() => setSelectedPieces([])}
                         >
                             Clear
                         </Button>
                         <Button
-                            size="sm"
+                            size="small"
+                            appearance="primary"
+                            icon={<WrenchRegular />}
                             onClick={() => setWoDialogOpen(true)}
-                            className="gap-2"
                         >
-                            <Wrench className="h-4 w-4" />
                             Create Work Order
                         </Button>
                     </div>
                 </div>
             )}
 
-            <div className="border rounded-lg overflow-hidden">
+            <div style={{ border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium, overflow: 'hidden' }}>
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-muted/50">
-                            <TableHead className="w-10"></TableHead>
-                            <TableHead>Part #</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Profile</TableHead>
-                            <TableHead>Grade</TableHead>
-                            <TableHead className="text-right">Length</TableHead>
-                            <TableHead className="text-right">Qty</TableHead>
-                            <TableHead className="text-right">Weight</TableHead>
-                            <TableHead className="w-48">Progress</TableHead>
+                        <TableRow>
+                            <TableHeaderCell style={{ width: '40px' }}></TableHeaderCell>
+                            <TableHeaderCell>Part #</TableHeaderCell>
+                            <TableHeaderCell>Description</TableHeaderCell>
+                            <TableHeaderCell>Profile</TableHeaderCell>
+                            <TableHeaderCell>Grade</TableHeaderCell>
+                            <TableHeaderCell style={{ textAlign: 'right' }}>Length</TableHeaderCell>
+                            <TableHeaderCell style={{ textAlign: 'right' }}>Qty</TableHeaderCell>
+                            <TableHeaderCell style={{ textAlign: 'right' }}>Weight</TableHeaderCell>
+                            <TableHeaderCell style={{ width: '200px' }}>Progress</TableHeaderCell>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -180,81 +230,73 @@ export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTable
                                 <>
                                     <TableRow
                                         key={part.id}
-                                        className="cursor-pointer hover:bg-muted/30"
                                         onClick={() => toggleExpand(part.id)}
+                                        style={{ cursor: 'pointer', backgroundColor: isExpanded ? tokens.colorNeutralBackground1 : undefined }}
                                     >
                                         <TableCell>
-                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                            </Button>
+                                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                {isExpanded ? <ChevronDownRegular /> : <ChevronRightRegular />}
+                                            </div>
                                         </TableCell>
-                                        <TableCell className="font-mono font-medium">{part.partNumber}</TableCell>
-                                        <TableCell className="text-muted-foreground">{part.description || '-'}</TableCell>
+                                        <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>{part.partNumber}</TableCell>
+                                        <TableCell><Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{part.description || '-'}</Text></TableCell>
                                         <TableCell>
                                             {part.profile ? `${part.profile.type} ${part.profile.dimensions}` : '-'}
                                         </TableCell>
                                         <TableCell>{part.grade?.name || '-'}</TableCell>
-                                        <TableCell className="text-right font-mono">
+                                        <TableCell style={{ textAlign: 'right', fontFamily: 'monospace' }}>
                                             {part.length ? `${part.length.toLocaleString()} mm` : '-'}
                                         </TableCell>
-                                        <TableCell className="text-right font-medium">{part.quantity}</TableCell>
-                                        <TableCell className="text-right font-mono">
+                                        <TableCell style={{ textAlign: 'right', fontWeight: 500 }}>{part.quantity}</TableCell>
+                                        <TableCell style={{ textAlign: 'right', fontFamily: 'monospace' }}>
                                             {part.unitWeight > 0 ? `${(part.unitWeight * part.quantity).toFixed(1)} kg` : '-'}
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Progress value={progress} className="flex-1 h-2" />
-                                                <span className="text-xs font-medium w-8">{progress}%</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <ProgressBar value={progress / 100} style={{ flex: 1 }} />
+                                                <span style={{ fontSize: '12px', width: '30px' }}>{progress}%</span>
                                             </div>
                                         </TableCell>
                                     </TableRow>
                                     {isExpanded && (
                                         <TableRow key={`${part.id}-pieces`}>
-                                            <TableCell colSpan={9} className="bg-muted/20 p-4">
-                                                <div className="space-y-3">
+                                            <TableCell colSpan={9} className={styles.expandableRow}>
+                                                <div style={{ padding: '12px' }}>
                                                     {/* Status summary and select all */}
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex gap-2 flex-wrap">
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                                             {Object.entries(statusCounts).map(([status, count]) => (
-                                                                <Badge key={status} variant="outline" className={STATUS_COLORS[status]}>
+                                                                <Badge key={status} appearance="outline">
                                                                     {status}: {count}
                                                                 </Badge>
                                                             ))}
                                                         </div>
                                                         <Button
-                                                            size="sm"
-                                                            variant="outline"
+                                                            size="small"
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
                                                                 toggleAllPiecesForPart(part)
                                                             }}
-                                                            className="h-7"
                                                         >
                                                             {isPartFullySelected(part) ? 'Deselect All' : 'Select All'}
                                                         </Button>
                                                     </div>
 
-                                                    {/* Pieces grid with checkboxes */}
-                                                    <div className="grid grid-cols-10 gap-1">
+                                                    {/* Pieces grid */}
+                                                    <div className={styles.piecesGrid}>
                                                         {part.pieces.map(piece => {
                                                             const isSelected = selectedPieces.some(sp => sp.pieceId === piece.id)
                                                             return (
                                                                 <div
                                                                     key={piece.id}
-                                                                    className={`
-                                                                        relative text-center text-xs py-1 px-2 rounded border cursor-pointer 
-                                                                        ${STATUS_COLORS[piece.status]}
-                                                                        ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}
-                                                                    `}
+                                                                    className={`${styles.pieceBadge} ${isSelected ? styles.selectedPiece : ''}`}
+                                                                    style={{ backgroundColor: STATUS_COLORS[piece.status] }}
                                                                     title={`Piece ${piece.pieceNumber}: ${piece.status}`}
                                                                     onClick={(e) => {
                                                                         e.stopPropagation()
                                                                         togglePieceSelection(piece, part.partNumber)
                                                                     }}
                                                                 >
-                                                                    {isSelected && (
-                                                                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full" />
-                                                                    )}
                                                                     {piece.pieceNumber}
                                                                 </div>
                                                             )
@@ -271,7 +313,6 @@ export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTable
                 </Table>
             </div>
 
-            {/* Create WO Dialog */}
             <CreatePartWODialog
                 projectId={projectId}
                 selectedPieces={selectedPieces}

@@ -1,40 +1,62 @@
-import { Skeleton } from "@/components/ui/skeleton"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+'use client'
+
+import { Skeleton, SkeletonItem, Card, CardHeader, makeStyles } from "@fluentui/react-components"
+
+const useStyles = makeStyles({
+    root: {
+        padding: '32px',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '32px'
+    },
+    card: {
+        marginBottom: '32px'
+    },
+    grid: {
+        display: 'grid',
+        gap: '16px'
+    },
+    row: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(7, 1fr)',
+        gap: '16px'
+    }
+})
 
 export default function StockLoading() {
-    return (
-        <div className="container mx-auto py-8">
-            <Skeleton className="h-9 w-48 mb-8" />
+    const styles = useStyles()
 
-            <Card className="mb-8">
-                <CardHeader>
-                    <Skeleton className="h-6 w-20" />
-                </CardHeader>
-                <CardContent>
-                    <div className="flex gap-4">
-                        <Skeleton className="h-10 flex-1" />
-                        <Skeleton className="h-10 w-24" />
-                    </div>
-                </CardContent>
+    return (
+        <Skeleton className={styles.root}>
+            <SkeletonItem style={{ height: '36px', width: '200px' }} />
+
+            <Card className={styles.card}>
+                <CardHeader header={<SkeletonItem style={{ height: '24px', width: '80px' }} />} />
+                <div style={{ padding: '0 12px 12px 12px', display: 'flex', gap: '16px' }}>
+                    <SkeletonItem style={{ height: '40px', width: '100%' }} />
+                    <SkeletonItem style={{ height: '40px', width: '100px' }} />
+                </div>
             </Card>
 
-            <div className="space-y-4">
-                {/* Table Header */}
-                <div className="grid grid-cols-7 gap-4">
+            <div className={styles.grid}>
+                {/* Header */}
+                <div className={styles.row}>
                     {Array.from({ length: 7 }).map((_, i) => (
-                        <Skeleton key={i} className="h-5 w-full" />
+                        <SkeletonItem key={i} style={{ height: '20px', width: '100%' }} />
                     ))}
                 </div>
 
-                {/* Table Rows */}
+                {/* Rows */}
                 {Array.from({ length: 5 }).map((_, rowIdx) => (
-                    <div key={rowIdx} className="grid grid-cols-7 gap-4">
+                    <div key={rowIdx} className={styles.row}>
                         {Array.from({ length: 7 }).map((_, colIdx) => (
-                            <Skeleton key={colIdx} className="h-8 w-full" />
+                            <SkeletonItem key={colIdx} style={{ height: '32px', width: '100%' }} />
                         ))}
                     </div>
                 ))}
             </div>
-        </div>
+        </Skeleton>
     )
 }

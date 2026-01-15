@@ -1,13 +1,52 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Checkbox } from "@/components/ui/checkbox"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { ChevronDown, ChevronRight, Layers, Package, Calendar, Weight, Check, Wrench, MoreHorizontal, Pencil, CheckCircle, Trash2 } from 'lucide-react'
+import {
+    Table,
+    TableHeader,
+    TableRow,
+    TableBody,
+    TableCell,
+    TableHeaderCell,
+    Button,
+    Checkbox,
+    Menu,
+    MenuTrigger,
+    MenuList,
+    MenuItem,
+    MenuPopover,
+    MenuDivider,
+    Badge,
+    makeStyles,
+    tokens,
+    Avatar,
+    Text,
+    ProgressBar,
+    shorthands,
+    Card,
+    CardHeader,
+    CardFooter,
+    CardPreview,
+    Caption1,
+    Subtitle1,
+    Body1
+} from "@fluentui/react-components";
+import {
+    MoreHorizontalRegular,
+    EditRegular,
+    CheckmarkCircleRegular,
+    DeleteRegular,
+    BoxRegular,
+    ShareRegular,
+    ChevronRightRegular,
+    ChevronDownRegular,
+    CalendarRegular,
+    bundleIcon,
+    BoxMultipleRegular,
+    WrenchRegular,
+    Delete20Regular,
+    Checkmark20Regular,
+    Edit20Regular
+} from "@fluentui/react-icons";
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { CreateAssemblyWODialog } from './create-assembly-wo-dialog'
@@ -15,6 +54,9 @@ import { finishPart } from '@/app/actions/parts'
 import { updatePlatePartStatus } from '@/app/actions/plateparts'
 import { removePartFromAssembly, removePlatePartFromAssembly } from '@/app/actions/assemblies'
 import { AssemblyDetailsDialog } from './assembly-details-dialog'
+
+const ChevronRight = bundleIcon(ChevronRightRegular, ChevronRightRegular);
+const ChevronDown = bundleIcon(ChevronDownRegular, ChevronDownRegular);
 
 interface Assembly {
     id: string
@@ -62,13 +104,80 @@ interface AssembliesTreeProps {
     projectId: string
 }
 
-const STATUS_COLORS: Record<string, string> = {
-    'NOT_STARTED': 'bg-gray-100 text-gray-800',
-    'IN_PROGRESS': 'bg-blue-100 text-blue-800',
-    'ASSEMBLED': 'bg-yellow-100 text-yellow-800',
-    'QC_PASSED': 'bg-green-100 text-green-800',
-    'SHIPPED': 'bg-purple-100 text-purple-800',
-}
+const useStyles = makeStyles({
+    root: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    row: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '12px',
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        backgroundColor: tokens.colorNeutralBackground1,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderLeftWidth: '4px',
+        cursor: 'pointer',
+        transition: 'background-color 0.2s',
+        ':hover': {
+            backgroundColor: tokens.colorNeutralBackground1Hover,
+        },
+    },
+    rowSelected: {
+        boxShadow: `0 0 0 2px ${tokens.colorBrandBackground}`,
+    },
+    rowExpanded: {
+        backgroundColor: tokens.colorNeutralBackground1Hover,
+    },
+    statusNotStarted: { borderLeftColor: tokens.colorNeutralStroke1 },
+    statusInProgress: { borderLeftColor: tokens.colorBrandBackground },
+    statusAssembled: { borderLeftColor: tokens.colorPaletteYellowBackground2 },
+    statusQcPassed: { borderLeftColor: tokens.colorPaletteGreenBackground2 },
+    statusShipped: { borderLeftColor: tokens.colorPalettePurpleBackground2 },
+
+    details: {
+        marginLeft: '32px',
+        marginBottom: '16px',
+        padding: '16px',
+        backgroundColor: tokens.colorNeutralBackgroundAlpha,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    },
+    statsGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '16px',
+        marginBottom: '16px',
+    },
+    statCard: {
+        padding: '12px',
+        backgroundColor: tokens.colorNeutralBackground1,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+    },
+    statLabel: {
+        fontSize: '10px',
+        textTransform: 'uppercase',
+        color: tokens.colorNeutralForeground3,
+        fontWeight: 'bold',
+        marginBottom: '4px',
+    },
+    statValue: {
+        fontSize: '18px',
+        fontWeight: 'bold',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+    },
+    tableContainer: {
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        overflow: 'hidden',
+        backgroundColor: tokens.colorNeutralBackground1,
+    }
+});
 
 function getAssemblyProgress(assembly: Assembly): { percent: number; ready: number; total: number } {
     let totalPieces = 0
@@ -85,8 +194,6 @@ function getAssemblyProgress(assembly: Assembly): { percent: number; ready: numb
     // Plates
     assembly.plateAssemblyParts?.forEach(pap => {
         const needed = pap.quantityInAssembly
-        // Plate is ready if RECEIVED or QC_PASSED or based on receivedQty if available?
-        // Using receivedQty is safer given the schema has it
         const ready = pap.platePart.receivedQty || 0
         totalPieces += needed
         readyPieces += Math.min(ready, needed)
@@ -124,6 +231,7 @@ function AssemblyItem({
     onSelect: (id: string, checked: boolean) => void
     onViewDetails: (assembly: Assembly) => void
 }) {
+    const styles = useStyles();
     const [expanded, setExpanded] = useState(false)
     const [detailsOpen, setDetailsOpen] = useState(false)
     const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -222,120 +330,128 @@ function AssemblyItem({
         toast.info("Edit feature coming soon")
     }
 
+    const getStatusClass = (status: string) => {
+        switch (status) {
+            case 'IN_PROGRESS': return styles.statusInProgress;
+            case 'ASSEMBLED': return styles.statusAssembled;
+            case 'QC_PASSED': return styles.statusQcPassed;
+            case 'SHIPPED': return styles.statusShipped;
+            default: return styles.statusNotStarted;
+        }
+    }
+
+    const getBadgeColor = (status: string) => {
+        switch (status) {
+            case 'IN_PROGRESS': return 'brand';
+            case 'ASSEMBLED': return 'warning';
+            case 'QC_PASSED': return 'success';
+            case 'SHIPPED': return 'important';
+            default: return 'subtle';
+        }
+    }
+
     return (
-        <div className="w-full">
+        <div style={{ marginLeft: level * 24 }}>
             {/* Main Row */}
             <div
-                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 cursor-pointer border-l-4 transition-colors ${progress.percent === 100 ? 'border-l-green-500' : progress.percent > 0 ? 'border-l-blue-500' : 'border-l-gray-300'
-                    } ${detailsOpen ? 'bg-muted/50' : ''} ${selected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
-                style={{ marginLeft: level * 24 }}
+                className={`${styles.row} ${getStatusClass(assembly.status)} ${selected ? styles.rowSelected : ''} ${detailsOpen ? styles.rowExpanded : ''}`}
                 onClick={handleRowClick}
             >
                 {/* Selection Checkbox */}
                 <div onClick={handleCheckboxClick}>
                     <Checkbox
                         checked={selected}
-                        onCheckedChange={(checked) => onSelect(assembly.id, checked === true)}
+                        onChange={(_, data) => onSelect(assembly.id, data.checked === true)}
                     />
                 </div>
 
                 {hasChildren ? (
-                    <span
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={handleChevronClick}
-                    >
-                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </span>
+                    <div onClick={handleChevronClick} style={{ cursor: 'pointer', display: 'flex' }}>
+                        {expanded ? <ChevronDown /> : <ChevronRight />}
+                    </div>
                 ) : (
-                    <span className="w-4" />
+                    <div style={{ width: 20 }} />
                 )}
-                <Layers className="h-4 w-4 text-muted-foreground" />
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                        <span className="font-mono font-medium">{assembly.assemblyNumber}</span>
-                        <span className="text-muted-foreground">—</span>
-                        <span>{assembly.name}</span>
+
+                <BoxMultipleRegular style={{ color: tokens.colorNeutralForeground3 }} />
+
+                <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Text font="monospace" weight="bold">{assembly.assemblyNumber}</Text>
+                        <Text style={{ color: tokens.colorNeutralForeground3 }}>—</Text>
+                        <Text>{assembly.name}</Text>
                     </div>
                     {assembly.description && (
-                        <p className="text-xs text-muted-foreground">{assembly.description}</p>
+                        <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: 'block' }}>{assembly.description}</Text>
                     )}
                 </div>
-                <Badge variant="outline" className={STATUS_COLORS[assembly.status] || ''}>
+
+                <Badge appearance="outline" color={getBadgeColor(assembly.status)}>
                     {assembly.status.replace('_', ' ')}
                 </Badge>
-                <div className="flex items-center gap-2 w-32">
-                    <Progress value={progress.percent} className="h-2" />
-                    <span className="text-xs font-medium w-8">{progress.percent}%</span>
+
+                <div style={{ width: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <ProgressBar value={progress.percent} max={100} thickness="medium" color={progress.percent === 100 ? 'success' : 'brand'} />
+                    <Text size={100} align="end">{progress.percent}%</Text>
                 </div>
-                <div className="text-xs text-muted-foreground w-16 text-right">
-                    {allParts.length} parts
+
+                <div style={{ width: '80px', textAlign: 'right' }}>
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{allParts.length} parts</Text>
                 </div>
+
                 {assembly.scheduledDate && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(assembly.scheduledDate).toLocaleDateString()}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: tokens.colorNeutralForeground3 }}>
+                        <CalendarRegular fontSize={12} />
+                        <Text size={200}>{new Date(assembly.scheduledDate).toLocaleDateString()}</Text>
                     </div>
                 )}
             </div>
 
             {/* Details Sub-Row */}
             {detailsOpen && (
-                <div
-                    className="ml-8 mr-2 mb-4 mt-1 p-4 bg-muted/30 rounded-lg border"
-                    style={{ marginLeft: level * 24 + 32 }}
-                >
+                <div className={styles.details}>
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-4 gap-4 mb-4">
-                        <div className="bg-background p-3 rounded border">
-                            <div className="text-xs text-muted-foreground uppercase mb-1">Parts</div>
-                            <div className="text-lg font-semibold flex items-center gap-2">
-                                <Package className="h-4 w-4 text-muted-foreground" />
+                    <div className={styles.statsGrid}>
+                        <div className={styles.statCard}>
+                            <div className={styles.statLabel}>Parts</div>
+                            <div className={styles.statValue}>
+                                <BoxRegular fontSize={20} style={{ opacity: 0.5 }} />
                                 {allParts.length}
                             </div>
                         </div>
-                        <div className="bg-background p-3 rounded border">
-                            <div className="text-xs text-muted-foreground uppercase mb-1">Pieces</div>
-                            <div className="text-lg font-semibold">
-                                <span className="text-green-600">{progress.ready}</span>
-                                <span className="text-muted-foreground"> / {progress.total}</span>
+                        <div className={styles.statCard}>
+                            <div className={styles.statLabel}>Pieces</div>
+                            <div className={styles.statValue}>
+                                <span style={{ color: tokens.colorPaletteGreenForeground1 }}>{progress.ready}</span>
+                                <span style={{ color: tokens.colorNeutralForeground3 }}> / {progress.total}</span>
                             </div>
                         </div>
-                        <div className="bg-background p-3 rounded border">
-                            <div className="text-xs text-muted-foreground uppercase mb-1">Weight</div>
-                            <div className="text-lg font-semibold flex items-center gap-2">
-                                <Weight className="h-4 w-4 text-muted-foreground" />
-                                {totalWeight.toFixed(1)} kg
+                        <div className={styles.statCard}>
+                            <div className={styles.statLabel}>Weight</div>
+                            <div className={styles.statValue}>
+                                <span style={{ color: tokens.colorNeutralForeground3 }}>{totalWeight.toFixed(1)} kg</span>
                             </div>
                         </div>
-                        <div className="text-lg font-semibold flex items-center gap-2">
-                            <Weight className="h-4 w-4 text-muted-foreground" />
-                            {totalWeight.toFixed(1)} kg
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                            <Button size="small" appearance="outline" onClick={(e) => { e.stopPropagation(); onViewDetails(assembly); }}>
+                                View Details & Traceability
+                            </Button>
                         </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <div className="bg-background p-3 rounded border flex-1 flex flex-col justify-center items-center">
-                            <Badge variant="outline" className={`${STATUS_COLORS[assembly.status] || ''} text-sm mb-1`}>
-                                {assembly.status.replace('_', ' ')}
-                            </Badge>
-                        </div>
-                        <Button size="sm" variant="outline" className="w-full text-xs h-8" onClick={(e) => { e.stopPropagation(); onViewDetails(assembly); }}>
-                            View Details & Traceability
-                        </Button>
                     </div>
 
                     {/* Parts Table */}
                     {allParts.length > 0 ? (
-                        <div className="border rounded overflow-hidden bg-background">
+                        <div className={styles.tableContainer}>
                             <Table>
                                 <TableHeader>
-                                    <TableRow className="bg-muted/50">
-                                        <TableHead>Part #</TableHead>
-                                        <TableHead>Type/Profile</TableHead>
-                                        <TableHead>Description</TableHead>
-                                        <TableHead className="text-center">Qty</TableHead>
-                                        <TableHead className="text-center">Ready</TableHead>
-                                        <TableHead className="text-right">Weight</TableHead>
-                                        <TableHead className="w-10"></TableHead>
+                                    <TableRow>
+                                        <TableHeaderCell>Part #</TableHeaderCell>
+                                        <TableHeaderCell>Type/Profile</TableHeaderCell>
+                                        <TableHeaderCell>Description</TableHeaderCell>
+                                        <TableHeaderCell>Qty</TableHeaderCell>
+                                        <TableHeaderCell>Ready</TableHeaderCell>
+                                        <TableHeaderCell>Weight</TableHeaderCell>
+                                        <TableHeaderCell></TableHeaderCell>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -343,51 +459,47 @@ function AssemblyItem({
                                         const isComplete = item.ready >= item.quantity
                                         return (
                                             <TableRow key={idx}>
-                                                <TableCell className="font-mono flex items-center gap-2">
-                                                    {item.partNumber}
-                                                    {item.kind === 'PLATE' && <Badge variant="secondary" className="text-[10px] h-4 px-1">PL</Badge>}
+                                                <TableCell>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <Text font="monospace">{item.partNumber}</Text>
+                                                        {item.kind === 'PLATE' && (
+                                                            <Badge size="extra-small" appearance="tint" color="brand">PL</Badge>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>{item.detail}</TableCell>
+                                                <TableCell>
+                                                    <Text style={{ color: tokens.colorNeutralForeground3 }}>{item.description || '-'}</Text>
+                                                </TableCell>
+                                                <TableCell>{item.quantity}</TableCell>
+                                                <TableCell>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{
+                                                            fontWeight: 'bold',
+                                                            color: isComplete ? tokens.colorPaletteGreenForeground1 : item.ready > 0 ? tokens.colorPaletteDarkOrangeForeground1 : tokens.colorNeutralForeground3
+                                                        }}>
+                                                            {item.ready}
+                                                        </span>
+                                                        {isComplete && <CheckmarkCircleRegular fontSize={16} style={{ color: tokens.colorPaletteGreenForeground1 }} />}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {item.detail}
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground">
-                                                    {item.description || '-'}
-                                                </TableCell>
-                                                <TableCell className="text-center">{item.quantity}</TableCell>
-                                                <TableCell className="text-center">
-                                                    <span className={isComplete ? 'text-green-600 font-medium' : item.ready > 0 ? 'text-orange-600' : 'text-muted-foreground'}>
-                                                        {item.ready}
-                                                        {isComplete && <Check className="h-3 w-3 inline ml-1" />}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {item.unitWeight
-                                                        ? `${(item.unitWeight * item.quantity).toFixed(1)} kg`
-                                                        : '-'
-                                                    }
+                                                    {item.unitWeight ? `${(item.unitWeight * item.quantity).toFixed(1)} kg` : '-'}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={loadingId === item.id}>
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                            <DropdownMenuItem onClick={() => handleEdit(item.id)}>
-                                                                <Pencil className="mr-2 h-4 w-4" /> Edit
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem onClick={() => handleFinish(item.id, item.kind)}>
-                                                                <CheckCircle className="mr-2 h-4 w-4 text-green-600" /> Mark Finished
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem onClick={() => handleRemove(item.id, item.kind)} className="text-red-600">
-                                                                <Trash2 className="mr-2 h-4 w-4" /> Remove
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                                    <Menu>
+                                                        <MenuTrigger disableButtonEnhancement>
+                                                            <Button icon={<MoreHorizontalRegular />} appearance="subtle" disabled={loadingId === item.id} />
+                                                        </MenuTrigger>
+                                                        <MenuPopover>
+                                                            <MenuList>
+                                                                <MenuItem icon={<Edit20Regular />} onClick={() => handleEdit(item.id)}>Edit</MenuItem>
+                                                                <MenuDivider />
+                                                                <MenuItem icon={<Checkmark20Regular />} onClick={() => handleFinish(item.id, item.kind)}>Mark Finished</MenuItem>
+                                                                <MenuItem icon={<Delete20Regular />} onClick={() => handleRemove(item.id, item.kind)} style={{ color: tokens.colorPaletteRedForeground1 }}>Remove</MenuItem>
+                                                            </MenuList>
+                                                        </MenuPopover>
+                                                    </Menu>
                                                 </TableCell>
                                             </TableRow>
                                         )
@@ -396,27 +508,25 @@ function AssemblyItem({
                             </Table>
                         </div>
                     ) : (
-                        <div className="text-center py-6 text-muted-foreground bg-background rounded border">
-                            <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p>No parts in this assembly</p>
+                        <div style={{ padding: '24px', textAlign: 'center', color: tokens.colorNeutralForeground3 }}>
+                            <BoxRegular fontSize={32} style={{ opacity: 0.5, marginBottom: '8px' }} />
+                            <Text block>No parts in this assembly</Text>
                         </div>
                     )}
 
-                    {/* Notes */}
                     {/* Notes */}
                     {assembly.notes && (
-                        <div className="mt-4 p-3 bg-background border rounded">
-                            <div className="text-xs text-muted-foreground uppercase mb-1">Notes</div>
-                            <p className="text-sm">{assembly.notes}</p>
+                        <div style={{ marginTop: '16px', padding: '12px', backgroundColor: tokens.colorNeutralBackground1, border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium }}>
+                            <div className={styles.statLabel}>Notes</div>
+                            <Text>{assembly.notes}</Text>
                         </div>
                     )}
-
                 </div>
             )}
 
             {/* Child Assemblies */}
             {hasChildren && expanded && (
-                <div className="mt-1">
+                <div style={{ marginTop: '4px' }}>
                     {assembly.children.map(child => (
                         <AssemblyItem
                             key={child.id}
@@ -434,6 +544,7 @@ function AssemblyItem({
 }
 
 export function AssembliesTree({ assemblies, projectId }: AssembliesTreeProps) {
+    const styles = useStyles();
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const [woDialogOpen, setWoDialogOpen] = useState(false)
     const [detailsAssembly, setDetailsAssembly] = useState<Assembly | null>(null)
@@ -458,44 +569,51 @@ export function AssembliesTree({ assemblies, projectId }: AssembliesTreeProps) {
 
     if (rootAssemblies.length === 0) {
         return (
-            <div className="text-center py-12 text-muted-foreground">
-                <Layers className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p>No assemblies defined yet.</p>
-                <p className="text-sm">Create assemblies to group parts for fabrication.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px', color: tokens.colorNeutralForeground3 }}>
+                <BoxMultipleRegular fontSize={48} style={{ opacity: 0.5, marginBottom: '16px' }} />
+                <Subtitle1>No assemblies defined yet.</Subtitle1>
+                <Body1>Create assemblies to group parts for fabrication.</Body1>
             </div>
         )
     }
 
     return (
-        <div className="space-y-4">
+        <div className={styles.root}>
             {/* Selection Toolbar */}
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
-                <div className="flex items-center gap-3">
+            <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px',
+                backgroundColor: tokens.colorNeutralBackgroundAlpha,
+                border: `1px solid ${tokens.colorNeutralStroke2}`,
+                borderRadius: tokens.borderRadiusMedium
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <Checkbox
-                        checked={selectedIds.length === assemblies.length}
-                        onCheckedChange={handleSelectAll}
+                        checked={selectedIds.length === assemblies.length && assemblies.length > 0}
+                        onChange={handleSelectAll}
                     />
-                    <span className="text-sm text-muted-foreground">
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
                         {selectedIds.length > 0
                             ? `${selectedIds.length} selected`
                             : 'Select assemblies'
                         }
-                    </span>
+                    </Text>
                 </div>
                 {selectedIds.length > 0 && (
                     <Button
-                        size="sm"
+                        size="small"
+                        icon={<WrenchRegular />}
                         onClick={() => setWoDialogOpen(true)}
-                        className="gap-2"
                     >
-                        <Wrench className="h-4 w-4" />
                         Create Work Order ({selectedIds.length})
                     </Button>
                 )}
             </div>
 
             {/* Assembly List */}
-            <div className="space-y-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {rootAssemblies.map(assembly => (
                     <AssemblyItem
                         key={assembly.id}
@@ -511,7 +629,6 @@ export function AssembliesTree({ assemblies, projectId }: AssembliesTreeProps) {
                 open={!!detailsAssembly}
                 onOpenChange={(open) => !open && setDetailsAssembly(null)}
                 assembly={detailsAssembly}
-                projectId={projectId}
             />
 
             {/* Create WO Dialog */}
@@ -536,48 +653,20 @@ export function AssemblySummary({ assemblies }: { assemblies: Assembly[] }) {
     const assembled = assemblies.filter(a => a.status === 'ASSEMBLED' || a.status === 'QC_PASSED').length
     const shipped = assemblies.filter(a => a.status === 'SHIPPED').length
 
+    const SummaryCard = ({ title, value, color }: { title: string, value: number, color?: string }) => (
+        <Card style={{ padding: '16px' }}>
+            <Caption1 style={{ color: tokens.colorNeutralForeground3, textTransform: 'uppercase', fontWeight: 'bold' }}>{title}</Caption1>
+            <Subtitle1 style={{ marginTop: '8px', color: color }}>{value}</Subtitle1>
+        </Card>
+    )
+
     return (
-        <div className="grid grid-cols-5 gap-4 mb-6">
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{total}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Not Started</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-gray-600">{notStarted}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-blue-600">{inProgress}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Assembled</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{assembled}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Shipped</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold text-purple-600">{shipped}</div>
-                </CardContent>
-            </Card>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
+            <SummaryCard title="Total" value={total} />
+            <SummaryCard title="Not Started" value={notStarted} color={tokens.colorNeutralForeground2} />
+            <SummaryCard title="In Progress" value={inProgress} color={tokens.colorBrandForeground1} />
+            <SummaryCard title="Assembled" value={assembled} color={tokens.colorPaletteGreenForeground1} />
+            <SummaryCard title="Shipped" value={shipped} color={tokens.colorPalettePurpleForeground2} />
         </div>
     )
 }

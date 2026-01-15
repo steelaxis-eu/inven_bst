@@ -1,18 +1,36 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+    Dialog,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Label,
+    Select, // Should use combobox or dropdown
+    Checkbox,
+    makeStyles,
+    tokens,
+    Text,
+    Spinner,
+    Combobox,
+    Option,
+    Badge,
+    shorthands
+} from "@fluentui/react-components"
+import {
+    CutRegular,
+    RulerRegular,
+    DeleteRegular,
+    DismissRegular
+} from "@fluentui/react-icons"
 import { toast } from 'sonner'
 import { getInventory } from "@/app/actions/inventory"
 import { recordBatchUsage } from "@/app/actions/usage"
-import { Loader2, Scissors, Ruler } from "lucide-react"
 
 interface BatchCutDialogProps {
     open: boolean
@@ -22,8 +40,101 @@ interface BatchCutDialogProps {
     onSuccess: () => void
 }
 
+const useStyles = makeStyles({
+    dialogContent: {
+        display: 'flex',
+        flexDirection: 'column',
+        height: '80vh',
+        padding: 0,
+    },
+    header: {
+        padding: '16px 24px',
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    },
+    body: {
+        flex: 1,
+        display: 'grid',
+        gridTemplateColumns: 'minmax(300px, 1fr) 1fr',
+        overflow: 'hidden',
+    },
+    column: {
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    columnHeader: {
+        padding: '12px',
+        backgroundColor: tokens.colorNeutralBackground2,
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        fontWeight: tokens.fontWeightSemibold,
+        fontSize: tokens.fontSizeBase200,
+        textTransform: 'uppercase',
+    },
+    scrollArea: {
+        flex: 1,
+        overflowY: 'auto',
+        padding: '16px',
+    },
+    listItem: {
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        padding: '12px',
+        borderRadius: tokens.borderRadiusMedium,
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+        cursor: 'pointer',
+        marginBottom: '8px',
+        transition: 'all 0.1s',
+        ':hover': {
+            backgroundColor: tokens.colorNeutralBackground1Hover,
+        }
+    },
+    selectedItem: {
+        backgroundColor: tokens.colorPaletteBlueBackground2,
+        ...shorthands.borderColor(tokens.colorBrandStroke1),
+    },
+    cuttingPlanBox: {
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+        borderRadius: tokens.borderRadiusMedium,
+        padding: '16px',
+        backgroundColor: tokens.colorNeutralBackground1,
+        marginTop: '16px',
+    },
+    barVisual: {
+        height: '24px',
+        backgroundColor: tokens.colorNeutralBackground3,
+        borderRadius: tokens.borderRadiusMedium,
+        overflow: 'hidden',
+        display: 'flex',
+        margin: '8px 0',
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+    },
+    barUsed: {
+        backgroundColor: tokens.colorPaletteBlueBackground2,
+        transition: 'width 0.3s ease',
+    },
+    barRemnant: {
+        backgroundColor: tokens.colorPaletteGreenBackground2,
+        flex: 1,
+        borderLeft: `1px dashed ${tokens.colorPaletteGreenBorder2}`,
+    },
+    controls: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        marginTop: '16px',
+    },
+    footer: {
+        padding: '16px',
+        borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '8px',
+        backgroundColor: tokens.colorNeutralBackground1,
+    }
+})
+
 export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess }: BatchCutDialogProps) {
-    const [step, setStep] = useState<'SELECT_SOURCE' | 'ALLOCATE'>('SELECT_SOURCE')
+    const styles = useStyles()
     const [inventory, setInventory] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
 
@@ -41,8 +152,7 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
     useEffect(() => {
         if (open) {
             loadInventory()
-            setPendingItems(items) // Reset when reopening? Or keep state? 
-            // Better to reset if strictly new session, but here we might be strictly passed fresh items.
+            setPendingItems(items)
         }
     }, [open, items])
 
@@ -50,8 +160,6 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
         setLoading(true)
         try {
             const data = await getInventory()
-            // Filter by profile? For now show all, or maybe filter by profiles present in items
-            // Enhance: Filter compatible profiles based on selected parts
             setInventory(data)
         } catch (e) {
             toast.error("Failed to load inventory")
@@ -64,20 +172,13 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
     // Calculate usage
     const selectedPartsLength = pendingItems
         .filter(i => selectedItemIds.includes(i.id))
-        // Assuming piece.part.profileDimensions or we need length? 
-        // We assume piece.part has length? No, part definition might not have length if it's not a bar?
-        // Wait, where is length? 
-        // We don't have part length in the typical Part object easily? 
-        // Actually items passed here usually have piece info.
-        // Let's assume item.piece?.part?.length ?? 0 ideally, or we need to fetch it.
-        // The WorkOrderItem interface has `piece`. Interface needs checking.
         .reduce((sum, item) => sum + (item.piece?.length || 0), 0)
 
     useEffect(() => {
         if (selectedSource) {
             const calc = selectedSource.length - selectedPartsLength
             setCalcRemnant(calc)
-            setRemnantLength(calc) // Default to calc
+            setRemnantLength(calc)
         }
     }, [selectedSource, selectedPartsLength])
 
@@ -98,7 +199,7 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
             const res = await recordBatchUsage({
                 projectId,
                 sourceId: selectedSource.id,
-                sourceType: 'INVENTORY', // TODO: Support Remnants
+                sourceType: 'INVENTORY',
                 cuts,
                 offcut: {
                     actualLength: isScrap ? 0 : remnantLength,
@@ -113,7 +214,7 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
                 const remaining = pendingItems.filter(i => !selectedItemIds.includes(i.id))
                 setPendingItems(remaining)
 
-                // Cleanup current alloc
+                // Cleanup
                 setSelectedItemIds([])
                 setSelectedSourceId('')
                 setReason('')
@@ -121,10 +222,9 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
 
                 // If no items left, close
                 if (remaining.length === 0) {
-                    onSuccess() // Refresh parent
+                    onSuccess()
                     onOpenChange(false)
                 } else {
-                    // Refresh inventory? Yes, quantity changed
                     loadInventory()
                 }
             } else {
@@ -136,34 +236,26 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
         setLoading(false)
     }
 
-    // Filter validation
     const isValid = selectedSource && selectedItemIds.length > 0 && (isScrap || remnantLength >= 0)
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
-                <DialogHeader className="px-6 py-4 border-b">
-                    <DialogTitle>Batch Material Cutting</DialogTitle>
-                    <DialogDescription>
-                        Allocate parts to inventory bars. {pendingItems.length} pieces remaining.
-                    </DialogDescription>
-                </DialogHeader>
+        <Dialog open={open} onOpenChange={(e, data) => onOpenChange(data.open)}>
+            <DialogSurface style={{ maxWidth: '900px', width: '90vw' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', height: '80vh' }}>
+                    <div className={styles.header}>
+                        <DialogTitle>Batch Material Cutting</DialogTitle>
+                        <Text>Allocate parts to inventory bars. {pendingItems.length} pieces remaining.</Text>
+                    </div>
 
-                <div className="flex-1 overflow-hidden grid grid-cols-2">
-                    {/* Left: Pending Parts */}
-                    <div className="border-r flex flex-col">
-                        <div className="p-3 bg-muted/20 font-medium text-xs uppercase tracking-wide border-b">
-                            Pending Parts
-                        </div>
-                        <ScrollArea className="flex-1 p-3">
-                            <div className="space-y-2">
+                    <div className={styles.body}>
+                        {/* LEFT: PENDING PARTS */}
+                        <div className={styles.column} style={{ borderRight: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                            <div className={styles.columnHeader}>Pending Parts</div>
+                            <div className={styles.scrollArea}>
                                 {pendingItems.map(item => (
                                     <div
                                         key={item.id}
-                                        className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedItemIds.includes(item.id)
-                                            ? 'bg-blue-50 border-blue-200'
-                                            : 'bg-card hover:bg-muted/50'
-                                            }`}
+                                        className={`${styles.listItem} ${selectedItemIds.includes(item.id) ? styles.selectedItem : ''}`}
                                         onClick={() => {
                                             if (selectedItemIds.includes(item.id)) {
                                                 setSelectedItemIds(selectedItemIds.filter(id => id !== item.id))
@@ -174,141 +266,130 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
                                     >
                                         <Checkbox
                                             checked={selectedItemIds.includes(item.id)}
-                                            onCheckedChange={() => { }}
+                                            onChange={() => { }} // Handled by div click
                                         />
-                                        <div className="flex-1 text-sm">
-                                            <div className="font-semibold">
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 600 }}>
                                                 {item.piece?.part?.partNumber} #{item.piece?.pieceNumber}
                                             </div>
-                                            <div className="text-muted-foreground flex justify-between mt-1">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: tokens.colorNeutralForeground3, marginTop: '4px' }}>
                                                 <span>L: {item.piece?.length || 0}mm</span>
-                                                <Badge variant="outline">{item.piece?.part?.profileType}</Badge>
+                                                <Badge appearance="outline" size="small">{item.piece?.part?.profileType}</Badge>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
+
                                 {pendingItems.length === 0 && (
-                                    <div className="text-center py-10 text-muted-foreground">
+                                    <div style={{ textAlign: 'center', padding: '40px', color: tokens.colorNeutralForeground3 }}>
                                         All parts allocated!
                                     </div>
                                 )}
                             </div>
-                        </ScrollArea>
-                    </div>
-
-                    {/* Right: Source & Allocation */}
-                    <div className="flex flex-col bg-slate-50">
-                        <div className="p-3 font-medium text-xs uppercase tracking-wide border-b bg-muted/20">
-                            Source Material
                         </div>
-                        <div className="p-4 space-y-6 flex-1 overflow-y-auto">
-                            <div className="space-y-2">
-                                <Label>Select Stock Item</Label>
-                                <Select value={selectedSourceId} onValueChange={setSelectedSourceId}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Choose inventory..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
+
+                        {/* RIGHT: SOURCE & PLAN */}
+                        <div className={styles.column} style={{ backgroundColor: tokens.colorNeutralBackground2 }}>
+                            <div className={styles.columnHeader}>Source Material</div>
+                            <div className={styles.scrollArea}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <Label>Select Stock Item</Label>
+                                    <Combobox
+                                        value={selectedSource ? `${selectedSource.profile.dimensions} - ${selectedSource.length}mm` : ''}
+                                        selectedOptions={selectedSourceId ? [selectedSourceId] : []}
+                                        onOptionSelect={(e, d) => setSelectedSourceId(d.optionValue as string)}
+                                        placeholder="Choose inventory..."
+                                    >
                                         {inventory.map(inv => (
-                                            <SelectItem key={inv.id} value={inv.id}>
+                                            <Option key={inv.id} value={inv.id} text={`${inv.profile.dimensions} - ${inv.length}mm`}>
                                                 {inv.profile.dimensions} - {inv.length}mm ({inv.quantityAtHand} left) - {inv.lotId}
-                                            </SelectItem>
+                                            </Option>
                                         ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                                    </Combobox>
+                                </div>
 
-                            {selectedSource && (
-                                <div className="space-y-4 border rounded-lg p-4 bg-white shadow-sm">
-                                    <h4 className="font-semibold text-sm flex items-center gap-2">
-                                        <Scissors className="w-4 h-4 text-orange-500" />
-                                        Cutting Plan
-                                    </h4>
+                                {selectedSource && (
+                                    <div className={styles.cuttingPlanBox}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, marginBottom: '8px' }}>
+                                            <CutRegular style={{ color: tokens.colorPaletteDarkOrangeForeground1 }} />
+                                            Cutting Plan
+                                        </div>
 
-                                    {/* Visual Bar */}
-                                    <div className="space-y-1">
-                                        <div className="flex justify-between text-xs text-muted-foreground">
+                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', color: tokens.colorNeutralForeground3 }}>
                                             <span>Used: {selectedPartsLength}mm</span>
-                                            <span>Start: {selectedSource.length}mm</span>
+                                            <span>Total: {selectedSource.length}mm</span>
                                         </div>
-                                        <div className="h-4 bg-slate-100 rounded-full overflow-hidden flex border">
-                                            {/* Used portion */}
-                                            <div
-                                                className="bg-blue-500 transition-all duration-300"
-                                                style={{ width: `${Math.min(100, (selectedPartsLength / selectedSource.length) * 100)}%` }}
-                                            />
-                                            {/* Remnant portion */}
-                                            <div className="bg-green-100 flex-1 border-l border-dashed border-green-300" />
+
+                                        <div className={styles.barVisual}>
+                                            <div className={styles.barUsed} style={{ width: `${Math.min(100, (selectedPartsLength / selectedSource.length) * 100)}%` }} />
+                                            <div className={styles.barRemnant} />
                                         </div>
-                                        <div className="flex justify-end text-xs font-medium text-green-700">
+
+                                        <div style={{ textAlign: 'right', fontSize: '12px', fontWeight: 600, color: tokens.colorPaletteGreenForeground1 }}>
                                             Remaining: {selectedSource.length - selectedPartsLength}mm
                                         </div>
-                                    </div>
 
-                                    {/* Inputs */}
-                                    <div className="grid gap-4 pt-2">
-                                        <div className="grid gap-2">
-                                            <Label>Actual Offcut Length (mm)</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    type="number"
-                                                    value={remnantLength}
-                                                    onChange={e => setRemnantLength(Number(e.target.value))}
-                                                    disabled={isScrap}
-                                                    className={remnantLength !== calcRemnant ? "border-orange-300 bg-orange-50" : ""}
-                                                />
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    onClick={() => setRemnantLength(calcRemnant)}
-                                                    title="Reset to Calculated"
-                                                >
-                                                    <span className="text-xs">R</span>
-                                                </Button>
+                                        <div className={styles.controls}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <Label>Actual Offcut Length (mm)</Label>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <Input
+                                                        type="number"
+                                                        value={remnantLength.toString()}
+                                                        onChange={(e, d) => setRemnantLength(Number(d.value))}
+                                                        disabled={isScrap}
+                                                        style={{ borderColor: remnantLength !== calcRemnant ? tokens.colorPaletteDarkOrangeBorder1 : undefined }}
+                                                    />
+                                                    <Button
+                                                        icon={<RulerRegular />}
+                                                        onClick={() => setRemnantLength(calcRemnant)}
+                                                        title="Reset to Calculated"
+                                                    />
+                                                </div>
+                                                {remnantLength !== calcRemnant && !isScrap && (
+                                                    <Text size={200} style={{ color: tokens.colorPaletteDarkOrangeForeground1, fontWeight: 500 }}>
+                                                        Difference of {Math.abs(calcRemnant - remnantLength)}mm recorded as loss.
+                                                    </Text>
+                                                )}
+
                                             </div>
-                                            {remnantLength !== calcRemnant && !isScrap && (
-                                                <p className="text-xs text-orange-600 font-medium">
-                                                    Difference of {Math.abs(calcRemnant - remnantLength)}mm will be recorded as processing loss.
-                                                </p>
+
+                                            <Checkbox
+                                                label="Mark remainder as SCRAP (No remnant created)"
+                                                checked={isScrap}
+                                                onChange={(e, d) => setIsScrap(d.checked as boolean)}
+                                            />
+
+                                            {(remnantLength !== calcRemnant || isScrap) && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                    <Label>Reason / Comment</Label>
+                                                    <Input
+                                                        value={reason}
+                                                        onChange={(e, d) => setReason(d.value)}
+                                                        placeholder="e.g. Saw blade width, damaged end..."
+                                                    />
+                                                </div>
                                             )}
                                         </div>
-
-                                        <div className="flex items-center space-x-2">
-                                            <Checkbox
-                                                id="scrap"
-                                                checked={isScrap}
-                                                onCheckedChange={(c) => setIsScrap(!!c)}
-                                            />
-                                            <Label htmlFor="scrap" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                                Mark remainder as SCRAP (No remnant created)
-                                            </Label>
-                                        </div>
-
-                                        {(remnantLength !== calcRemnant || isScrap) && (
-                                            <div className="grid gap-2">
-                                                <Label>Reason / Comment</Label>
-                                                <Input
-                                                    value={reason}
-                                                    onChange={e => setReason(e.target.value)}
-                                                    placeholder="e.g. Saw blade width, damaged end..."
-                                                />
-                                            </div>
-                                        )}
                                     </div>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
 
-                        <div className="p-4 border-t bg-white flex justify-end gap-2">
-                            <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
-                            <Button onClick={handleAllocate} disabled={!isValid || loading}>
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                                Record Cut & Save
-                            </Button>
+                            <div className={styles.footer}>
+                                <Button appearance="subtle" onClick={() => onOpenChange(false)}>Close</Button>
+                                <Button
+                                    appearance="primary"
+                                    onClick={handleAllocate}
+                                    disabled={!isValid || loading}
+                                    icon={loading ? <Spinner size="tiny" /> : undefined}
+                                >
+                                    Record Cut & Save
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </DialogContent>
+            </DialogSurface>
         </Dialog>
     )
 }

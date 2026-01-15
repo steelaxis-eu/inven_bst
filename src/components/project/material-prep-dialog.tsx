@@ -1,23 +1,34 @@
 'use client'
 
 import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import {
+    Dialog,
+    DialogSurface,
+    DialogTitle,
+    DialogBody,
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Label,
+    makeStyles,
+    tokens,
+    Spinner,
+    Text,
+    Title3
+} from "@fluentui/react-components"
 import { completeMaterialPrepWorkOrder } from '@/app/actions/workorders'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
 
 interface MaterialPrepDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    workOrder: any // Using any for simplicity in linking, but ideally properly typed
+    workOrder: any
     onSuccess: () => void
 }
 
 interface StockInputItem {
-    id: string // aggregate key
+    id: string
     profileId: string
     gradeId: string
     profileType: string
@@ -25,7 +36,6 @@ interface StockInputItem {
     gradeName: string
     totalLengthNeeded: number
     quantityNeeded: number
-    // Inputs
     lotId: string
     certificate: string
     supplierId: string
@@ -34,7 +44,44 @@ interface StockInputItem {
     receivedQuantity: number
 }
 
+const useStyles = makeStyles({
+    content: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        maxHeight: '80vh',
+    },
+    itemCard: {
+        backgroundColor: tokens.colorNeutralBackground2,
+        padding: '16px',
+        borderRadius: tokens.borderRadiusMedium,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+    },
+    itemHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: '8px',
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        marginBottom: '4px',
+    },
+    gridThree: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+    },
+    field: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+    }
+})
+
 export function MaterialPrepDialog({ open, onOpenChange, workOrder, onSuccess }: MaterialPrepDialogProps) {
+    const styles = useStyles()
     const [loading, setLoading] = useState(false)
     const [items, setItems] = useState<StockInputItem[]>([])
     const [initialized, setInitialized] = useState(false)
@@ -64,7 +111,7 @@ export function MaterialPrepDialog({ open, onOpenChange, workOrder, onSuccess }:
                     certificate: '',
                     supplierId: '',
                     totalCost: 0,
-                    receivedLength: 6000, // Default stock length
+                    receivedLength: 6000,
                     receivedQuantity: 1
                 }
             }
@@ -122,82 +169,77 @@ export function MaterialPrepDialog({ open, onOpenChange, workOrder, onSuccess }:
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
+        <Dialog open={open} onOpenChange={(e, data) => onOpenChange(data.open)}>
+            <DialogSurface style={{ minWidth: '800px' }}>
+                <DialogBody>
                     <DialogTitle>Receive Material & Complete Prep</DialogTitle>
-                    <DialogDescription>
-                        Input details for the received stock. This will create inventory records and unblock the Cutting Work Order.
-                    </DialogDescription>
-                </DialogHeader>
+                    <div style={{ marginBottom: '16px' }}>
+                        <Text>Input details for the received stock to create inventory records.</Text>
+                    </div>
+                    <DialogContent className={styles.content}>
+                        {items.map((item, idx) => (
+                            <div key={item.id} className={styles.itemCard}>
+                                <div className={styles.itemHeader}>
+                                    <Title3>{idx + 1}: {item.profileType} {item.dimensions} - {item.gradeName}</Title3>
+                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                                        Needed: {item.quantityNeeded} pieces ({item.totalLengthNeeded / 1000}m total)
+                                    </Text>
+                                </div>
 
-                <div className="space-y-6 py-4">
-                    {items.map((item, idx) => (
-                        <div key={item.id} className="p-4 border rounded-lg bg-gray-50 space-y-4">
-                            <div className="flex justify-between items-center border-b pb-2">
-                                <h4 className="font-semibold text-sm">
-                                    Item {idx + 1}: {item.profileType} {item.dimensions} - {item.gradeName}
-                                </h4>
-                                <div className="text-xs text-muted-foreground">
-                                    Needed: {item.quantityNeeded} pieces ({item.totalLengthNeeded / 1000}m total)
+                                <div className={styles.gridThree}>
+                                    <div className={styles.field}>
+                                        <Label required>Lot ID / Heat Number</Label>
+                                        <Input
+                                            value={item.lotId}
+                                            onChange={(e, d) => updateItem(item.id, 'lotId', d.value)}
+                                            placeholder="e.g. HEAT-12345"
+                                        />
+                                    </div>
+                                    <div className={styles.field}>
+                                        <Label required>Certificate Filename</Label>
+                                        <Input
+                                            value={item.certificate}
+                                            onChange={(e, d) => updateItem(item.id, 'certificate', d.value)}
+                                            placeholder="e.g. CERT-001.pdf"
+                                        />
+                                    </div>
+                                    <div className={styles.field}>
+                                        <Label>Total Cost (€)</Label>
+                                        <Input
+                                            type="number"
+                                            value={item.totalCost.toString()}
+                                            onChange={(e, d) => updateItem(item.id, 'totalCost', d.value)}
+                                            min="0"
+                                        />
+                                    </div>
+                                    <div className={styles.field}>
+                                        <Label>Stock Length (mm)</Label>
+                                        <Input
+                                            type="number"
+                                            value={item.receivedLength.toString()}
+                                            onChange={(e, d) => updateItem(item.id, 'receivedLength', d.value)}
+                                        />
+                                    </div>
+                                    <div className={styles.field}>
+                                        <Label>Quantity Received</Label>
+                                        <Input
+                                            type="number"
+                                            value={item.receivedQuantity.toString()}
+                                            onChange={(e, d) => updateItem(item.id, 'receivedQuantity', d.value)}
+                                        />
+                                    </div>
                                 </div>
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Lot ID / Heat Number *</Label>
-                                    <Input
-                                        value={item.lotId}
-                                        onChange={(e) => updateItem(item.id, 'lotId', e.target.value)}
-                                        placeholder="e.g. HEAT-12345"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Certificate Filename *</Label>
-                                    <Input
-                                        value={item.certificate}
-                                        onChange={(e) => updateItem(item.id, 'certificate', e.target.value)}
-                                        placeholder="e.g. CERT-001.pdf"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Total Cost (€)</Label>
-                                    <Input
-                                        type="number"
-                                        value={item.totalCost}
-                                        onChange={(e) => updateItem(item.id, 'totalCost', e.target.value)}
-                                        min="0"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Stock Length (mm)</Label>
-                                    <Input
-                                        type="number"
-                                        value={item.receivedLength}
-                                        onChange={(e) => updateItem(item.id, 'receivedLength', e.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Quantity Received</Label>
-                                    <Input
-                                        type="number"
-                                        value={item.receivedQuantity}
-                                        onChange={(e) => updateItem(item.id, 'receivedQuantity', e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={loading}>
-                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Confirm Receipt & Complete WO
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+                        ))}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button appearance="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button appearance="primary" onClick={handleSubmit} disabled={loading}>
+                            {loading ? <Spinner size="tiny" /> : "Confirm Receipt & Complete WO"}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
         </Dialog>
     )
 }

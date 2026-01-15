@@ -2,25 +2,66 @@
 
 import { useState, useEffect } from 'react'
 import { useImport } from "@/context/import-context"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Package, Scissors, Layers } from 'lucide-react'
+import {
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Label,
+    Spinner,
+    makeStyles,
+    tokens,
+    Text,
+    TabList,
+    Tab,
+    Table,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    TableBody,
+    TableCell,
+    Checkbox,
+    Dropdown,
+    Option,
+    Combobox,
+    Badge,
+    shorthands
+} from "@fluentui/react-components"
+import {
+    ArrowUploadRegular,
+    DocumentTextRegular,
+    LayerRegular,
+    CheckmarkCircleRegular,
+    ErrorCircleRegular,
+    BoxRegular,
+    AddRegular
+} from "@fluentui/react-icons"
 import { toast } from 'sonner'
-import { parseDrawingsZip, ParsedPart, parseAssemblyZip, ParsedAssembly } from '@/app/actions/drawings'
-import { createPart, getProjectPartsCount } from '@/app/actions/parts'
+import { getProjectPartsCount, createPart } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
 import { createAssembly } from '@/app/actions/assemblies'
+import { createGrade } from '@/app/actions/grades'
 
-// Extended Helper Interfaces
-interface ReviewPart extends ParsedPart {
+// Interfaces
+interface ReviewPart {
+    id: string
+    filename: string
+    partNumber: string
+    description?: string
+    quantity: number
+    material?: string
+    thickness?: number
+    width?: number
+    length?: number
+    profileType?: string | null
+    profileDimensions?: string | null
+    drawingRef?: string
+    confidence: number
     include: boolean
     type: 'PROFILE' | 'PLATE'
     selectedProfileType?: string
@@ -28,10 +69,17 @@ interface ReviewPart extends ParsedPart {
     selectedGradeId?: string
     status?: 'PENDING' | 'CREATED' | 'ERROR'
     errorMsg?: string
-    drawingRef?: string
 }
 
-interface ReviewAssembly extends ParsedAssembly {
+interface ReviewAssembly {
+    id: string
+    filename: string
+    assemblyNumber: string
+    name: string
+    quantity: number
+    bom: any[]
+    drawingRef?: string
+    confidence: number
     include: boolean
     status?: 'PENDING' | 'CREATED' | 'ERROR'
     errorMsg?: string
@@ -45,7 +93,58 @@ interface ImportDrawingsDialogProps {
     shapes: { id: string; params: string[] }[]
 }
 
+const useStyles = makeStyles({
+    dialogContent: {
+        height: '90vh',
+        width: '95vw',
+        maxWidth: '1400px',
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    uploadArea: {
+        border: `2px dashed ${tokens.colorNeutralStroke1}`,
+        borderRadius: tokens.borderRadiusLarge,
+        padding: '48px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '16px',
+        margin: '24px',
+        transition: 'all 0.2s',
+        cursor: 'pointer',
+        ':hover': {
+            ...shorthands.borderColor(tokens.colorBrandStroke1),
+            backgroundColor: tokens.colorBrandBackground2,
+        }
+    },
+    activeUpload: {
+        ...shorthands.borderColor(tokens.colorBrandStroke1),
+        backgroundColor: tokens.colorBrandBackground2,
+    },
+    tableContainer: {
+        flex: 1,
+        overflow: 'auto',
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+        borderRadius: tokens.borderRadiusMedium,
+        marginTop: '16px',
+    },
+    inputSmall: {
+        minWidth: '60px',
+        maxWidth: '80px',
+    },
+    inputMedium: {
+        minWidth: '100px',
+    },
+    actionRow: {
+        display: 'flex',
+        gap: '4px',
+        alignItems: 'center',
+    }
+})
+
 export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades, shapes }: ImportDrawingsDialogProps) {
+    const styles = useStyles()
     const { startImport, resultParts, resultAssemblies, status, dismiss, reset } = useImport()
 
     // Local state
@@ -59,7 +158,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     const [isDragging, setIsDragging] = useState(false)
     const [hasExistingParts, setHasExistingParts] = useState(false)
 
-    // New states for dynamic grade creation
+    // Dynamic Grade Creation
     const [availableGrades, setAvailableGrades] = useState(grades)
     const [isAddingGrade, setIsAddingGrade] = useState(false)
     const [newGradeName, setNewGradeName] = useState("")
@@ -76,46 +175,28 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         setAvailableGrades(grades)
     }, [grades])
 
-    // Sync context status with dialog open state
-    // Sync context status with dialog open state and initialize data
     useEffect(() => {
         if (status === 'reviewing') {
             setOpen(true)
-
-            // Only initialize if we haven't already populate the table
-            // This prevents overwriting user edits if this effect re-runs due to other dependency changes
             if (resultParts.length > 0 && parts.length === 0) {
-                // Filter confidence > 90
-                const mappedParts: ReviewPart[] = resultParts
+                const mappedParts = resultParts
                     .filter(p => p.confidence > 90)
                     .map(p => {
-                        // Normalize type
-                        // The AI is instructed to return PROFILE or PLATE, but we handle safe fallbacks
                         const rawType = p.type?.toUpperCase() || 'PLATE'
                         const isProfile = rawType === 'PROFILE' || !!p.profileType
-
-                        // Try to match grade
                         const matchedGrade = availableGrades.find(g =>
                             g.name.toLowerCase() === p.material?.toLowerCase() ||
-                            // Check for common variations like leaving out spaces "S235JR" vs "S235 JR"
                             g.name.replace(/\s+/g, '').toLowerCase() === p.material?.replace(/\s+/g, '').toLowerCase()
                         )
-
                         return {
                             ...p,
                             include: true,
-                            // If profileType is present, force PROFILE even if type says PLATE (AI inconsistency fix)
-                            type: isProfile ? 'PROFILE' : 'PLATE',
-
-                            // Map extracted profile data
+                            type: (isProfile ? 'PROFILE' : 'PLATE') as 'PROFILE' | 'PLATE',
                             selectedProfileType: p.profileType ? p.profileType.toUpperCase() : undefined,
                             selectedProfileDim: p.profileDimensions,
-
-                            // Map Grade
                             selectedGradeId: matchedGrade?.id,
-
-                            status: 'PENDING' as const
-                        }
+                            status: 'PENDING'
+                        } as ReviewPart
                     })
                 setParts(mappedParts)
                 setStep('review')
@@ -123,61 +204,23 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
             } else if (resultAssemblies.length > 0 && assemblies.length === 0) {
                 setAssemblies(resultAssemblies
                     .filter(a => a.confidence > 90)
-                    .map(a => ({ ...a, include: true, status: 'PENDING' })))
+                    .map(a => ({ ...a, include: true, status: 'PENDING' } as ReviewAssembly)))
                 setStep('review')
                 setMode('assemblies')
             }
         }
     }, [status, resultParts, resultAssemblies, availableGrades])
 
-    // Derived lists for Profile Selectors
     const profileTypes = Array.from(new Set([
         ...standardProfiles.map(p => p.type),
         ...shapes.map(s => s.id),
         "RHS", "SHS", "CHS"
     ])).sort()
 
-    // Drag handlers
-    const handleDragEnter = (e: React.DragEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        setIsDragging(true)
-    }
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        setIsDragging(false)
-    }
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault()
-    }
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        setIsDragging(false)
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            const droppedFile = e.dataTransfer.files[0]
-            if (droppedFile.name.endsWith('.zip')) {
-                setFile(droppedFile)
-            } else {
-                toast.error("Please upload a ZIP file")
-            }
-        }
-    }
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setFile(e.target.files[0])
-        }
-    }
-
     const handleUpload = async () => {
         if (!file) return
-        setOpen(false) // Close dialog immediately
-        await startImport(file, mode, projectId) // Start background process
+        setOpen(false)
+        await startImport(file, mode, projectId)
     }
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
@@ -191,25 +234,22 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     const handleCreateParts = async () => {
         const partsToCreate = parts.filter(p => p.include && p.status !== 'CREATED')
         if (partsToCreate.length === 0) return
-
         setCreating(true)
         let successCount = 0
 
         for (const part of partsToCreate) {
             try {
                 if (part.type === 'PROFILE') {
-                    if (!part.selectedProfileType || !part.selectedProfileDim) {
-                        throw new Error("Profile Type/Dimensions not selected")
-                    }
+                    if (!part.selectedProfileType || !part.selectedProfileDim) throw new Error("Missing profile info")
                     await createPart({
                         projectId,
                         partNumber: part.partNumber,
-                        description: part.description,
+                        description: part.description || undefined,
                         quantity: part.quantity,
-                        gradeId: part.selectedGradeId,
+                        gradeId: part.selectedGradeId!,
                         profileType: part.selectedProfileType,
                         profileDimensions: part.selectedProfileDim,
-                        length: part.length,
+                        length: part.length || 0,
                         drawingRef: part.drawingRef,
                         notes: `Imported from ${part.filename}`
                     })
@@ -217,12 +257,12 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     await createPlatePart({
                         projectId,
                         partNumber: part.partNumber,
-                        description: part.description,
+                        description: part.description || undefined,
                         quantity: part.quantity,
-                        gradeId: part.selectedGradeId,
-                        thickness: part.thickness,
-                        width: part.width,
-                        length: part.length,
+                        gradeId: part.selectedGradeId!,
+                        thickness: part.thickness || 0,
+                        width: part.width || 0,
+                        length: part.length || 0,
                         notes: `Imported from ${part.filename}`,
                         isOutsourced: false
                     })
@@ -230,25 +270,21 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                 updatePart(part.id, { status: 'CREATED' })
                 successCount++
             } catch (e: any) {
-                console.error(e)
                 updatePart(part.id, { status: 'ERROR', errorMsg: e.message || "Failed" })
             }
         }
         setCreating(false)
         if (successCount > 0) {
             toast.success(`Created ${successCount} parts`)
-            reset()
+            reset() // Context reset but keep dialog potentially? Usually we reload or clear.
             window.location.reload()
         }
     }
 
     const handleCreateAssemblies = async () => {
         const assembliesToCreate = assemblies.filter(a => a.include && a.status !== 'CREATED')
-        if (assembliesToCreate.length === 0) return
-
         setCreating(true)
         let successCount = 0
-
         for (const assembly of assembliesToCreate) {
             try {
                 await createAssembly({
@@ -256,15 +292,14 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                     assemblyNumber: assembly.assemblyNumber,
                     name: assembly.name,
                     quantity: assembly.quantity,
-                    notes: `Imported from ${assembly.filename}. BOM parsed.`,
+                    notes: `Imported from ${assembly.filename}`,
                     bom: assembly.bom,
                     drawingRef: assembly.drawingRef
                 })
                 updateAssembly(assembly.id, { status: 'CREATED' })
                 successCount++
             } catch (e: any) {
-                console.error(e)
-                updateAssembly(assembly.id, { status: 'ERROR', errorMsg: e.message || "Failed" })
+                updateAssembly(assembly.id, { status: 'ERROR', errorMsg: e.message })
             }
         }
         setCreating(false)
@@ -277,35 +312,26 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
     const handleAddGrade = async () => {
         if (!newGradeName) return
-
-        // Dynamic import to avoid circular dependencies if any, or just import at top
-        const { createGrade } = await import('@/app/actions/grades')
-
         const res = await createGrade(newGradeName)
         if (res.success && res.grade) {
             toast.success(`Grade ${res.grade.name} created`)
             const newGradeItem = { id: res.grade.id, name: res.grade.name }
-
             setAvailableGrades(prev => [...prev, newGradeItem])
-
-            // AUTO-LINKING: Update all parts that match this new grade name
             setParts(prevParts => prevParts.map(p => {
-                // Check if part has no grade selected AND its parsed material matches the new grade
-                if (!p.selectedGradeId && p.material && p.material.toLowerCase() === newGradeName.toLowerCase()) {
+                if (!p.selectedGradeId && p.material?.toLowerCase() === newGradeName.toLowerCase()) {
                     return { ...p, selectedGradeId: res.grade.id }
                 }
                 return p
             }))
-
             setNewGradeName("")
             setIsAddingGrade(false)
         } else {
-            toast.error(res.error || "Failed to create grade")
+            toast.error("Failed to create grade")
         }
     }
 
     const handleReset = () => {
-        reset() // context reset
+        reset()
         setStep('upload')
         setFile(null)
         setParts([])
@@ -313,255 +339,200 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
         setCreating(false)
     }
 
-    // ... (updatePart kept implied, but I am inserting before updatePart or similar)
-    // Actually, I will insert it before `return (` which is around line 263.
-    // Let's target the lines before `return`.
-
     return (
-        <Dialog open={open} onOpenChange={setOpen} >
-            <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <Upload className="h-4 w-4" />
-                    Import Drawings
-                </Button>
+        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<ArrowUploadRegular />}>Import Drawings</Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] flex flex-col p-4 md:max-w-screen-2xl lg:max-w-none">
-                <DialogHeader>
-                    <DialogTitle>Import from Drawings</DialogTitle>
-                    <DialogDescription>
-                        Automated extraction for Parts and Assemblies using AI.
-                    </DialogDescription>
-                    <div className="pt-2">
-                        <Tabs value={mode} onValueChange={(v: any) => { setMode(v); handleReset(); }}>
-                            <TabsList>
-                                <TabsTrigger value="parts" className="gap-2"><FileText className="h-4 w-4" /> Parts (Single)</TabsTrigger>
-                                <TabsTrigger value="assemblies" disabled={!hasExistingParts} title={!hasExistingParts ? "Upload Parts first" : ""} className="gap-2"><Layers className="h-4 w-4" /> Assemblies</TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-                    </div>
-                </DialogHeader>
 
-                <div className="flex-1 overflow-hidden p-1 mt-2">
-                    {step === 'upload' && (
-                        <div
-                            className={`
-                                h-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-6 text-center transition-colors
-                                ${isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"}
-                            `}
-                            onDragEnter={handleDragEnter}
-                            onDragLeave={handleDragLeave}
-                            onDragOver={handleDragOver}
-                            onDrop={handleDrop}
-                        >
-                            <div className="flex flex-col items-center justify-center space-y-4 max-w-md">
-                                <div className={`p-4 rounded-full ${isDragging ? "bg-primary/10" : "bg-muted"}`}>
-                                    <Upload className="h-8 w-8 text-muted-foreground" />
+            <DialogSurface className={styles.dialogContent}>
+                <DialogBody style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <DialogTitle>Import from Drawings</DialogTitle>
+                    <div>
+                        <TabList selectedValue={mode} onTabSelect={(e, d) => { setMode(d.value as any); handleReset(); }}>
+                            <Tab value="parts" icon={<DocumentTextRegular />}>Parts (Single)</Tab>
+                            <Tab value="assemblies" icon={<LayerRegular />} disabled={!hasExistingParts} title={!hasExistingParts ? "Upload parts first" : ""}>Assemblies</Tab>
+                        </TabList>
+                    </div>
+
+                    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        {step === 'upload' && (
+                            <div
+                                className={`${styles.uploadArea} ${isDragging ? styles.activeUpload : ''}`}
+                                onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    setIsDragging(false);
+                                    if (e.dataTransfer.files?.[0]?.name.endsWith('.zip')) setFile(e.dataTransfer.files[0]);
+                                    else toast.error("ZIP files only");
+                                }}
+                                onClick={() => document.getElementById('file-upload-dialog')?.click()}
+                            >
+                                <ArrowUploadRegular style={{ fontSize: '48px', color: tokens.colorNeutralForeground3 }} />
+                                <div style={{ textAlign: 'center' }}>
+                                    <Text weight="semibold" size={400}>{isDragging ? "Drop ZIP file here" : "Upload Drawings ZIP"}</Text>
+                                    <br />
+                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Drag & drop or Click to browse</Text>
                                 </div>
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-lg">
-                                        {isDragging ? "Drop ZIP file here" : "Upload Drawings ZIP"}
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Drag and drop a ZIP file containing your PDF drawings, or click below to browse.
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="file"
-                                        className="hidden"
-                                        id="file-upload"
-                                        accept=".zip"
-                                        onChange={handleFileChange}
-                                    />
-                                    <Button variant={file ? "secondary" : "default"} asChild>
-                                        <label htmlFor="file-upload" className="cursor-pointer">
-                                            {file ? "Change File" : "Select File"}
-                                        </label>
-                                    </Button>
-                                    {file && (
-                                        <Badge variant="outline" className="h-9 px-3 flex items-center gap-1 font-mono text-sm">
-                                            <Package className="h-3 w-3" />
-                                            {file.name}
-                                        </Badge>
-                                    )}
-                                </div>
+                                <input
+                                    type="file"
+                                    id="file-upload-dialog"
+                                    style={{ display: 'none' }}
+                                    accept=".zip"
+                                    onChange={(e) => { if (e.target.files?.[0]) setFile(e.target.files[0]); }}
+                                />
+                                {file && (
+                                    <Badge appearance="tint" color="brand" icon={<BoxRegular />}>
+                                        {file.name}
+                                    </Badge>
+                                )}
                             </div>
-                        </div>
-                    )}
-                    {step === 'review' && (
-                        <ScrollArea className="h-full border rounded-md">
-                            <div className="min-w-max p-2">
+                        )}
+
+                        {step === 'review' && (
+                            <div className={styles.tableContainer}>
                                 {mode === 'parts' ? (
-                                    <Table>
+                                    <Table size="small">
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead className="w-12"><Checkbox /></TableHead>
-                                                <TableHead className="min-w-[200px]">Part Number</TableHead>
-                                                <TableHead className="min-w-[140px]">Type</TableHead>
-                                                <TableHead className="min-w-[80px]">Qty</TableHead>
-                                                <TableHead className="min-w-[140px]">Grade</TableHead>
-                                                <TableHead className="min-w-[350px]">Dimensions</TableHead>
-                                                <TableHead className="w-12"></TableHead>
+                                                <TableHeaderCell style={{ width: '40px' }}><Checkbox /></TableHeaderCell>
+                                                <TableHeaderCell>Part Number</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '100px' }}>Type</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '60px' }}>Qty</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '150px' }}>Grade</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '300px' }}>Dimensions</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '40px' }}></TableHeaderCell>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {parts.map((part) => (
-                                                <TableRow key={part.id} className={part.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
-                                                    {/* ... (Checkbox, PartNumber, Type, Qty) ... */}
+                                            {parts.map(part => (
+                                                <TableRow key={part.id} style={{ opacity: part.status === 'CREATED' ? 0.5 : 1, backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined }}>
                                                     <TableCell>
-                                                        <Checkbox checked={part.include} onCheckedChange={(c) => updatePart(part.id, { include: c === true })} disabled={part.status === 'CREATED'} />
+                                                        <Checkbox checked={part.include} onChange={(e, d) => updatePart(part.id, { include: d.checked as boolean })} disabled={part.status === 'CREATED'} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="space-y-1">
-                                                            <Input value={part.partNumber} onChange={(e) => updatePart(part.id, { partNumber: e.target.value })} className="h-8 font-mono w-full" />
-                                                            <p className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={part.filename}>{part.filename}</p>
-                                                        </div>
+                                                        <Input value={part.partNumber} onChange={(e, d) => updatePart(part.id, { partNumber: d.value })} className={styles.inputMedium} />
+                                                        <div style={{ fontSize: '10px', color: tokens.colorNeutralForeground3 }}>{part.filename}</div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Select value={part.type} onValueChange={(v: any) => updatePart(part.id, { type: v })}>
-                                                            <SelectTrigger className="h-8 w-full"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="PLATE">Plate</SelectItem>
-                                                                <SelectItem value="PROFILE">Profile</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <Dropdown
+                                                            value={part.type === 'PLATE' ? "Plate" : "Profile"}
+                                                            selectedOptions={[part.type]}
+                                                            onOptionSelect={(e, d) => updatePart(part.id, { type: d.optionValue as any })}
+                                                            style={{ minWidth: '90px' }}
+                                                        >
+                                                            <Option value="PLATE">Plate</Option>
+                                                            <Option value="PROFILE">Profile</Option>
+                                                        </Dropdown>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input type="number" value={part.quantity} onChange={(e) => updatePart(part.id, { quantity: parseInt(e.target.value) || 0 })} className="h-8 w-16" />
+                                                        <Input type="number" value={part.quantity.toString()} onChange={(e, d) => updatePart(part.id, { quantity: parseInt(d.value) || 0 })} className={styles.inputSmall} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Select
-                                                            value={part.selectedGradeId}
-                                                            onValueChange={(v) => {
-                                                                if (v === 'new') {
+                                                        <Combobox
+                                                            value={availableGrades.find(g => g.id === part.selectedGradeId)?.name || part.material || ''}
+                                                            selectedOptions={part.selectedGradeId ? [part.selectedGradeId] : []}
+                                                            onOptionSelect={(e, d) => {
+                                                                if (d.optionValue === 'new') {
                                                                     setNewGradeName("")
                                                                     setIsAddingGrade(true)
-                                                                } else if (v.startsWith('create:')) {
-                                                                    const nameToCreate = v.split(':')[1]
-                                                                    setNewGradeName(nameToCreate)
-                                                                    setIsAddingGrade(true)
                                                                 } else {
-                                                                    updatePart(part.id, { selectedGradeId: v })
+                                                                    updatePart(part.id, { selectedGradeId: d.optionValue as string })
                                                                 }
                                                             }}
+                                                            placeholder={(!part.selectedGradeId && part.material) ? `Add ${part.material}?` : "Grade"}
+                                                            style={{
+                                                                minWidth: '140px',
+                                                                border: (!part.selectedGradeId && part.material) ? `1px solid ${tokens.colorPaletteDarkOrangeBorder1}` : undefined
+                                                            }}
                                                         >
-                                                            <SelectTrigger
-                                                                className={`h-8 w-full ${!part.selectedGradeId && part.material ? "border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30" : ""}`}
-                                                            >
-                                                                <SelectValue
-                                                                    placeholder={(!part.selectedGradeId && part.material) ? `Add ${part.material}?` : "Grade"}
-                                                                />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {/* Helper Option: If we have a parsed material but no ID, offer to create it */}
-                                                                {(!part.selectedGradeId && part.material) && (
-                                                                    <SelectItem value={`create:${part.material}`} className="text-amber-600 font-semibold focus:text-amber-700 focus:bg-amber-50">
-                                                                        ✨ Create "{part.material}"
-                                                                    </SelectItem>
-                                                                )}
-
-                                                                {availableGrades.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
-
-                                                                <SelectItem value="new" className="text-primary font-medium border-t mt-1">
-                                                                    + Add New Grade
-                                                                </SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
+                                                            {availableGrades.map(g => <Option key={g.id} value={g.id} text={g.name}>{g.name}</Option>)}
+                                                            <Option value="new" text="+ Add New Grade">+ Add New Grade</Option>
+                                                        </Combobox>
                                                     </TableCell>
-                                                    {/* ... (Dimensions, Status) ... */}
                                                     <TableCell>
                                                         {part.type === 'PLATE' ? (
-                                                            <div className="flex items-center gap-1">
-                                                                <Input placeholder="T" value={part.thickness} onChange={(e) => updatePart(part.id, { thickness: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
-                                                                <span className="text-xs">x</span>
-                                                                <Input placeholder="W" value={part.width} onChange={(e) => updatePart(part.id, { width: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
-                                                                <span className="text-xs">x</span>
-                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-20" />
+                                                            <div className={styles.actionRow}>
+                                                                <Input placeholder="T" value={part.thickness?.toString()} onChange={(e, d) => updatePart(part.id, { thickness: parseFloat(d.value) })} className={styles.inputSmall} />
+                                                                <span>x</span>
+                                                                <Input placeholder="W" value={part.width?.toString()} onChange={(e, d) => updatePart(part.id, { width: parseFloat(d.value) })} className={styles.inputSmall} />
+                                                                <span>x</span>
+                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} className={styles.inputSmall} />
                                                             </div>
                                                         ) : (
-                                                            <div className="flex items-center gap-1">
-                                                                <Select value={part.selectedProfileType} onValueChange={(v) => updatePart(part.id, { selectedProfileType: v })}>
-                                                                    <SelectTrigger className="h-8 w-32"><SelectValue placeholder="Type" /></SelectTrigger>
-                                                                    <SelectContent>{profileTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                                                                </Select>
-                                                                <div className="relative">
-                                                                    <Input
-                                                                        placeholder="Dim"
-                                                                        value={part.selectedProfileDim}
-                                                                        onChange={(e) => updatePart(part.id, { selectedProfileDim: e.target.value })}
-                                                                        className="h-8 w-36"
-                                                                        list={`dims-${part.id}`}
-                                                                    />
-                                                                    <datalist id={`dims-${part.id}`}>
-                                                                        {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => <option key={p.dimensions} value={p.dimensions} />)}
-                                                                    </datalist>
-                                                                </div>
-
-                                                                <Input placeholder="L" value={part.length} onChange={(e) => updatePart(part.id, { length: parseFloat(e.target.value) || 0 })} className="h-8 w-24" />
+                                                            <div className={styles.actionRow}>
+                                                                <Dropdown
+                                                                    value={part.selectedProfileType || ''}
+                                                                    selectedOptions={part.selectedProfileType ? [part.selectedProfileType] : []}
+                                                                    onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileType: d.optionValue as string })}
+                                                                    placeholder="Type"
+                                                                    style={{ minWidth: '80px' }}
+                                                                >
+                                                                    {profileTypes.map(t => <Option key={t} value={t}>{t}</Option>)}
+                                                                </Dropdown>
+                                                                <Combobox
+                                                                    value={part.selectedProfileDim || ''}
+                                                                    onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileDim: d.optionValue as string })}
+                                                                    onInput={(e) => updatePart(part.id, { selectedProfileDim: (e.target as HTMLInputElement).value })}
+                                                                    placeholder="Dim"
+                                                                    style={{ minWidth: '100px' }}
+                                                                    freeform
+                                                                >
+                                                                    {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => (
+                                                                        <Option key={p.dimensions} value={p.dimensions}>{p.dimensions}</Option>
+                                                                    ))}
+                                                                </Combobox>
+                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} className={styles.inputSmall} />
                                                             </div>
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {part.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                        {part.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                                        {part.status === 'CREATED' && <CheckmarkCircleRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
+                                                        {part.status === 'ERROR' && <ErrorCircleRegular style={{ color: tokens.colorPaletteRedForeground1 }} title={part.errorMsg} />}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
                                     </Table>
                                 ) : (
-                                    // ... (Assemblies Table - mostly unchanged but careful with nesting) ...
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead className="w-10"><Checkbox /></TableHead>
-                                                <TableHead className="w-40">Assembly Number</TableHead>
-                                                <TableHead className="w-48">Name</TableHead>
-                                                <TableHead className="w-20">Qty</TableHead>
-                                                <TableHead>BOM Summary</TableHead>
-                                                <TableHead className="w-10"></TableHead>
+                                                <TableHeaderCell style={{ width: '40px' }}><Checkbox /></TableHeaderCell>
+                                                <TableHeaderCell>Assembly #</TableHeaderCell>
+                                                <TableHeaderCell>Name</TableHeaderCell>
+                                                <TableHeaderCell>Qty</TableHeaderCell>
+                                                <TableHeaderCell>BOM</TableHeaderCell>
+                                                <TableHeaderCell></TableHeaderCell>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {assemblies.map((assembly) => (
-                                                <TableRow key={assembly.id} className={assembly.status === 'CREATED' ? 'opacity-50 bg-green-50' : ''}>
+                                            {assemblies.map(assembly => (
+                                                <TableRow key={assembly.id} style={{ opacity: assembly.status === 'CREATED' ? 0.5 : 1 }}>
                                                     <TableCell>
-                                                        <Checkbox checked={assembly.include} onCheckedChange={(c) => updateAssembly(assembly.id, { include: c === true })} disabled={assembly.status === 'CREATED'} />
+                                                        <Checkbox checked={assembly.include} onChange={(e, d) => updateAssembly(assembly.id, { include: d.checked as boolean })} disabled={assembly.status === 'CREATED'} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input value={assembly.assemblyNumber} onChange={(e) => updateAssembly(assembly.id, { assemblyNumber: e.target.value })} className="h-8 font-mono" />
+                                                        <Input value={assembly.assemblyNumber} onChange={(e, d) => updateAssembly(assembly.id, { assemblyNumber: d.value })} className={styles.inputMedium} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input value={assembly.name} onChange={(e) => updateAssembly(assembly.id, { name: e.target.value })} className="h-8" />
+                                                        <Input value={assembly.name} onChange={(e, d) => updateAssembly(assembly.id, { name: d.value })} className={styles.inputMedium} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input type="number" value={assembly.quantity} onChange={(e) => updateAssembly(assembly.id, { quantity: parseInt(e.target.value) || 1 })} className="h-8" />
+                                                        <Input type="number" value={assembly.quantity.toString()} onChange={(e, d) => updateAssembly(assembly.id, { quantity: parseInt(d.value) || 0 })} className={styles.inputSmall} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="flex flex-col text-xs text-muted-foreground space-y-1">
-                                                            <div className="font-semibold">{assembly.bom.length} items extracted</div>
-                                                            <div className="max-h-[100px] overflow-y-auto pr-2 space-y-1">
-                                                                {assembly.bom.map((b, i) => (
-                                                                    <div key={i} className="flex gap-2 whitespace-nowrap">
-                                                                        <span className="w-6 font-mono text-foreground/70">{b.quantity}x</span>
-                                                                        <span className="w-20 font-mono text-foreground/70">{b.partNumber}</span>
-                                                                        <span>
-                                                                            {b.profileType ? (
-                                                                                <span className="text-foreground">
-                                                                                    {b.profileType} - {b.profileDimensions} - {b.length}mm
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span>{b.description}</span>
-                                                                            )}
-                                                                        </span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
+                                                        <div style={{ fontSize: '11px', lineHeight: '1.2' }}>
+                                                            {assembly.bom.map((b, i) => (
+                                                                <div key={i}>{b.quantity}x {b.partNumber} ({b.profileType || 'PLATE'})</div>
+                                                            ))}
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        {assembly.status === 'CREATED' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                        {assembly.status === 'ERROR' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                                        {assembly.status === 'CREATED' && <CheckmarkCircleRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
+                                                        {assembly.status === 'ERROR' && <ErrorCircleRegular style={{ color: tokens.colorPaletteRedForeground1 }} />}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -569,57 +540,42 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                     </Table>
                                 )}
                             </div>
-                        </ScrollArea>
-                    )}
-                </div>
+                        )}
+                    </div>
 
-                <DialogFooter>
-                    {step === 'upload' ? (
-                        <Button onClick={handleUpload} disabled={!file || status === 'processing'}>
-                            {status === 'processing' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Upload & Parse
-                        </Button>
-                    ) : (
-                        <>
-                            <Button variant="outline" onClick={handleReset}>Cancel / Restart</Button>
-                            <Button onClick={mode === 'parts' ? handleCreateParts : handleCreateAssemblies} disabled={creating}>
-                                {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Create {mode === 'parts' ? 'Parts' : 'Assemblies'}
+                    <DialogActions>
+                        {step === 'upload' ? (
+                            <Button appearance="primary" onClick={handleUpload} disabled={!file || status === 'processing'} icon={status === 'processing' ? <Spinner size="tiny" /> : undefined}>
+                                Upload & Parse
                             </Button>
-                        </>
-                    )}
-                </DialogFooter>
+                        ) : (
+                            <>
+                                <Button appearance="subtle" onClick={handleReset}>Cancel / Restart</Button>
+                                <Button appearance="primary" onClick={mode === 'parts' ? handleCreateParts : handleCreateAssemblies} disabled={creating} icon={creating ? <Spinner size="tiny" /> : undefined}>
+                                    Create {mode === 'parts' ? 'Parts' : 'Assemblies'}
+                                </Button>
+                            </>
+                        )}
+                    </DialogActions>
 
-                {/* Nested Dialog for Adding Grade */}
-                <Dialog open={isAddingGrade} onOpenChange={setIsAddingGrade}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Add New Grade</DialogTitle>
-                            <DialogDescription>
-                                Create a new material grade to use for this part.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="name" className="text-right">
-                                    Name
-                                </Label>
-                                <Input
-                                    id="name"
-                                    value={newGradeName}
-                                    onChange={(e) => setNewGradeName(e.target.value)}
-                                    className="col-span-3"
-                                    placeholder="e.g. S355J2"
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button onClick={handleAddGrade} disabled={!newGradeName}>Create Grade</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                    <Dialog open={isAddingGrade} onOpenChange={(e, data) => setIsAddingGrade(data.open)}>
+                        <DialogSurface>
+                            <DialogBody>
+                                <DialogTitle>Add New Grade</DialogTitle>
+                                <DialogContent>
+                                    <Label>Name</Label>
+                                    <Input value={newGradeName} onChange={(e, d) => setNewGradeName(d.value)} placeholder="e.g. S355" />
+                                </DialogContent>
+                                <DialogActions>
+                                    <Button appearance="secondary" onClick={() => setIsAddingGrade(false)}>Cancel</Button>
+                                    <Button appearance="primary" onClick={handleAddGrade} disabled={!newGradeName} icon={<AddRegular />}>Create Grade</Button>
+                                </DialogActions>
+                            </DialogBody>
+                        </DialogSurface>
+                    </Dialog>
 
-            </DialogContent>
-        </Dialog >
+                </DialogBody>
+            </DialogSurface>
+        </Dialog>
     )
 }

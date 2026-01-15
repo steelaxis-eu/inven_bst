@@ -1,325 +1,254 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
+import {
+    Dialog,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    Input,
+    Label,
+    Textarea,
+    Table,
+    TableHeader,
+    TableRow,
+    TableHeaderCell,
+    TableBody,
+    TableCell,
+    makeStyles,
+    tokens,
+    shorthands,
+    Text,
+    Field,
+    Spinner,
+    Combobox,
+    Option
+} from "@fluentui/react-components";
+import {
+    BoxRegular,
+    CheckmarkCircleRegular,
+    DismissRegular,
+    AddRegular,
+    DeleteRegular
+} from "@fluentui/react-icons";
 import { toast } from 'sonner'
-import { Upload, X, FileText, CheckCircle, RefreshCw } from 'lucide-react'
-// Actions
-import { getSignedUploadUrl } from '@/app/actions/upload'
-// We will need bulk update actions for parts and plate parts
-import { bulkUpdatePieceStatus, generatePartPieces } from '@/app/actions/parts'
-// Need to create this action for plates
-import { bulkUpdatePlatePieceStatus, generatePlatePieces } from '@/app/actions/plateparts'
+import { receivePartBatch } from '@/app/actions/parts'
+import { getSuppliers } from '@/app/actions/inventory'
+import { FluentFileUploader } from '@/components/common/fluent-file-uploader'
+import { PartWithRelations } from '@/types'
 
-// Define a unified interface for the dialog input
-interface ReceivableItem {
-    id: string
-    type: 'part' | 'plate'
-    partNumber: string
-    description: string
-    quantity: number
-    // We pass pieces if we have them, otherwise we might fetch them?
-    // For simplicity, let's assume we pass the full object which has pieces
-    pieces: { id: string, pieceNumber: number, status: string }[]
-}
+const useStyles = makeStyles({
+    dialogSurface: {
+        width: '800px',
+        maxWidth: '100%',
+        height: 'auto',
+        maxHeight: '90vh',
+    },
+    dialogContent: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+    },
+    grid2: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '24px',
+    },
+    section: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+    },
+    sectionTitle: {
+        fontSize: '14px',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        color: tokens.colorNeutralForeground3,
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        paddingBottom: '8px',
+        marginBottom: '8px',
+    },
+    fileUploaderContainer: {
+        border: `1px dashed ${tokens.colorNeutralStroke1}`,
+        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        padding: '16px',
+        backgroundColor: tokens.colorNeutralBackgroundAlpha,
+    }
+});
 
 interface ReceiveItemsDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    item: ReceivableItem // We receive one "Part" definition, but we are receiving its pieces
-    projectId: string
+    part: PartWithRelations | null
     onSuccess?: () => void
 }
 
-export function ReceiveItemsDialog({ open, onOpenChange, item, projectId, onSuccess }: ReceiveItemsDialogProps) {
-    const [step, setStep] = useState<'select' | 'details'>('select')
-    const [selectedPieceIds, setSelectedPieceIds] = useState<string[]>([])
+export function ReceiveItemsDialog({ open, onOpenChange, part, onSuccess }: ReceiveItemsDialogProps) {
+    const styles = useStyles();
+    const [quantity, setQuantity] = useState(1)
+    const [heatValues, setHeatValues] = useState<{ [key: number]: string }>({})
+    const [supplierId, setSupplierId] = useState<string>('')
+    const [suppliers, setSuppliers] = useState<{ id: string, name: string }[]>([])
+    const [certificatePath, setCertificatePath] = useState<string | null>(null)
+    const [submitting, setSubmitting] = useState(false)
 
-    // Local state for pieces (allows us to update list after generation)
-    const [currentPieces, setCurrentPieces] = useState<any[]>(item.pieces || [])
-
-    // Form State
-    const [supplier, setSupplier] = useState('')
-    const [lotId, setLotId] = useState('') // Heat Number / Batch ID
-    const [certificateFile, setCertificateFile] = useState<File | null>(null)
-    const [isUploading, setIsUploading] = useState(false)
-    const [saving, setSaving] = useState(false)
-    const [isGenerating, setIsGenerating] = useState(false)
-
-    // Sync pieces when item changes
     useEffect(() => {
-        if (item.pieces) {
-            setCurrentPieces(item.pieces)
+        if (open) {
+            getSuppliers().then(setSuppliers)
+            setQuantity(1)
+            setHeatValues({})
+            setCertificatePath(null)
+            setSupplierId('')
         }
-    }, [item])
+    }, [open])
 
-    // Filter only pending pieces
-    const availablePieces = currentPieces.filter(p => p.status === 'PENDING')
+    if (!part) return null
 
-    const handleSelectAll = (checked: boolean) => {
-        if (checked) {
-            setSelectedPieceIds(availablePieces.map(p => p.id))
-        } else {
-            setSelectedPieceIds([])
+    const handleReceive = async () => {
+        if (!part) return
+        setSubmitting(true)
+
+        // Validate Heat Numbers
+        const heats = []
+        for (let i = 0; i < quantity; i++) {
+            heats.push(heatValues[i] || '')
         }
-    }
 
-    const handleTogglePiece = (id: string) => {
-        if (selectedPieceIds.includes(id)) {
-            setSelectedPieceIds(selectedPieceIds.filter(pid => pid !== id))
-        } else {
-            setSelectedPieceIds([...selectedPieceIds, id])
-        }
-    }
-
-    const handleNext = () => {
-        if (selectedPieceIds.length === 0) {
-            toast.error("Please select at least one piece to receive")
-            return
-        }
-        setStep('details')
-    }
-
-    const handleGeneratePieces = async () => {
-        setIsGenerating(true)
         try {
-            const action = item.type === 'part' ? generatePartPieces : generatePlatePieces
-            const res = await action(item.id)
+            const res = await receivePartBatch({
+                projectId: part.projectId,
+                pieceIds: part.pieces.filter(p => p.status === 'PENDING').slice(0, quantity).map(p => p.id),
+                supplier: suppliers.find(s => s.id === supplierId)?.name || 'Unknown',
+                lotId: heatValues[0] || 'Batch',
+                certificatePath: certificatePath || undefined
+            })
 
-            if (res.success && res.pieces) {
-                toast.success(res.message || "Pieces generated successfully")
-                setCurrentPieces(res.pieces)
+            if (res.success) {
+                toast.success(`Successfully received ${quantity} items`)
+                onSuccess?.()
+                onOpenChange(false)
             } else {
-                toast.error(res.error || "Failed to generate pieces")
+                toast.error(res.error || "Failed using server action")
             }
-        } catch (error) {
-            toast.error("An error occurred while generating pieces")
+        } catch (e: any) {
+            toast.error(e.message || "Failed to receive items")
         } finally {
-            setIsGenerating(false)
+            setSubmitting(false)
         }
     }
 
-    const handleUploadAndSave = async () => {
-        if (!supplier || !lotId) {
-            toast.error("Supplier and Lot ID are required")
-            return
+    const setHeatValue = (index: number, val: string) => {
+        setHeatValues(prev => ({ ...prev, [index]: val }))
+    }
+
+    const batchFillHeat = (val: string) => {
+        const newHeats: any = {}
+        for (let i = 0; i < quantity; i++) {
+            newHeats[i] = val
         }
-
-        if (!certificateFile) {
-            toast.error("Please upload a certificate")
-            return
-        }
-
-        setSaving(true)
-        try {
-            // 1. Upload Certificate
-            setIsUploading(true)
-            const filename = `CERT-${lotId}-${Date.now()}.${certificateFile.name.split('.').pop()}`
-            const uploadPath = `projects/${projectId}/certificates/${filename}`
-
-            // Get Signed URL
-            const { success, url, error } = await getSignedUploadUrl(uploadPath, certificateFile.type)
-            if (!success || !url) throw new Error(error || "Failed to get upload URL")
-
-            // Upload directly to blob
-            const uploadRes = await fetch(url, {
-                method: 'PUT',
-                body: certificateFile,
-                headers: { 'Content-Type': certificateFile.type }
-            })
-
-            if (!uploadRes.ok) throw new Error("Failed to upload certificate file")
-            setIsUploading(false)
-
-            // 2. Create Receipt Record (Batch) - Server Action
-            // We need a specific action to "Receive" items which creates Inventory + Links Pieces + Links Cert
-            // For now, let's assume we call a robust server action
-            const action = item.type === 'part' ? receiveParts : receivePlates
-
-            const res = await action({
-                projectId,
-                pieceIds: selectedPieceIds,
-                supplier,
-                lotId,
-                certificatePath: uploadPath,
-                certificateFilename: certificateFile.name
-            })
-
-            if (!res.success) throw new Error(res.error)
-
-            toast.success(`Successfully received ${selectedPieceIds.length} items`)
-            if (onSuccess) onSuccess()
-            onOpenChange(false)
-
-        } catch (e: any) {
-            console.error(e)
-            toast.error(e.message || "Failed to process receipt")
-        } finally {
-            setSaving(false)
-            setIsUploading(false)
-        }
+        setHeatValues(newHeats)
     }
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>Receive Outsourced Items</DialogTitle>
-                    <DialogDescription>
-                        Record receipt of {item.partNumber} from supplier.
-                    </DialogDescription>
-                </DialogHeader>
-
-                {step === 'select' ? (
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center mb-2">
-                            <Label>Select Pieces to Receive ({selectedPieceIds.length}/{availablePieces.length})</Label>
-                            <div className="flex items-center space-x-2">
-                                <Checkbox
-                                    id="select-all"
-                                    checked={selectedPieceIds.length === availablePieces.length && availablePieces.length > 0}
-                                    onCheckedChange={handleSelectAll}
-                                    disabled={availablePieces.length === 0}
-                                />
-                                <label htmlFor="select-all" className="text-sm cursor-pointer">Select All</label>
+        <Dialog open={open} onOpenChange={(e, data) => onOpenChange(data.open)}>
+            <DialogSurface className={styles.dialogSurface}>
+                <DialogBody>
+                    <DialogTitle>Receive Items: {part.partNumber}</DialogTitle>
+                    <DialogContent className={styles.dialogContent}>
+                        <div className={styles.grid2}>
+                            <div className={styles.section}>
+                                <div className={styles.sectionTitle}>Details</div>
+                                <Field label="Quantity to Receive">
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        value={quantity.toString()}
+                                        onChange={(e, d) => setQuantity(parseInt(d.value) || 1)}
+                                    />
+                                </Field>
+                                <Field label="Supplier (Optional)">
+                                    <Combobox
+                                        placeholder="Select Supplier"
+                                        value={suppliers.find(s => s.id === supplierId)?.name || ''}
+                                        onOptionSelect={(e, d) => setSupplierId(d.optionValue || '')}
+                                    >
+                                        {suppliers.map(s => <Option key={s.id} value={s.id} text={s.name}>{s.name}</Option>)}
+                                    </Combobox>
+                                </Field>
                             </div>
-                        </div>
 
-                        <div className="border rounded-md max-h-[300px] overflow-y-auto p-2 grid grid-cols-4 gap-2">
-                            {availablePieces.length === 0 ? (
-                                <div className="col-span-4 flex flex-col items-center justify-center py-8 text-muted-foreground gap-4">
-                                    <p>No pending pieces available.</p>
-
-                                    {/* Show Generate Button if we have 0 pieces but quantity > 0 (Legacy Data Fix) */}
-                                    {currentPieces.length === 0 && item.quantity > 0 && (
-                                        <div className="bg-yellow-50 dark:bg-yellow-950/30 p-4 rounded-md border border-yellow-200 dark:border-yellow-900 flex flex-col items-center gap-2 max-w-sm">
-                                            <p className="text-sm text-yellow-800 dark:text-yellow-200 text-center">
-                                                This item appears to be missing tracking data (likely created before the tracking update).
-                                            </p>
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                onClick={handleGeneratePieces}
-                                                disabled={isGenerating}
-                                                className="gap-2"
-                                            >
-                                                {isGenerating ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                                                Generate {item.quantity} Tracking Pieces
-                                            </Button>
-                                        </div>
+                            <div className={styles.section}>
+                                <div className={styles.sectionTitle}>Certificate</div>
+                                <div className={styles.fileUploaderContainer}>
+                                    <FluentFileUploader
+                                        bucketName="projects"
+                                        folderPath={`certificates/${part.projectId}`}
+                                        onUploadComplete={(path) => setCertificatePath(path)}
+                                        accept=".pdf,image/*"
+                                        label="Upload Material Cert"
+                                    />
+                                    {certificatePath && (
+                                        <Text size={200} style={{ color: tokens.colorPaletteGreenForeground1, marginTop: '8px', display: 'block' }}>
+                                            <CheckmarkCircleRegular /> Certificate Attached
+                                        </Text>
                                     )}
                                 </div>
-                            ) : (
-                                availablePieces.map(piece => (
-                                    <div
-                                        key={piece.id}
-                                        onClick={() => handleTogglePiece(piece.id)}
-                                        className={`
-                                            cursor-pointer p-2 rounded border text-center text-sm transition-colors
-                                            ${selectedPieceIds.includes(piece.id)
-                                                ? 'bg-primary text-primary-foreground border-primary'
-                                                : 'bg-background hover:bg-muted'}
-                                        `}
-                                    >
-                                        Piece #{piece.pieceNumber}
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Supplier Name</Label>
-                                <Input
-                                    placeholder="e.g. SteelCo Ltd."
-                                    value={supplier}
-                                    onChange={e => setSupplier(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Heat / Lot Number</Label>
-                                <Input
-                                    placeholder="e.g. HT-2024-5592"
-                                    value={lotId}
-                                    onChange={e => setLotId(e.target.value)}
-                                />
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>Certificate / Mill Test Report</Label>
-                            <div className="border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center bg-muted/30">
-                                {certificateFile ? (
-                                    <div className="flex items-center gap-2 text-sm bg-background p-2 rounded border">
-                                        <FileText className="h-4 w-4 text-blue-500" />
-                                        <span className="font-medium truncate max-w-[200px]">{certificateFile.name}</span>
-                                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setCertificateFile(null)}>
-                                            <X className="h-3 w-3" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                                        <p className="text-sm text-muted-foreground mb-2">Upload PDF Certificate</p>
+                        <div className={styles.section}>
+                            <div className={styles.sectionTitle} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>Heat Numbers / Lot IDs</span>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    {/* Quick fill helper */}
+                                    {quantity > 1 && (
                                         <Input
-                                            type="file"
-                                            accept=".pdf,.jpg,.png"
-                                            className="w-full max-w-xs"
-                                            onChange={e => {
-                                                if (e.target.files?.[0]) setCertificateFile(e.target.files[0])
-                                            }}
+                                            placeholder="Batch fill all..."
+                                            size="small"
+                                            onChange={(e, d) => batchFillHeat(d.value)}
                                         />
-                                    </>
-                                )}
+                                    )}
+                                </div>
+                            </div>
+
+                            <div style={{ maxHeight: '300px', overflowY: 'auto', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium }}>
+                                <Table size="small">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHeaderCell style={{ width: '60px' }}>#</TableHeaderCell>
+                                            <TableHeaderCell>Heat Number / Lot ID</TableHeaderCell>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {Array.from({ length: quantity }).map((_, idx) => (
+                                            <TableRow key={idx}>
+                                                <TableCell>{idx + 1}</TableCell>
+                                                <TableCell>
+                                                    <Input
+                                                        value={heatValues[idx] || ''}
+                                                        onChange={(e, d) => setHeatValue(idx, d.value)}
+                                                        placeholder="Enter Heat No."
+                                                        style={{ width: '100%' }}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
                         </div>
-
-                        <div className="bg-blue-50 text-blue-800 p-3 rounded-md text-sm flex gap-2">
-                            <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                            <div>
-                                This will mark <strong>{selectedPieceIds.length} pieces</strong> as RECEIVED and link them to Lot <strong>{lotId || '...'}</strong>.
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-
-                <DialogFooter>
-                    {step === 'select' ? (
-                        <>
-                            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                            <Button onClick={handleNext} disabled={selectedPieceIds.length === 0}>Next</Button>
-                        </>
-                    ) : (
-                        <>
-                            <Button variant="outline" onClick={() => setStep('select')} disabled={saving}>Back</Button>
-                            <Button onClick={handleUploadAndSave} disabled={saving}>
-                                {saving ? (isUploading ? "Uploading..." : "Saving...") : "Confirm Receipt"}
-                            </Button>
-                        </>
-                    )}
-                </DialogFooter>
-            </DialogContent>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => onOpenChange(false)} appearance="secondary">Cancel</Button>
+                        <Button onClick={handleReceive} appearance="primary" disabled={submitting} icon={submitting ? <Spinner size="small" /> : <BoxRegular />}>
+                            {submitting ? "Receiving..." : "Receive Items"}
+                        </Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
         </Dialog>
     )
-}
-
-// Mock actions for now - need to implement these in appropriate files
-// We can define inputs but implementing them needs to be in separate 'use server' files usually
-async function receiveParts(data: any) {
-    // This will refer to the actual server action we will create
-    const { receivePartBatch } = await import('@/app/actions/parts')
-    return receivePartBatch(data)
-}
-
-async function receivePlates(data: any) {
-    const { receivePlateBatch } = await import('@/app/actions/plateparts')
-    return receivePlateBatch(data)
 }

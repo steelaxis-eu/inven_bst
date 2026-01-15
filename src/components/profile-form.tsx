@@ -2,9 +2,7 @@
 
 import { useState } from 'react'
 import { updateProfile } from '@/app/actions/profile'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Button, Input, Label, Spinner } from '@fluentui/react-components'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
@@ -36,13 +34,13 @@ export function ProfileForm({
     }
 
     return (
-        <form action={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
+        <form action={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '400px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" value={email} disabled className="bg-muted" />
-                <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
+                <Input id="email" value={email} disabled />
+                <span style={{ fontSize: '10px', color: '#666' }}>Email cannot be changed.</span>
             </div>
-            <div className="space-y-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <Label htmlFor="name">Display Name</Label>
                 <Input
                     id="name"
@@ -51,10 +49,10 @@ export function ProfileForm({
                     placeholder="Your Name"
                     required
                 />
-                <p className="text-xs text-muted-foreground">This name will appear in usage logs and reports.</p>
+                <span style={{ fontSize: '10px', color: '#666' }}>This name will appear in usage logs and reports.</span>
             </div>
-            <div className="pt-4">
-                <Button type="submit" disabled={loading}>
+            <div style={{ paddingTop: '16px' }}>
+                <Button type="submit" appearance="primary" disabled={loading} icon={loading ? <Spinner size="tiny" /> : undefined}>
                     {loading ? 'Saving...' : 'Save Changes'}
                 </Button>
             </div>

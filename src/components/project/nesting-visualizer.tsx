@@ -1,9 +1,87 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+    Card,
+    CardHeader,
+    CardPreview,
+    Text,
+    Badge,
+    makeStyles,
+    tokens,
+    shorthands,
+} from "@fluentui/react-components";
+import {
+    CircleRegular,
+    SquareRegular
+} from "@fluentui/react-icons";
+
+const useStyles = makeStyles({
+    container: {
+        marginBottom: '16px',
+        width: '100%',
+        boxShadow: tokens.shadow2,
+    },
+    header: {
+        padding: '8px 16px',
+        backgroundColor: tokens.colorNeutralBackground2,
+        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    content: {
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+    },
+    sectionTitle: {
+        fontWeight: 'bold',
+        color: tokens.colorNeutralForeground2,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '8px',
+    },
+    barContainer: {
+        height: '24px',
+        width: '100%',
+        backgroundColor: tokens.colorNeutralBackground3,
+        ...shorthands.borderRadius(tokens.borderRadiusSmall),
+        overflow: 'hidden',
+        display: 'flex',
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+        position: 'relative'
+    },
+    barItem: {
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '9px',
+        color: tokens.colorNeutralForegroundOnBrand,
+        fontWeight: 'bold',
+        borderRight: '1px solid rgba(255,255,255,0.2)',
+    },
+    wasteItem: {
+        height: '100%',
+        backgroundColor: tokens.colorNeutralBackground3,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '9px',
+        color: tokens.colorNeutralForeground3,
+        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.05) 5px, rgba(0,0,0,0.05) 10px)'
+    },
+    infoRow: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        fontSize: '10px',
+        color: tokens.colorNeutralForeground3,
+        marginBottom: '4px'
+    }
+});
 
 interface OptimizationResult {
     stockUsed: {
@@ -17,7 +95,7 @@ interface OptimizationResult {
     newStockNeeded: {
         length: number
         quantity: number
-        parts: { partId: string, length: number }[] // This might be grouped
+        parts: { partId: string, length: number }[]
     }[]
     unallocated: { id: string, length: number }[]
     efficiency: number
@@ -33,31 +111,36 @@ interface NestingVisualizerProps {
 }
 
 export function NestingVisualizer({ plan }: NestingVisualizerProps) {
-    const { profile, grade, result } = plan
+    const styles = useStyles();
+    const { profile, grade, result } = plan;
 
     return (
-        <Card className="mb-4 text-xs">
-            <CardHeader className="py-2 px-4 bg-muted/50 rounded-t-lg">
-                <div className="flex justify-between items-center">
-                    <span className="font-semibold">{profile} - {grade}</span>
-                    <Badge variant={result.efficiency > 0.85 ? "default" : "secondary"}>
-                        Eff: {Math.round(result.efficiency * 100)}%
+        <Card className={styles.container}>
+            <div className={styles.header}>
+                <Text weight="semibold">{profile} - {grade}</Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Text size={200}>Efficiency:</Text>
+                    <Badge
+                        appearance={result.efficiency > 0.85 ? "filled" : "outline"}
+                        color={result.efficiency > 0.85 ? "success" : "important"}
+                    >
+                        {Math.round(result.efficiency * 100)}%
                     </Badge>
                 </div>
-            </CardHeader>
-            <CardContent className="p-4 space-y-4">
+            </div>
 
+            <div className={styles.content}>
                 {/* 1. EXISTING STOCK USAGE */}
                 {result.stockUsed.length > 0 && (
                     <div>
-                        <h4 className="font-semibold mb-2 text-muted-foreground flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                            Using {result.stockUsed.length} Existing Items (Stock/Remnants)
-                        </h4>
-                        <div className="space-y-2">
+                        <div className={styles.sectionTitle}>
+                            <CircleRegular style={{ color: tokens.colorPaletteBlueBorderActive }} />
+                            <span>Using {result.stockUsed.length} Existing Items (Stock/Remnants)</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {result.stockUsed.map((stock, idx) => (
-                                <div key={stock.stockId + idx} className="space-y-1">
-                                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <div key={stock.stockId + idx}>
+                                    <div className={styles.infoRow}>
                                         <span>{stock.stockType} #{stock.stockId.slice(-4)}</span>
                                         <span>{stock.originalLength}mm</span>
                                     </div>
@@ -76,18 +159,17 @@ export function NestingVisualizer({ plan }: NestingVisualizerProps) {
                 {/* 2. NEW STOCK NEEDED */}
                 {result.newStockNeeded.length > 0 && (
                     <div>
-                        <h4 className="font-semibold mb-2 text-muted-foreground flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                            Buy {result.newStockNeeded.reduce((s, x) => s + x.quantity, 0)} New Bars
-                        </h4>
-                        <div className="space-y-2">
+                        <div className={styles.sectionTitle}>
+                            <CircleRegular style={{ color: tokens.colorPaletteRedBorderActive }} />
+                            <span>Buy {result.newStockNeeded.reduce((s, x) => s + x.quantity, 0)} New Bars</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {result.newStockNeeded.map((stock, idx) => (
-                                <div key={idx} className="space-y-1">
-                                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                                <div key={idx}>
+                                    <div className={styles.infoRow}>
                                         <span>New Bar ({stock.quantity}x)</span>
                                         <span>{stock.length}mm</span>
                                     </div>
-                                    {/* Visualize just one example bar for this group */}
                                     <BarVisualizer
                                         totalLength={stock.length}
                                         parts={stock.parts}
@@ -102,33 +184,34 @@ export function NestingVisualizer({ plan }: NestingVisualizerProps) {
 
                 {/* 3. UNALLOCATED */}
                 {result.unallocated.length > 0 && (
-                    <div className="p-2 bg-red-100 dark:bg-red-900/30 border border-red-200 rounded text-red-600">
-                        <strong>Warning:</strong> {result.unallocated.length} parts could not be nested (Too long?).
+                    <div style={{ padding: '8px', backgroundColor: tokens.colorPaletteRedBackground1, border: `1px solid ${tokens.colorPaletteRedBorder1}`, borderRadius: tokens.borderRadiusMedium, color: tokens.colorPaletteRedForeground1 }}>
+                        <Text weight="bold">Warning:</Text> {result.unallocated.length} parts could not be nested (Too long?).
                     </div>
                 )}
-
-            </CardContent>
+            </div>
         </Card>
     )
 }
 
 function BarVisualizer({ totalLength, parts, waste, type }: {
     totalLength: number,
-    parts: { length: number }[], // Reduced interface
+    parts: { length: number }[],
     waste: number,
     type: 'stock' | 'new'
 }) {
-    // Determine colors
-    const partColor = type === 'stock' ? 'bg-blue-500' : 'bg-red-500'
-    const wasteColor = 'bg-gray-200 dark:bg-gray-700 repeating-linear-gradient(45deg,transparent,transparent_5px,#00000010_5px,#00000010_10px)'
+    const styles = useStyles();
+    const partColor = type === 'stock' ? tokens.colorPaletteBlueBackground2 : tokens.colorPaletteRedBackground2;
 
     return (
-        <div className="h-6 w-full bg-muted rounded overflow-hidden flex border border-border relative">
+        <div className={styles.barContainer}>
             {parts.map((p, i) => (
                 <div
                     key={i}
-                    className={`h-full ${partColor} border-r border-white/20 flex items-center justify-center text-[9px] text-white font-medium`}
-                    style={{ width: `${(p.length / totalLength) * 100}%` }}
+                    className={styles.barItem}
+                    style={{
+                        width: `${(p.length / totalLength) * 100}%`,
+                        backgroundColor: partColor
+                    }}
                     title={`Part: ${p.length}mm`}
                 >
                     {p.length}
@@ -136,10 +219,9 @@ function BarVisualizer({ totalLength, parts, waste, type }: {
             ))}
             {waste > 0 && (
                 <div
-                    className="h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[9px] text-muted-foreground"
+                    className={styles.wasteItem}
                     style={{
-                        width: `${(waste / totalLength) * 100}%`,
-                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(0,0,0,0.05) 5px, rgba(0,0,0,0.05) 10px)'
+                        width: `${(waste / totalLength) * 100}%`
                     }}
                     title={`Waste: ${waste}mm`}
                 >
