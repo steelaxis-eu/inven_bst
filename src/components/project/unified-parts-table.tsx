@@ -432,7 +432,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                                 <Text font="monospace" size={100} weight="bold">{progress}%</Text>
                                             </div>
                                         ) : (
-                                            <Badge appearance={data.status === 'RECEIVED' ? "filled" : "outline"} color={data.status === 'RECEIVED' ? "success" : "subtle"}>
+                                            <Badge appearance="tint" color={data.status === 'RECEIVED' ? "success" : "brand"}>
                                                 {data.status}
                                             </Badge>
                                         )}
