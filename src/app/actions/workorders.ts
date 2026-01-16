@@ -13,7 +13,8 @@ import {
     QualityCheckStatus,
     QualityCheckType,
     InventoryStatus,
-    PlatePieceStatus
+    PlatePieceStatus,
+    RemnantStatus
 } from '@prisma/client'
 
 // ============================================================================
@@ -855,46 +856,97 @@ export async function getOptimizationPreview(input: string[] | { id: string, typ
                 }
             })
 
-            // Group by Profile/Grade
+            // Group by Profile/Grade logic - Enhanced to handle custom profiles
             const materialGroups: Record<string, typeof pieces> = {}
 
             pieces.forEach(p => {
-                const key = `${p.part.profileId || 'custom'}|${p.part.gradeId || 'custom'}`
+                // If profileId exists, use it. If not, use type|dim key
+                let profileKey = p.part.profileId
+                if (!profileKey) {
+                    if (p.part.profileType && p.part.profileDimensions) {
+                        profileKey = `${p.part.profileType}|${p.part.profileDimensions}`
+                    } else {
+                        profileKey = 'unknown'
+                    }
+                }
+
+                const gradeKey = p.part.gradeId || 'unknown'
+                const key = `${profileKey}#${gradeKey}`
+
                 if (!materialGroups[key]) materialGroups[key] = []
                 materialGroups[key].push(p)
             })
 
             for (const [key, groupPieces] of Object.entries(materialGroups)) {
                 const firstPart = groupPieces[0].part
-                if (!firstPart.profileId || !firstPart.gradeId) {
+                const [profileKeyPart, gradeKeyPart] = key.split('#')
+
+                // Determine Profile Info for display
+                let profileName = 'Unknown Profile'
+                let gradeName = firstPart.grade?.name || 'Unknown Grade'
+                let profileType = firstPart.profile?.type || firstPart.profileType
+                let profileDims = firstPart.profile?.dimensions || firstPart.profileDimensions
+
+                if (firstPart.profile) {
+                    profileName = `${firstPart.profile.type} ${firstPart.profile.dimensions}`
+                } else if (profileType && profileDims) {
+                    profileName = `${profileType} ${profileDims} (Custom)`
+                }
+
+                // If completely missing info, we can't do much but show error
+                if (!profileType || !profileDims) {
                     planResults.push({
                         type: 'profile',
                         materialKey: key,
-                        profile: 'Custom / Unknown',
-                        grade: 'Unknown',
+                        profile: 'Missing Type/Dimensions',
+                        grade: gradeName,
                         canOptimize: false,
-                        error: 'Missing Profile/Grade data'
+                        error: 'Missing Profile Dimensions data'
                     })
                     continue
                 }
 
-                // Fetch Stock
-                const inventory = await prisma.inventory.findMany({
-                    where: {
-                        profileId: firstPart.profileId,
-                        gradeId: firstPart.gradeId,
-                        status: 'ACTIVE',
-                        quantityAtHand: { gt: 0 }
-                    }
-                })
+                // Fetch Stock - Try by ID first, then by matching properties
+                const inventoryAndRemnantsQuery: any = {
+                    gradeId: firstPart.gradeId,
+                    status: 'ACTIVE' // for inventory
+                    // for remnants status: 'AVAILABLE' handled below
+                }
 
-                const remnants = await prisma.remnant.findMany({
-                    where: {
-                        profileId: firstPart.profileId,
-                        gradeId: firstPart.gradeId,
-                        status: 'AVAILABLE'
-                    }
-                })
+                // If we have a profileId, strict match. If custom, we try to find ONE profileId that matches?
+                // Actually, inventory is linked to ProfileId. If custom part has no profileId, it technically matches NO inventory 
+                // UNLESS there is a SteelProfile with those dimensions.
+                let targetProfileId = firstPart.profileId
+
+                if (!targetProfileId && profileType && profileDims) {
+                    // Try to find a profile with these dims
+                    const matchingProfile = await prisma.steelProfile.findFirst({
+                        where: { type: profileType, dimensions: profileDims }
+                    })
+                    if (matchingProfile) targetProfileId = matchingProfile.id
+                }
+
+                let inventory: any[] = []
+                let remnants: any[] = []
+
+                if (targetProfileId && firstPart.gradeId) {
+                    inventory = await prisma.inventory.findMany({
+                        where: {
+                            profileId: targetProfileId,
+                            gradeId: firstPart.gradeId,
+                            status: InventoryStatus.ACTIVE,
+                            quantityAtHand: { gt: 0 }
+                        }
+                    })
+
+                    remnants = await prisma.remnant.findMany({
+                        where: {
+                            profileId: targetProfileId,
+                            gradeId: firstPart.gradeId,
+                            status: RemnantStatus.AVAILABLE
+                        }
+                    })
+                }
 
                 const stockInfo: StockInfo[] = [
                     ...remnants.map(r => ({
@@ -917,13 +969,14 @@ export async function getOptimizationPreview(input: string[] | { id: string, typ
                     quantity: 1
                 }))
 
+                // We run optimization even if no stock - it will tell us what to buy
                 const result = optimizeCuttingPlan(partsRequest, stockInfo, 12000)
 
                 planResults.push({
                     type: 'profile',
                     materialKey: key,
-                    profile: `${firstPart.profile?.type} ${firstPart.profile?.dimensions}`,
-                    grade: firstPart.grade?.name,
+                    profile: profileName,
+                    grade: gradeName,
                     canOptimize: true,
                     pieceIds: partsRequest.map(p => p.id),
                     result
