@@ -267,7 +267,7 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                     <TableRow>
                                         <TableHeaderCell>Piece #</TableHeaderCell>
                                         <TableHeaderCell>Status</TableHeaderCell>
-                                        <TableHeaderCell>Material / Lot ID</TableHeaderCell>
+                                        <TableHeaderCell>Source / Material</TableHeaderCell>
                                         <TableHeaderCell>Timestamps</TableHeaderCell>
                                     </TableRow>
                                 </TableHeader>

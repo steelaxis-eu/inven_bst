@@ -116,7 +116,7 @@ const useStyles = makeStyles({
 const TABS = {
     GENERAL: 'general',
     PRODUCTION: 'production',
-    DXF: 'dxf'
+    DRAWING: 'drawing'
 } as const;
 
 interface PlateDetailsDialogProps {
@@ -158,10 +158,6 @@ export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpd
         ? `/api/certificates/view?path=${encodeURIComponent(plate.dxfStoragePath)}&bucket=projects`
         : null
 
-    // For Plate Parts, "production" is technically just pieces if we add that logic later, 
-    // or we can show existing pieces if we migrate plate handling to match standard parts.
-    // Currently PlatePart logic might differ, assuming 'pieces' property exists on types.
-    // Assuming plate.pieces exists based on unified table logic. If not, hidden.
     const pieces = (plate as any).pieces || []
 
     return (
@@ -191,7 +187,7 @@ export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpd
                     <TabList selectedValue={activeTab} onTabSelect={(e, d) => setActiveTab(d.value as string)}>
                         <Tab value={TABS.GENERAL} icon={<BoxMultipleRegular />}>General</Tab>
                         <Tab value={TABS.PRODUCTION} icon={<HistoryRegular />}>Production</Tab>
-                        {dxfUrl && <Tab value={TABS.DXF} icon={<DocumentRegular />}>DXF / Drawing</Tab>}
+                        {dxfUrl && <Tab value={TABS.DRAWING} icon={<DocumentRegular />}>Drawing</Tab>}
                     </TabList>
                 </div>
 
@@ -266,7 +262,7 @@ export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpd
                                     <TableRow>
                                         <TableHeaderCell>Piece #</TableHeaderCell>
                                         <TableHeaderCell>Status</TableHeaderCell>
-                                        <TableHeaderCell>Location</TableHeaderCell>
+                                        <TableHeaderCell>Source / Material</TableHeaderCell>
                                         <TableHeaderCell>Timestamps</TableHeaderCell>
                                     </TableRow>
                                 </TableHeader>
@@ -280,8 +276,17 @@ export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpd
                                                         {piece.status}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell>-</TableCell>
+                                                <TableCell>
+                                                    {/* Assuming plate pieces might have inventory relation, similar to PartPiece */}
+                                                    {piece.inventoryId ? (
+                                                        <div className={styles.label}>{piece.inventoryId}</div>
+                                                    ) : (
+                                                        <span style={{ fontStyle: 'italic', color: tokens.colorNeutralForeground3 }}>-</span>
+                                                    )}
+                                                </TableCell>
                                                 <TableCell style={{ fontSize: '11px', color: tokens.colorNeutralForeground3 }}>
+                                                    {piece.receivedAt && <div>Received: {format(new Date(piece.receivedAt), 'dd/MM HH:mm')}</div>}
+                                                    {/* Using completedAt if available, otherwise just receivedAt for plate parts usually */}
                                                     {piece.completedAt && <div style={{ color: tokens.colorPaletteGreenForeground1 }}>Ready: {format(new Date(piece.completedAt), 'dd/MM HH:mm')}</div>}
                                                 </TableCell>
                                             </TableRow>
@@ -298,7 +303,7 @@ export function PlateDetailsDialog({ open, onOpenChange, plate, projectId, onUpd
                         </div>
                     )}
 
-                    {dxfUrl && activeTab === TABS.DXF && (
+                    {dxfUrl && activeTab === TABS.DRAWING && (
                         <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                                 <Button appearance="outline" icon={<ArrowDownloadRegular />} onClick={() => window.open(dxfUrl, '_blank')}>
