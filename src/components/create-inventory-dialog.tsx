@@ -83,7 +83,8 @@ const useStyles = makeStyles({
         alignItems: "end",
         marginBottom: "24px",
         "@media (max-width: 768px)": {
-            gridTemplateColumns: "1fr", // Stack on mobile (Single column grid)
+            display: "flex",
+            flexDirection: "column",
             gap: "16px",
             alignItems: "stretch",
         },
@@ -94,7 +95,8 @@ const useStyles = makeStyles({
         gap: "24px",
         alignItems: "end",
         "@media (max-width: 768px)": {
-            gridTemplateColumns: "1fr", // Stack on mobile
+            display: "flex",
+            flexDirection: "column",
             gap: "16px",
             alignItems: "stretch",
         },
@@ -106,7 +108,8 @@ const useStyles = makeStyles({
         alignItems: "end",
         marginTop: "24px",
         "@media (max-width: 768px)": {
-            gridTemplateColumns: "1fr", // Stack on mobile
+            display: "flex",
+            flexDirection: "column",
             gap: "16px",
         },
     },
