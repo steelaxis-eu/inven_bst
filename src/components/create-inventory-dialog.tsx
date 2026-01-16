@@ -75,32 +75,46 @@ const useStyles = makeStyles({
         alignItems: "center",
         gap: "8px"
     },
-    // Replace generic 'row' with specific grid layouts
+    // Replace generic 'row' with responsive grid/flex layouts
     gridRowMain: {
         display: "grid",
-        gridTemplateColumns: "120px 180px 1fr 140px", // Lot, Type, Dims (Flexible), Grade
+        gridTemplateColumns: "1fr 1fr 2fr 1fr", // Desktop: Balanced
         gap: "24px",
         alignItems: "end",
-        marginBottom: "16px"
+        marginBottom: "24px",
+        "@media (max-width: 768px)": {
+            gridTemplateColumns: "1fr", // Stack on mobile (Single column grid)
+            gap: "16px",
+            alignItems: "stretch",
+        },
     },
     gridRowSecondary: {
         display: "grid",
-        gridTemplateColumns: "repeat(5, 1fr)", // Equal width for metrics
+        gridTemplateColumns: "repeat(4, 1fr) auto", // Desktop: 4 fields + Supplier
         gap: "24px",
         alignItems: "end",
+        "@media (max-width: 768px)": {
+            gridTemplateColumns: "1fr", // Stack on mobile
+            gap: "16px",
+            alignItems: "stretch",
+        },
     },
     gridRowActions: {
         display: "grid",
         gridTemplateColumns: "1fr auto",
         gap: "24px",
         alignItems: "end",
-        marginTop: "16px"
+        marginTop: "24px",
+        "@media (max-width: 768px)": {
+            gridTemplateColumns: "1fr", // Stack on mobile
+            gap: "16px",
+        },
     },
     field: {
         display: "flex",
         flexDirection: "column",
-        gap: "6px",
-        width: "100%", // Force full width in grid cell
+        gap: "8px", // More breathing room
+        width: "100%",
     },
     weightContainer: {
         position: "relative",
@@ -108,9 +122,15 @@ const useStyles = makeStyles({
     },
     actions: {
         marginTop: "auto",
-        paddingTop: "16px",
+        paddingTop: "24px",
         borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
     },
+    addItemBtn: {
+        width: '150px',
+        "@media (max-width: 768px)": {
+            width: '100%', // Full width on mobile
+        },
+    }
 });
 
 interface CreateInventoryProps {
@@ -469,7 +489,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 />
                             </Field>
 
-                            <Button appearance="primary" size="large" icon={<AddRegular />} onClick={handleAddItem} style={{ width: '150px' }}>
+                            <Button appearance="primary" size="large" icon={<AddRegular />} onClick={handleAddItem} className={styles.addItemBtn}>
                                 Add Item
                             </Button>
                         </div>

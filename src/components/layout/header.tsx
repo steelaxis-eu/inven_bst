@@ -42,7 +42,7 @@ const useStyles = makeStyles({
     nav: {
         display: "flex",
         gap: "24px",
-        "@media (max-width: 768px)": {
+        "@media (max-width: 1024px)": {
             display: "none",
         },
     },

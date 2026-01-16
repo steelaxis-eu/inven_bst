@@ -19,7 +19,7 @@ import { useTranslations } from 'next-intl';
 const useStyles = makeStyles({
     root: {
         display: 'none',
-        '@media (max-width: 768px)': {
+        '@media (max-width: 1024px)': {
             display: 'block',
         },
     },

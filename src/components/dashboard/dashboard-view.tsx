@@ -35,6 +35,10 @@ const useStyles = makeStyles({
         padding: "32px",
         minHeight: "calc(100vh - 64px)", // adjust for header
         backgroundColor: tokens.colorNeutralBackground2, // light gray bg
+        "@media (max-width: 768px)": {
+            padding: "16px", // Reduce padding on mobile
+            justifyContent: "flex-start", // Start from top on mobile to avoid centering vertically with scrolling
+        },
     },
     content: {
         maxWidth: "1024px",
@@ -42,6 +46,9 @@ const useStyles = makeStyles({
         display: "flex",
         flexDirection: "column",
         gap: "48px",
+        "@media (max-width: 768px)": {
+            gap: "24px", // Reduce gap on mobile
+        },
     },
     header: {
         textAlign: "center",
@@ -55,11 +62,19 @@ const useStyles = makeStyles({
         WebkitTextFillColor: "transparent",
         fontSize: "48px", // Fallback
         fontWeight: 800,
+        "@media (max-width: 768px)": {
+            fontSize: "32px", // Responsive font size
+        },
     },
     grid: {
         display: "grid",
         gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
         gap: "24px",
+        "@media (max-width: 768px)": {
+            display: "flex", // Stack cards on mobile
+            flexDirection: "column",
+            gap: "16px",
+        },
     },
     card: {
         height: "100%",
@@ -147,7 +162,7 @@ export function DashboardView({ userEmail, appName, appVersion, projects }: Dash
             <div className={styles.content}>
                 <div className={styles.header}>
                     <h1 className={styles.appName}>{appName}</h1>
-                    <Title1 as="h2" style={{ fontWeight: 300 }}>
+                    <Title1 as="h2" style={{ fontWeight: 300, fontSize: "1.5rem" }}>
                         {t('welcome', { name: userEmail || "Guest" })}
                     </Title1>
                 </div>

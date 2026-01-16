@@ -72,9 +72,10 @@ const useStyles = makeStyles({
         border: `1px solid ${tokens.colorNeutralStroke2}`,
     },
     tableContainer: {
-        border: `1px solid ${tokens.colorNeutralStroke2}`,
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
         ...shorthands.borderRadius(tokens.borderRadiusMedium),
         overflowX: "auto",
+        boxShadow: tokens.shadow2,
     },
     partLink: {
         fontWeight: "bold",
