@@ -317,7 +317,7 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
             </div>
 
             <div className={styles.tableContainer}>
-                <Table size="small">
+                <Table size="small" style={{ minWidth: "900px" }}>
                     <TableHeader>
                         <TableRow style={{ backgroundColor: tokens.colorNeutralBackground2 }}>
                             <TableHeaderCell style={{ width: '40px' }}>

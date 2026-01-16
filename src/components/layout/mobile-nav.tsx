@@ -11,7 +11,7 @@ import {
     DrawerBody,
 } from "@fluentui/react-components";
 import { NavigationRegular, DismissRegular } from "@fluentui/react-icons";
-import { Link } from "@/components/navigation"; // Assuming we might want a centralized link or generic next/link
+
 import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';

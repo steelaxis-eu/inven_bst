@@ -48,8 +48,10 @@ const useStyles = makeStyles({
         height: "80vh",
         // Remove fixed widths to allow fluid resizing within viewport limits if needed, 
         // but keep a reasonable min/max.
-        minWidth: "900px",
-        maxWidth: "1400px",
+        // Remove fixed widths to allow fluid resizing within viewport limits
+        width: "95vw", // Occupy almost full width on small screens
+        maxWidth: "1400px", // Cap at 1400px
+        minWidth: "320px", // Minimum for very small phones
     },
     section: {
         display: "flex",

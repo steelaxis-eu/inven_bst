@@ -30,8 +30,9 @@ const useStyles = makeStyles({
         display: "flex",
         flexDirection: "column",
         gap: "16px",
-        minWidth: "600px",
+        width: "90vw",
         maxWidth: "800px",
+        minWidth: "320px",
     },
     section: {
         display: "flex",
@@ -53,6 +54,7 @@ const useStyles = makeStyles({
     row: {
         display: "flex",
         gap: "16px",
+        flexWrap: "wrap", // Allow wrapping on small screens
     },
     field: {
         display: "flex",

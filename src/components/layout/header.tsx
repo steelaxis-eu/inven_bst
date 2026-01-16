@@ -1,9 +1,99 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+    makeStyles,
+    tokens,
+    TabList,
+} from "@fluentui/react-components";
+import { useTranslations } from "next-intl";
+import { APP_CONFIG } from "@/lib/config";
+import { UserNav } from "@/components/user-nav";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { ModeToggle } from "@/components/mode-toggle";
 import { MobileNav } from "@/components/layout/mobile-nav";
 
-// ... existing imports ...
+const useStyles = makeStyles({
+    header: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "16px 24px",
+        backgroundColor: tokens.colorNeutralBackground1,
+        borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+    },
+    logo: {
+        textDecoration: "none",
+        color: tokens.colorBrandForeground1,
+        fontWeight: "bold",
+        fontSize: "20px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        ":hover": {
+            color: tokens.colorBrandForeground2,
+        }
+    },
+    nav: {
+        display: "flex",
+        gap: "24px",
+        "@media (max-width: 768px)": {
+            display: "none",
+        },
+    },
+    navLink: {
+        textDecoration: "none",
+        color: tokens.colorNeutralForeground1,
+        fontSize: "14px",
+        fontWeight: "normal",
+        padding: "8px 12px",
+        borderRadius: tokens.borderRadiusMedium,
+        ":hover": {
+            backgroundColor: tokens.colorNeutralBackground1Hover,
+            color: tokens.colorNeutralForeground1Hover,
+        }
+    },
+    navLinkSelected: {
+        fontWeight: "bold",
+        color: tokens.colorBrandForeground1,
+        ":after": {
+            content: "''",
+            display: "block",
+            height: "2px",
+            backgroundColor: tokens.colorBrandForeground1,
+            marginTop: "4px"
+        }
+    },
+    actions: {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+    },
+});
 
 export function Header({ userEmail }: { userEmail?: string }) {
-    // ... existing code ...
+    const styles = useStyles();
+    const t = useTranslations("Navigation");
+    const pathname = usePathname();
+
+    // Mapping paths to tabs
+    const getSelectedValue = () => {
+        if (pathname.includes("/stock")) return "stock";
+        if (pathname.includes("/inventory")) return "inventory";
+        if (pathname.includes("/usage")) return "usage";
+        if (pathname.includes("/projects")) return "projects";
+        if (pathname.includes("/customers")) return "customers";
+        if (pathname.includes("/settings")) return "settings";
+        if (pathname === "/" || pathname === "/en" || pathname === "/lv") return "dashboard"; // simplistic check
+        return undefined;
+    };
+
+    const selectedValue = getSelectedValue();
 
     return (
         <header className={styles.header}>
@@ -15,13 +105,14 @@ export function Header({ userEmail }: { userEmail?: string }) {
             </div>
 
             <div className={styles.nav}>
-                {/* ... existing desktop nav ... */}
                 <TabList
                     selectedValue={selectedValue}
                     onTabSelect={(e, data) => {
-                        // ... existing logic ...
+                        // Handle navigation programmatically to work with Fluent Tabs
+                        // The functionality is managed by Links below, this is just for visual active state if needed
                     }}
                 >
+                    {/* We will just use Links for now with Fluent styling to avoid complex router injection in this single call. */}
                 </TabList>
                 <nav className={styles.nav}>
                     <Link href="/" className={`${styles.navLink} ${selectedValue === 'dashboard' ? styles.navLinkSelected : ''}`}>
