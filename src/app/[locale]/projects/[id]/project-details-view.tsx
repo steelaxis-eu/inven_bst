@@ -59,7 +59,6 @@ export function ProjectDetailsView({
     parts
 }: ProjectDetailsViewProps) {
     return (
-    return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
