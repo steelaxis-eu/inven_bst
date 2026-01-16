@@ -79,12 +79,12 @@ const useStyles = makeStyles({
     // Replace generic 'row' with responsive grid/flex layouts
     gridRowMain: {
         display: "grid",
-        gridTemplateColumns: "1fr 1fr 2fr 1fr", // Desktop: Balanced
+        gridTemplateColumns: "1fr 1fr", // Desktop: 2 columns for vertical flow
         gap: "24px",
         alignItems: "end",
-        marginBottom: "24px",
+        marginBottom: "16px",
         "@media (max-width: 768px)": {
-            display: "flex",
+            display: "flex", // Mobile: 1 column
             flexDirection: "column",
             gap: "16px",
             alignItems: "stretch",
@@ -92,7 +92,7 @@ const useStyles = makeStyles({
     },
     gridRowSecondary: {
         display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr) auto", // Desktop: 4 fields + Supplier
+        gridTemplateColumns: "1fr 1fr", // Desktop: 2 columns
         gap: "24px",
         alignItems: "end",
         "@media (max-width: 768px)": {
