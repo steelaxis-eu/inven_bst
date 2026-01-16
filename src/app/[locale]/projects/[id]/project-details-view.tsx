@@ -59,13 +59,14 @@ export function ProjectDetailsView({
     parts
 }: ProjectDetailsViewProps) {
     return (
-        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                         <Title1>{project.projectNumber}</Title1>
-                        <Badge appearance="outline" shape="rounded">
+                        <Badge appearance="tint" shape="rounded" color="brand">
                             {project.status}
                         </Badge>
                     </div>
@@ -80,7 +81,7 @@ export function ProjectDetailsView({
                         </Text>
                     )}
                 </div>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <BackgroundTasksIndicator projectId={project.id} />
                     {missingCertCount > 0 ? (
                         <Badge appearance="filled" color="danger" icon={<WarningRegular />}>
@@ -107,7 +108,7 @@ export function ProjectDetailsView({
                     <CardHeader header={<Text weight="medium" style={{ color: tokens.colorNeutralForeground3 }}>Progress</Text>} />
                     <div style={{ padding: '0 12px 12px 12px' }}>
                         <Text size={600} weight="bold" block>{overallProgress}%</Text>
-                        <ProgressBar value={overallProgress / 100} thickness="medium" style={{ marginTop: '8px' }} />
+                        <ProgressBar value={overallProgress / 100} thickness="large" shape="rounded" style={{ marginTop: '8px', height: '8px' }} />
                         <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: '4px' }}>{readyPieces}/{totalPieces} pieces</Text>
                     </div>
                 </Card>

@@ -42,8 +42,9 @@ import { PartWithRelations } from '@/types'
 
 const useStyles = makeStyles({
     dialogSurface: {
-        width: '800px',
-        maxWidth: '100%',
+        width: '95vw',
+        maxWidth: '1000px',
+        minWidth: '320px',
         height: 'auto',
         maxHeight: '90vh',
     },
@@ -56,6 +57,10 @@ const useStyles = makeStyles({
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: '24px',
+        '@media (max-width: 768px)': {
+            display: 'flex',
+            flexDirection: 'column',
+        }
     },
     section: {
         display: 'flex',

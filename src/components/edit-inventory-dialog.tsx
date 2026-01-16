@@ -26,8 +26,13 @@ const useStyles = makeStyles({
     content: {
         display: "flex",
         flexDirection: "column",
-        gap: "16px", // Increased for better spacing
+        gap: "16px",
     },
+    dialogSurface: {
+        width: '95vw',
+        maxWidth: '600px',
+        minWidth: '320px',
+    }
 });
 
 interface EditInventoryProps {
@@ -86,7 +91,7 @@ export function EditInventoryDialog({ item }: EditInventoryProps) {
             <DialogTrigger disableButtonEnhancement>
                 <Button appearance="subtle" icon={<EditRegular />} />
             </DialogTrigger>
-            <DialogSurface>
+            <DialogSurface className={styles.dialogSurface}>
                 <DialogBody>
                     <DialogTitle>Edit Inventory Item</DialogTitle>
                     <div className={styles.content}>

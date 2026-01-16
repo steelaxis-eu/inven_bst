@@ -58,7 +58,9 @@ const useStyles = makeStyles({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '16px'
+        marginBottom: '16px',
+        flexWrap: 'wrap',
+        gap: '16px'
     },
     usageGrid: {
         display: 'grid',
@@ -132,7 +134,7 @@ export function ProjectTabs({
                                 <Title3>In-House Production</Title3>
                                 <Text block style={{ color: tokens.colorNeutralForeground3 }}>Items fabricated internally (Profiles & Plates)</Text>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <RecalculateWeightsButton projectId={projectId} />
                                 <ImportDrawingsDialog
                                     projectId={projectId}

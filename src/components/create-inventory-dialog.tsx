@@ -50,7 +50,7 @@ const useStyles = makeStyles({
         // but keep a reasonable min/max.
         // Remove fixed widths to allow fluid resizing within viewport limits
         width: "95vw", // Occupy almost full width on small screens
-        maxWidth: "1400px", // Cap at 1400px
+        maxWidth: "1000px", // Cap at 1000px (reduced from 1400px)
         minWidth: "320px", // Minimum for very small phones
     },
     section: {
@@ -58,10 +58,8 @@ const useStyles = makeStyles({
         flexDirection: "column",
         gap: "16px",
         padding: "24px",
-        backgroundColor: tokens.colorNeutralBackground2,
-        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        // Removed grey background and shadow for a cleaner, flatter look
         marginBottom: "16px",
-        boxShadow: tokens.shadow4, // Add depth
     },
     sectionTitle: {
         fontWeight: "bold",

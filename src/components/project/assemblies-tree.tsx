@@ -386,12 +386,12 @@ function AssemblyItem({
                     )}
                 </div>
 
-                <Badge appearance="outline" color={getBadgeColor(assembly.status)}>
+                <Badge appearance="tint" color={getBadgeColor(assembly.status)}>
                     {assembly.status.replace('_', ' ')}
                 </Badge>
 
                 <div style={{ width: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <ProgressBar value={progress.percent} max={100} thickness="medium" color={progress.percent === 100 ? 'success' : 'brand'} />
+                    <ProgressBar value={progress.percent} max={100} thickness="large" shape="rounded" color={progress.percent === 100 ? 'success' : 'brand'} style={{ height: '8px' }} />
                     <Text size={100} align="end">{progress.percent}%</Text>
                 </div>
 
@@ -661,7 +661,7 @@ export function AssemblySummary({ assemblies }: { assemblies: Assembly[] }) {
     )
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <SummaryCard title="Total" value={total} />
             <SummaryCard title="Not Started" value={notStarted} color={tokens.colorNeutralForeground2} />
             <SummaryCard title="In Progress" value={inProgress} color={tokens.colorBrandForeground1} />

@@ -29,38 +29,38 @@ const useStyles = makeStyles({
     dialogContent: {
         display: "flex",
         flexDirection: "column",
-        gap: "16px",
-        width: "90vw",
-        maxWidth: "800px",
+        gap: "24px",
+        width: "95vw",
+        maxWidth: "1000px",
         minWidth: "320px",
     },
     section: {
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
-        padding: "16px",
-        backgroundColor: tokens.colorNeutralBackground2,
-        ...shorthands.borderRadius(tokens.borderRadiusMedium),
+        gap: "16px",
+        // Removed grey background for standard look
     },
     sectionTitle: {
         fontWeight: "bold",
-        color: tokens.colorNeutralForeground2,
+        color: tokens.colorBrandForeground1,
         textTransform: "uppercase",
         fontSize: "12px",
-        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        letterSpacing: "0.05em",
+        borderBottom: `2px solid ${tokens.colorNeutralStroke2}`,
         paddingBottom: "8px",
         marginBottom: "8px",
     },
     row: {
         display: "flex",
         gap: "16px",
-        flexWrap: "wrap", // Allow wrapping on small screens
+        flexWrap: "wrap",
     },
     field: {
         display: "flex",
         flexDirection: "column",
         flex: 1,
-        gap: "4px"
+        gap: "4px",
+        minWidth: "200px", // Ensure wrap happens
     }
 });
 

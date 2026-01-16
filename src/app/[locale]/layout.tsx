@@ -64,7 +64,9 @@ export default async function RootLayout({
                   <Header userEmail={user?.email ?? undefined} />
                   <ImportStatus />
                   <main className="flex-1 bg-gradient-to-br from-white to-gray-50 dark:from-neutral-900 dark:to-neutral-950">
-                    {children}
+                    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+                      {children}
+                    </div>
                   </main>
                   <Toaster richColors position="bottom-right" />
                   <Analytics />

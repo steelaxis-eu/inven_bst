@@ -89,8 +89,12 @@ const useStyles = makeStyles({
     mono: {
         fontFamily: tokens.fontFamilyMonospace
     },
-    statusBadge: {
-        textTransform: "capitalize"
+    headerCell: {
+        fontWeight: "bold",
+        textTransform: "uppercase",
+        fontSize: "11px",
+        color: tokens.colorNeutralForeground2,
+        letterSpacing: "0.05em",
     }
 });
 
@@ -319,25 +323,25 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
             </div>
 
             <div className={styles.tableContainer}>
-                <Table size="small" style={{ minWidth: "900px" }}>
+                <Table size="small" style={{ minWidth: "1100px" }}>
                     <TableHeader>
                         <TableRow style={{ backgroundColor: tokens.colorNeutralBackground2 }}>
-                            <TableHeaderCell style={{ width: '40px' }}>
+                            <TableHeaderCell style={{ width: '40px' }} className={styles.headerCell}>
                                 <Checkbox
                                     checked={allSelected ? true : selectedIds.length > 0 ? "mixed" : false}
                                     onChange={handleSelectAll}
                                 />
                             </TableHeaderCell>
-                            <TableHeaderCell>Part #</TableHeaderCell>
-                            <TableHeaderCell>Type</TableHeaderCell>
-                            <TableHeaderCell style={{ width: '40px' }}>Dwng</TableHeaderCell>
-                            <TableHeaderCell>Description</TableHeaderCell>
-                            <TableHeaderCell>Dimensions</TableHeaderCell>
-                            <TableHeaderCell>Grade</TableHeaderCell>
-                            <TableHeaderCell style={{ textAlign: 'right' }}>Qty</TableHeaderCell>
-                            <TableHeaderCell style={{ textAlign: 'right' }}>Weight</TableHeaderCell>
-                            <TableHeaderCell style={{ width: '160px' }}>Status / Progress</TableHeaderCell>
-                            <TableHeaderCell style={{ width: '40px' }}></TableHeaderCell>
+                            <TableHeaderCell className={styles.headerCell}>Part #</TableHeaderCell>
+                            <TableHeaderCell className={styles.headerCell}>Type</TableHeaderCell>
+                            <TableHeaderCell style={{ width: '40px' }} className={styles.headerCell}>Dwng</TableHeaderCell>
+                            <TableHeaderCell className={styles.headerCell}>Description</TableHeaderCell>
+                            <TableHeaderCell className={styles.headerCell}>Dimensions</TableHeaderCell>
+                            <TableHeaderCell className={styles.headerCell}>Grade</TableHeaderCell>
+                            <TableHeaderCell style={{ textAlign: 'right' }} className={styles.headerCell}>Qty</TableHeaderCell>
+                            <TableHeaderCell style={{ textAlign: 'right' }} className={styles.headerCell}>Weight</TableHeaderCell>
+                            <TableHeaderCell style={{ width: '160px' }} className={styles.headerCell}>Status / Progress</TableHeaderCell>
+                            <TableHeaderCell style={{ width: '40px' }} className={styles.headerCell}></TableHeaderCell>
                         </TableRow>
                     </TableHeader>
                     <TableBody>

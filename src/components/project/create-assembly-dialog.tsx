@@ -55,23 +55,20 @@ const useStyles = makeStyles({
     root: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
+        gap: '24px',
     },
     section: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px',
-        padding: '16px',
-        backgroundColor: tokens.colorNeutralBackground1,
-        ...shorthands.borderRadius(tokens.borderRadiusMedium),
-        ...shorthands.border('1px', 'solid', tokens.colorNeutralStroke2),
+        gap: '16px',
+        // Removed grey background/border for cleaner look
     },
     header: {
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
         marginBottom: '8px',
-        ...shorthands.borderBottom('1px', 'solid', tokens.colorNeutralStroke3),
+        borderBottom: `2px solid ${tokens.colorNeutralStroke2}`,
         paddingBottom: '8px',
     },
     headerIcon: {
@@ -79,20 +76,28 @@ const useStyles = makeStyles({
     },
     headerTitle: {
         fontWeight: 'bold',
-        color: tokens.colorNeutralForeground2,
+        color: tokens.colorBrandForeground1,
         textTransform: 'uppercase',
-        fontSize: '11px',
-        letterSpacing: '1px',
+        fontSize: '12px',
+        letterSpacing: '0.05em',
     },
     gridTwo: {
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: '16px',
+        '@media (max-width: 768px)': {
+            display: 'flex',
+            flexDirection: 'column',
+        }
     },
     gridThree: {
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
         gap: '16px',
+        '@media (max-width: 768px)': {
+            display: 'flex',
+            flexDirection: 'column',
+        }
     },
     partList: {
         maxHeight: '300px',
@@ -103,9 +108,9 @@ const useStyles = makeStyles({
     addSubSection: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px',
-        padding: '12px',
-        backgroundColor: tokens.colorNeutralBackgroundAlpha,
+        gap: '16px',
+        padding: '16px',
+        backgroundColor: tokens.colorNeutralBackgroundAlpha, // Keep slight bg for nested form or remove? Let's keep distinct sub-form
         ...shorthands.borderRadius(tokens.borderRadiusMedium),
         ...shorthands.border('1px', 'dashed', tokens.colorNeutralStroke2),
     },
@@ -455,7 +460,7 @@ export function CreateAssemblyDialog({
             <DialogTrigger disableButtonEnhancement>
                 <Button icon={<AddRegular />}>Add Assembly</Button>
             </DialogTrigger>
-            <DialogSurface style={{ minWidth: '800px', maxWidth: '1000px', minHeight: '600px' }}>
+            <DialogSurface style={{ width: '95vw', maxWidth: '1000px', minWidth: '320px', minHeight: '600px' }}>
                 <DialogBody>
                     <DialogTitle>Create New Assembly</DialogTitle>
                     <DialogContent className={styles.root}>
