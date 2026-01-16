@@ -26,7 +26,7 @@ const useStyles = makeStyles({
     content: {
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
+        gap: "16px", // Increased for better spacing
     },
 });
 

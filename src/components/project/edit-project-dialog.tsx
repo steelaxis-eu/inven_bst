@@ -42,6 +42,10 @@ const useStyles = makeStyles({
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: '16px',
+        '@media (max-width: 768px)': {
+            display: 'flex',
+            flexDirection: 'column',
+        }
     },
     sectionTitle: {
         fontWeight: tokens.fontWeightSemibold,

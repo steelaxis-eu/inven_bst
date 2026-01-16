@@ -67,6 +67,7 @@ const useStyles = makeStyles({
         justifyContent: "space-between",
         alignItems: "center",
         padding: "12px",
+        gap: "12px", // Ensure spacing between items
         backgroundColor: tokens.colorNeutralBackground2,
         ...shorthands.borderRadius(tokens.borderRadiusMedium),
         border: `1px solid ${tokens.colorNeutralStroke2}`,

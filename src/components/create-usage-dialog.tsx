@@ -46,9 +46,12 @@ const useStyles = makeStyles({
         display: "flex",
         flexDirection: "column",
         gap: "16px",
-        minWidth: "900px",
+        width: "95vw",
         maxWidth: "1200px",
         height: "90vh",
+        "@media (min-width: 768px)": {
+            minWidth: "600px", // Only enforce min-width on larger screens
+        }
     },
     section: {
         display: "flex",

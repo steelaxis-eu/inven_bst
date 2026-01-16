@@ -65,15 +65,16 @@ const useStyles = makeStyles({
     },
     sectionTitle: {
         fontWeight: "bold",
-        color: tokens.colorNeutralForeground2,
+        color: tokens.colorBrandForeground1, // Use brand color for hierarchy
         textTransform: "uppercase",
         fontSize: "12px",
-        borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+        borderBottom: `2px solid ${tokens.colorNeutralStroke2}`, // Thicker divider
         paddingBottom: "12px",
         marginBottom: "16px",
         display: "flex",
         alignItems: "center",
-        gap: "8px"
+        gap: "8px",
+        letterSpacing: "0.05em" // Slight letter spacing for uppercase header
     },
     // Replace generic 'row' with responsive grid/flex layouts
     gridRowMain: {
