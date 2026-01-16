@@ -45,18 +45,21 @@ const useStyles = makeStyles({
         display: "flex",
         flexDirection: "column",
         gap: "16px",
-        minWidth: "800px",
-        maxWidth: "1200px",
         height: "80vh",
+        // Remove fixed widths to allow fluid resizing within viewport limits if needed, 
+        // but keep a reasonable min/max.
+        minWidth: "900px",
+        maxWidth: "1400px",
     },
     section: {
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
-        padding: "16px",
+        gap: "16px",
+        padding: "24px",
         backgroundColor: tokens.colorNeutralBackground2,
         ...shorthands.borderRadius(tokens.borderRadiusMedium),
         marginBottom: "16px",
+        boxShadow: tokens.shadow4, // Add depth
     },
     sectionTitle: {
         fontWeight: "bold",
@@ -64,36 +67,48 @@ const useStyles = makeStyles({
         textTransform: "uppercase",
         fontSize: "12px",
         borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-        paddingBottom: "8px",
-        marginBottom: "8px",
+        paddingBottom: "12px",
+        marginBottom: "16px",
         display: "flex",
         alignItems: "center",
         gap: "8px"
     },
-    row: {
-        display: "flex",
-        gap: "16px",
-        flexWrap: "wrap",
-        alignItems: "flex-end", // Align Inputs with Buttons
+    // Replace generic 'row' with specific grid layouts
+    gridRowMain: {
+        display: "grid",
+        gridTemplateColumns: "120px 180px 1fr 140px", // Lot, Type, Dims (Flexible), Grade
+        gap: "24px",
+        alignItems: "end",
+        marginBottom: "16px"
+    },
+    gridRowSecondary: {
+        display: "grid",
+        gridTemplateColumns: "repeat(5, 1fr)", // Equal width for metrics
+        gap: "24px",
+        alignItems: "end",
+    },
+    gridRowActions: {
+        display: "grid",
+        gridTemplateColumns: "1fr auto",
+        gap: "24px",
+        alignItems: "end",
+        marginTop: "16px"
     },
     field: {
         display: "flex",
         flexDirection: "column",
-        gap: "4px",
+        gap: "6px",
+        width: "100%", // Force full width in grid cell
+    },
+    weightContainer: {
+        position: "relative",
+        width: "100%",
     },
     actions: {
         marginTop: "auto",
         paddingTop: "16px",
         borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
     },
-    weightContainer: {
-        position: "relative",
-    },
-    calcButton: {
-        position: "absolute",
-        right: 0,
-        top: 0,
-    }
 });
 
 interface CreateInventoryProps {
@@ -325,14 +340,14 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                             <AddRegular /> New Item Definition
                         </div>
 
-                        {/* Row 1: Profile Def */}
-                        <div className={styles.row}>
+                        {/* Row 1: Definition */}
+                        <div className={styles.gridRowMain}>
                             <Field label="Lot ID" className={styles.field}>
                                 <Input
                                     value={current.lotId}
                                     onChange={(e, d) => setCurrent({ ...current, lotId: d.value })}
                                     placeholder="[Auto]"
-                                    style={{ width: '100px', textTransform: 'uppercase' }}
+                                    style={{ width: '100%', textTransform: 'uppercase' }}
                                 />
                             </Field>
 
@@ -341,7 +356,7 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     value={selectedType}
                                     onOptionSelect={handleTypeSelect}
                                     placeholder="Select Type"
-                                    style={{ minWidth: '150px' }}
+                                    style={{ width: '100%' }}
                                 >
                                     {uniqueTypes.map(t => <Option key={t} text={t}>{t}</Option>)}
                                     {activeShape && !isStandardType && <Option text={activeShape.id}>{activeShape.id}</Option>}
@@ -356,54 +371,65 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                     onInput={(e: any) => { setSelectedDim(e.target.value); setCustomDim(e.target.value); }}
                                     freeform
                                     placeholder="Dims"
-                                    style={{ minWidth: '180px' }}
+                                    style={{ width: '100%' }}
                                 >
                                     {activeDims.map(d => <Option key={d}>{d}</Option>)}
                                     {isStandardType && catalogDims.map(d => <Option key={d}>{d}</Option>)}
                                 </Combobox>
                             </Field>
 
-                            {/* Custom Shape Params Inline */}
-                            {!isStandardType && activeShape && (activeShape.params as string[]).map(param => (
-                                <Field key={param} label={param} className={styles.field}>
-                                    <Input
-                                        value={shapeParams[param] || ''}
-                                        onChange={(e, d) => updateShapeParam(param, d.value)}
-                                        style={{ width: '60px' }}
-                                    />
-                                </Field>
-                            ))}
+                            {/* Custom Shape Params Inline - If visible, they might break grid alignment unless handled. 
+                                For now, let's keep them here but they might wrap weirdly if many. 
+                                Ideally they merge into dimensions line or separate line. 
+                                Given current rigorous grid, let's put them in a flex container if present or allow grid to break.
+                                actually, the Layout design assumes standard mainly. 
+                                If custom params appear, we might want a separate dynamic row.
+                            */}
 
                             <Field label="Grade" className={styles.field}>
                                 <Combobox
                                     value={selectedGrade}
                                     onOptionSelect={(e, d) => setSelectedGrade(d.optionValue || '')}
                                     placeholder="Select Grade"
-                                    style={{ width: '120px' }}
+                                    style={{ width: '100%' }}
                                 >
                                     {grades.map(g => <Option key={g.id} value={g.name}>{g.name}</Option>)}
                                 </Combobox>
                             </Field>
                         </div>
 
-                        {/* Row 2: Logistics */}
-                        <div className={styles.row}>
-                            <Field label="Length (mm)" required>
-                                <Input type="number" value={current.length} onChange={(e, d) => setCurrent({ ...current, length: d.value })} style={{ width: '100px' }} />
+                        {/* Custom Params Row (Conditional) */}
+                        {!isStandardType && activeShape && (activeShape.params as string[]).length > 0 && (
+                            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                                {(activeShape.params as string[]).map(param => (
+                                    <Field key={param} label={param} className={styles.field} style={{ maxWidth: '100px' }}>
+                                        <Input
+                                            value={shapeParams[param] || ''}
+                                            onChange={(e, d) => updateShapeParam(param, d.value)}
+                                        />
+                                    </Field>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Row 2: Metrics */}
+                        <div className={styles.gridRowSecondary}>
+                            <Field label="Length (mm)" required className={styles.field}>
+                                <Input type="number" value={current.length} onChange={(e, d) => setCurrent({ ...current, length: d.value })} style={{ width: '100%' }} />
                             </Field>
-                            <Field label="Qty" required>
-                                <Input type="number" value={current.quantity} onChange={(e, d) => setCurrent({ ...current, quantity: d.value })} style={{ width: '80px' }} />
+                            <Field label="Qty" required className={styles.field}>
+                                <Input type="number" value={current.quantity} onChange={(e, d) => setCurrent({ ...current, quantity: d.value })} style={{ width: '100%' }} />
                             </Field>
-                            <Field label="Cost (€)">
-                                <Input type="number" value={current.totalCost} onChange={(e, d) => setCurrent({ ...current, totalCost: d.value })} style={{ width: '100px' }} />
+                            <Field label="Cost (€)" className={styles.field}>
+                                <Input type="number" value={current.totalCost} onChange={(e, d) => setCurrent({ ...current, totalCost: d.value })} style={{ width: '100%' }} />
                             </Field>
 
                             <div className={styles.weightContainer}>
-                                <Field label="Weight (kg/m)">
+                                <Field label="Weight (kg/m)" className={styles.field}>
                                     <Input
                                         value={manualWeight}
                                         onChange={(e, d) => setManualWeight(d.value)}
-                                        style={{ width: '100px' }}
+                                        style={{ width: '100%' }}
                                         contentAfter={
                                             <Button
                                                 appearance="transparent"
@@ -417,19 +443,22 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 </Field>
                             </div>
 
-                            <Field label="Supplier">
+                            <Field label="Supplier" className={styles.field}>
                                 <Combobox
                                     value={suppliers.find(s => s.id === selectedSupplier)?.name || (selectedSupplier === '' ? 'None' : selectedSupplier)}
                                     onOptionSelect={(e, d) => setSelectedSupplier(d.optionValue || '')}
                                     placeholder="Optional"
-                                    style={{ width: '140px' }}
+                                    style={{ width: '100%' }}
                                 >
                                     <Option value="">None</Option>
                                     {suppliers.map(s => <Option key={s.id} value={s.id}>{s.name}</Option>)}
                                 </Combobox>
                             </Field>
+                        </div>
 
-                            <Field label="Cert">
+                        {/* Row 3: Actions */}
+                        <div className={styles.gridRowActions}>
+                            <Field label="Cert" className={styles.field}>
                                 <FluentFileUploader
                                     bucketName="certificates"
                                     onUploadComplete={(path) => setCurrent({ ...current, certificate: path })}
@@ -438,7 +467,9 @@ export function CreateInventoryDialog({ profiles: initialProfiles, standardProfi
                                 />
                             </Field>
 
-                            <Button appearance="primary" onClick={handleAddItem} style={{ alignSelf: "flex-end", marginBottom: "2px" }}>Add Item</Button>
+                            <Button appearance="primary" size="large" icon={<AddRegular />} onClick={handleAddItem} style={{ width: '150px' }}>
+                                Add Item
+                            </Button>
                         </div>
                     </div>
 
