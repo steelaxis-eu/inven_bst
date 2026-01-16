@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import {
     Dialog,
+    DialogTrigger,
     DialogSurface,
     DialogBody,
     DialogTitle,
@@ -451,6 +452,9 @@ export function CreateAssemblyDialog({
 
     return (
         <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<AddRegular />}>Add Assembly</Button>
+            </DialogTrigger>
             <DialogSurface style={{ minWidth: '800px', maxWidth: '1000px', minHeight: '600px' }}>
                 <DialogBody>
                     <DialogTitle>Create New Assembly</DialogTitle>
@@ -686,7 +690,6 @@ export function CreateAssemblyDialog({
                     </DialogActions>
                 </DialogBody>
             </DialogSurface>
-            <Button onClick={() => setOpen(true)} icon={<AddRegular />}>Add Assembly</Button>
         </Dialog>
     )
 }

@@ -20,3 +20,25 @@ You are an expert in `@fluentui/react-components` (v9). When generating code for
   const useStyles = makeStyles({
     container: { display: 'flex', flexDirection: 'column', gap: '10px' }
   });
+  ```
+
+## 3. Component Best Practices
+
+### Dialogs
+- **Trigger Pattern (Preferred)**: Always use `DialogTrigger` to wrap the button that opens the dialog. This handles accessibility and state automatically.
+  ```tsx
+  <Dialog>
+    <DialogTrigger disableButtonEnhancement>
+      <Button>Open Dialog</Button>
+    </DialogTrigger>
+    <DialogSurface>
+      <DialogBody>
+        <DialogTitle>Title</DialogTitle>
+        <DialogContent>...</DialogContent>
+        <DialogActions>...</DialogActions>
+      </DialogBody>
+    </DialogSurface>
+  </Dialog>
+  ```
+- **Controlled Pattern**: Use controlled state (`open`, `onOpenChange`) ONLY when the dialog is triggered by an external event (not a direct button click) or needs complex state management.
+- **Anti-Pattern**: Do not manually manage `open` state `[open, setOpen]` for simple button triggers. This often leads to "auto-open" bugs if default state is mishandled or if the parent re-renders.

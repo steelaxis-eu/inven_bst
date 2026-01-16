@@ -23,6 +23,7 @@ import {
     Text,
     Spinner,
     Switch,
+    DialogTrigger,
     Field,
     Divider
 } from '@fluentui/react-components'
@@ -392,21 +393,26 @@ export function CreatePartDialog({
 
     return (
         <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+            <DialogTrigger disableButtonEnhancement>
+                <Button icon={<AddRegular />}>Add Part</Button>
+            </DialogTrigger>
             <DialogSurface style={{ minWidth: '650px', maxWidth: '800px' }}>
                 <DialogBody>
-                    <DialogTitle>Add New Part</DialogTitle>
+                    <DialogTitle>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            Add New Part
+                            <TabList
+                                selectedValue={tab}
+                                onTabSelect={(_, data) => setTab(data.value as 'profile' | 'plate')}
+                                style={{ marginTop: '8px' }}
+                            >
+                                <Tab id="profile" value="profile" icon={<BoxRegular />}>Profile Part</Tab>
+                                <Tab id="plate" value="plate" icon={<CutRegular />}>Plate Part</Tab>
+                            </TabList>
+                        </div>
+                    </DialogTitle>
 
-                    <div style={{ margin: '16px 0' }}>
-                        <TabList
-                            selectedValue={tab}
-                            onTabSelect={(_, data) => setTab(data.value as 'profile' | 'plate')}
-                        >
-                            <Tab id="profile" value="profile" icon={<BoxRegular />}>Profile Part</Tab>
-                            <Tab id="plate" value="plate" icon={<CutRegular />}>Plate Part</Tab>
-                        </TabList>
-                    </div>
-
-                    <DialogContent className={styles.root}>
+                    <DialogContent className={styles.root} style={{ marginTop: '16px' }}>
                         {/* Common Fields */}
                         <div className={styles.section}>
                             <div className={styles.header}>
@@ -632,7 +638,6 @@ export function CreatePartDialog({
                     </DialogActions>
                 </DialogBody>
             </DialogSurface>
-            <Button onClick={() => setOpen(true)} icon={<AddRegular />}>Add Part</Button>
         </Dialog>
     )
 }
