@@ -65,6 +65,7 @@ const useStyles = makeStyles({
         height: "100%",
         backgroundColor: tokens.colorNeutralBackground1,
         border: `1px solid ${tokens.colorNeutralStroke1}`,
+        borderLeft: `4px solid ${tokens.colorBrandStroke1}`, // Brand accent
         ...shorthands.borderRadius(tokens.borderRadiusLarge),
         transition: "all 0.3s ease",
         ":hover": {
