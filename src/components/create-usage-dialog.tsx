@@ -46,12 +46,12 @@ const useStyles = makeStyles({
         display: "flex",
         flexDirection: "column",
         gap: "16px",
+        height: "auto",
+        maxHeight: "90vh",
+        overflowY: "auto",
         width: "95vw",
-        maxWidth: "1200px",
-        height: "90vh",
-        "@media (min-width: 768px)": {
-            minWidth: "600px", // Only enforce min-width on larger screens
-        }
+        maxWidth: "1000px", // Reduced from 1200px to match standard
+        minWidth: "320px",
     },
     section: {
         display: "flex",
@@ -74,7 +74,11 @@ const useStyles = makeStyles({
         display: "flex",
         gap: "16px",
         alignItems: "flex-end",
-        flexWrap: "wrap",
+        flexWrap: "wrap", // Ensure wrapping
+        "@media (max-width: 768px)": {
+            flexDirection: "column",
+            alignItems: "stretch",
+        },
     },
     field: {
         display: "flex",

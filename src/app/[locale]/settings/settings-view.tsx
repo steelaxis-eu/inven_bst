@@ -25,8 +25,8 @@ export function SettingsView({
     return (
         <div className="container mx-auto px-4 py-10" style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-                <Link href="/">
-                    <Button appearance="outline" icon={<ArrowLeftRegular />}>Back</Button>
+                <Link href="/" style={{ textDecoration: 'none' }}>
+                    <Button appearance="subtle" icon={<ArrowLeftRegular />}>Dashboard</Button>
                 </Link>
                 <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>Settings</h1>
             </div>

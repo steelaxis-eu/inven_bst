@@ -4,8 +4,8 @@ import { Skeleton, SkeletonItem, makeStyles } from "@fluentui/react-components"
 
 const useStyles = makeStyles({
     root: {
-        padding: '32px',
-        maxWidth: '1200px',
+        padding: '32px 16px',
+        maxWidth: '1400px',
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',

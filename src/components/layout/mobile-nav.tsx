@@ -19,6 +19,8 @@ import { useTranslations } from 'next-intl';
 const useStyles = makeStyles({
     root: {
         display: 'none',
+        zIndex: 20000,
+        position: 'relative',
         '@media (max-width: 1024px)': {
             display: 'block',
         },

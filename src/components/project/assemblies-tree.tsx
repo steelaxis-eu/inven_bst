@@ -386,7 +386,7 @@ function AssemblyItem({
                     )}
                 </div>
 
-                <Badge appearance="tint" color={getBadgeColor(assembly.status)}>
+                <Badge appearance="tint" color={getBadgeColor(assembly.status)} style={{ whiteSpace: 'nowrap' }}>
                     {assembly.status.replace('_', ' ')}
                 </Badge>
 

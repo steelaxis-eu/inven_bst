@@ -19,7 +19,9 @@ const useStyles = makeStyles({
     header: {
         width: "100%",
         // Remove padding here as it's handled by inner container
-        backgroundColor: tokens.colorNeutralBackground1,
+        backgroundColor: tokens.colorNeutralBackgroundAlpha, // Semi-transparent
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
         borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
         position: "sticky",
         top: 0,

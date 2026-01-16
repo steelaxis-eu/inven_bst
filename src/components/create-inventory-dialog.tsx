@@ -45,7 +45,9 @@ const useStyles = makeStyles({
         display: "flex",
         flexDirection: "column",
         gap: "16px",
-        height: "80vh",
+        height: "auto",
+        maxHeight: "90vh",
+        overflowY: "auto",
         // Remove fixed widths to allow fluid resizing within viewport limits if needed, 
         // but keep a reasonable min/max.
         // Remove fixed widths to allow fluid resizing within viewport limits

@@ -42,9 +42,9 @@ export function InventoryView({
 }: InventoryViewProps) {
     return (
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
                 <Title1>Inventory</Title1>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <CSVImportDialog />
                     <CreateUsageDialog projects={projects} />
                     <CreateInventoryDialog

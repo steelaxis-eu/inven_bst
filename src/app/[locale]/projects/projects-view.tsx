@@ -27,7 +27,7 @@ interface ProjectsViewProps {
 export function ProjectsView({ projects, customers }: ProjectsViewProps) {
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
                 <Title1>Projects</Title1>
                 <CreateProjectDialog customers={customers} />
             </div>
