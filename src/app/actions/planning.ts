@@ -37,28 +37,44 @@ export async function calculateCuttingPlan(
             }
         })
 
-        // 2. Group by Profile + Grade
+        // 2. Group by Profile + Grade (Enhanced for Custom Profiles)
         const groups: Record<string, {
-            profile: any,
-            grade: any,
+            profileType: string,
+            dimensions: string,
+            gradeName: string,
+            profileId?: string,
+            gradeId?: string,
             pieces: { id: string, length: number }[]
         }> = {}
 
         for (const piece of pieces) {
-            const profile = piece.part.profile
-            const grade = piece.part.grade
-            if (!profile || !grade) continue // Skip if missing info
+            // Determine keys even if relations are missing
+            const gradeName = piece.part.grade?.name || 'Unknown Grade'
+            const gradeId = piece.part.grade?.id
 
-            const key = `${profile.type}|${profile.dimensions}|${grade.name}`
+            let profileType = piece.part.profile?.type || piece.part.profileType
+            let dimensions = piece.part.profile?.dimensions || piece.part.profileDimensions
+            let profileId = piece.part.profile?.id
+
+            // If we have absolutely no info, we can't optimize
+            if (!profileType || !dimensions) {
+                // Optionally log or handle 'Unknown' parts
+                continue
+            }
+
+            const key = `${profileType}|${dimensions}|${gradeName}`
+
             if (!groups[key]) {
                 groups[key] = {
-                    profile,
-                    grade,
+                    profileType,
+                    dimensions,
+                    gradeName,
+                    profileId,
+                    gradeId,
                     pieces: []
                 }
             }
-            // Use part length (assuming piece length is same? Part Piece logic usually inherits)
-            // If piece has specific length (e.g. variable), use it. But typically Part has length.
+
             const len = piece.part.length || 0
             groups[key].pieces.push({ id: piece.id, length: len })
         }
@@ -70,23 +86,32 @@ export async function calculateCuttingPlan(
             const group = groups[key]
 
             // Fetch Inventory (Stock + Remnants)
-            // Use greedy fetch: Available items matching profile/grade
-            const inventory = await prisma.inventory.findMany({
-                where: {
-                    profileId: group.profile.id,
-                    gradeId: group.grade.id,
-                    status: 'ACTIVE',
-                    quantityAtHand: { gt: 0 }
-                },
-                orderBy: { length: 'asc' } // Try smallest first? Or largest?
-                // Usually for minimizing waste, Best Fit works well with any order, 
-                // but using Remnants (usually smaller) first is good practice.
-            })
+            let inventory: any[] = []
+
+            // Try to find matching profile ID if we don't have one
+            let targetProfileId = group.profileId
+            if (!targetProfileId) {
+                const matchingProfile = await prisma.steelProfile.findFirst({
+                    where: { type: group.profileType, dimensions: group.dimensions }
+                })
+                if (matchingProfile) targetProfileId = matchingProfile.id
+            }
+
+            if (targetProfileId && group.gradeId) {
+                inventory = await prisma.inventory.findMany({
+                    where: {
+                        profileId: targetProfileId,
+                        gradeId: group.gradeId,
+                        status: 'ACTIVE',
+                        quantityAtHand: { gt: 0 }
+                    },
+                    orderBy: { length: 'asc' }
+                })
+            }
 
             const stockInfo: StockInfo[] = inventory.flatMap(inv => {
-                // Expand quantity into individual items for the optimizer
                 return Array(inv.quantityAtHand).fill({
-                    id: inv.lotId, // Use Lot ID as reference
+                    id: inv.lotId,
                     length: inv.length,
                     quantity: 1
                 })
@@ -104,7 +129,7 @@ export async function calculateCuttingPlan(
             // Map results
             const stockUsed = plan.stockUsed.map(s => ({
                 lotId: s.stockId,
-                length: s.parts.reduce((sum, p) => sum + p.length, 0) + s.waste, // reconstruct orig length
+                length: s.parts.reduce((sum, p) => sum + p.length, 0) + s.waste,
                 partsCount: s.parts.length,
                 waste: s.waste
             }))
@@ -119,9 +144,9 @@ export async function calculateCuttingPlan(
             const partsFromNew = plan.newStockNeeded.flatMap(n => n.parts.flatMap(p => p.partId))
 
             results.push({
-                profileType: group.profile.type,
-                dimensions: group.profile.dimensions,
-                grade: group.grade.name,
+                profileType: group.profileType,
+                dimensions: group.dimensions,
+                grade: group.gradeName,
                 stockUsed,
                 newStockNeeded,
                 partsFromStock,
