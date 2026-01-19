@@ -14,7 +14,9 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
-    // serverActions: true, // Next 14 has this by default
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
   }
 };
 
