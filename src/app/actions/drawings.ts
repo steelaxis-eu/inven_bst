@@ -164,12 +164,14 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
 
           CRITICAL CLASSIFICATION RULES:
           1. **PROFILE**: Any part that is a standard section beam, tube, or angle.
-             - Keywords to look for: RHS, SHS, IPE, HEA, HEB, UNP, UPE, L-Profile, Angle, Tube, Pipe, Beam.
-             - Example Descriptions: "HEA 200", "RHS 100x100x5", "L 50x50x5".
-             - If the part is defined by a Profile Name (e.g. "IPE200") it is a PROFILE.
+             - Keywords: RHS, SHS, IPE, HEA, HEB, UNP, UPE, L-Profile, Angle, Tube, Pipe, Beam, Round Bar.
+             - **Standard Nomenclature**: Use "CHS", "RHS 10219", "SHS 10219", "UPN", "ROUND BAR" where applicable.
              - **RHS vs SHS Rule**: 
                 - If a tube is SQUARE (e.g. 60x60x4 or Side=60, Wall=4), classify as **SHS**.
                 - If a tube is RECTANGULAR (e.g. 100x50x5), classify as **RHS**.
+             - **ROUND BAR vs CHS**:
+                - If "RO", "Round", "Bar" has **1 Dimension** (Diameter) -> **ROUND BAR**.
+                - If "RO", "Tube", "Pipe" has **2 Dimensions** (Diameter x Wall) -> **CHS**.
           
           2. **PLATE**: Any part that is a flat sheet of material defined by Thickness x Width x Length.
              - Typically designated as "PL", "FL", "Flat Bar" (sometimes), or just dimensions like "10x200x500".
@@ -264,27 +266,57 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                 for (const data of partsList) {
                     try {
                         // ... post processing ...
+                        let pType = data.profileType?.toUpperCase() || "";
+                        let pDims = data.profileDimensions || "";
+
                         // 1. Clean Profile Dimensions (replace * with x)
-                        if (data.profileDimensions) {
-                            data.profileDimensions = data.profileDimensions.replace(/\*/g, 'x').toLowerCase()
+                        if (pDims) {
+                            pDims = pDims.replace(/\*/g, 'x').toLowerCase()
+                            data.profileDimensions = pDims
                         }
 
-                        // 2. Fix SHS/RHS Confusion
+                        // 2. Normalize Types
+                        if (pType === 'UNP') pType = 'UPN';
+                        // UPE remains UPE
+
+                        // 2a. Round Shape Logic (Round Bar vs CHS)
+                        const isRoundKeyword = ['RO', 'ROUND', 'ROUND BAR', 'BAR', 'RD'].some(t => pType === t || pType.startsWith(t + ' '));
+                        const isTubeKeyword = ['TUBE', 'PIPE', 'CHS'].some(t => pType.includes(t));
+
+                        if (isTubeKeyword) {
+                            pType = 'CHS';
+                        } else if (isRoundKeyword) {
+                            // Check dimensions count
+                            const dimCount = pDims.split('x').length;
+                            if (dimCount === 1) {
+                                pType = 'ROUND BAR';
+                            } else if (dimCount >= 2) {
+                                pType = 'CHS';
+                            }
+                        }
+
+                        // 2b. Add Suffixes for 10219
+                        if (pType === 'RHS' && !pType.includes('10219')) pType = 'RHS 10219';
+                        if (pType === 'SHS' && !pType.includes('10219')) pType = 'SHS 10219';
+
+                        data.profileType = pType;
+
+                        // 3. Fix SHS/RHS Confusion
                         // Logic: If identified as RHS but dims are like "60x4" (WxT), convert to SHS 60x60x4
-                        if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('RHS')) {
+                        if (data.type === 'PROFILE' && data.profileType?.includes('RHS')) {
                             const dims = data.profileDimensions?.split('x') || []
                             // Case: "60x4" -> [60, 4]
                             if (dims.length === 2) {
                                 const side = dims[0]
                                 const wall = dims[1]
                                 // Assume it implies a square tube
-                                data.profileType = "SHS"
+                                data.profileType = "SHS 10219" // Ensure standardized SHS
                                 data.profileDimensions = `${side}x${side}x${wall}`
                             }
                         }
 
-                        // 2.1 Ensure SHS has 3 dims "60x60x4" if only 2 provided "60x4" even if AI called it SHS
-                        if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('SHS')) {
+                        // 3.1 Ensure SHS has 3 dims "60x60x4" if only 2 provided "60x4" even if AI called it SHS
+                        if (data.type === 'PROFILE' && data.profileType?.includes('SHS')) {
                             const dims = data.profileDimensions?.split('x') || []
                             if (dims.length === 2) {
                                 const side = dims[0]
@@ -293,7 +325,7 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                             }
                         }
 
-                        // 3. Normalize Profile Type (Uppercase)
+                        // 4. Normalize Profile Type (Uppercase) - already handled by pType logic but good safety
                         if (data.profileType) {
                             data.profileType = data.profileType.toUpperCase()
                         }
