@@ -46,6 +46,7 @@
     "decimal.js": "^10.6.0",
     "exceljs": "^4.4.0",
     "iconv-lite": "^0.7.1",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.561.0",
     "module-alias": "^2.2.3",
     "next": "16.0.10",

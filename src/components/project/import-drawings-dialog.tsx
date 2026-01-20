@@ -29,6 +29,7 @@ import {
     Dropdown,
     Option,
     Combobox,
+    ProgressBar,
     Badge,
     shorthands
 } from "@fluentui/react-components"
@@ -145,7 +146,7 @@ const useStyles = makeStyles({
 
 export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades, shapes }: ImportDrawingsDialogProps) {
     const styles = useStyles()
-    const { startImport, resultParts, resultAssemblies, status, dismiss, reset } = useImport()
+    const { startImport, resultParts, resultAssemblies, status, progress, dismiss, reset } = useImport()
 
     // Local state
     const [open, setOpen] = useState(false)
@@ -219,7 +220,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
     const handleUpload = async () => {
         if (!file) return
-        setOpen(false)
+        // Don't close dialog here, stay open to show progress
         await startImport(file, mode, projectId)
     }
 
@@ -370,23 +371,35 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                 }}
                                 onClick={() => document.getElementById('file-upload-dialog')?.click()}
                             >
-                                <ArrowUploadRegular style={{ fontSize: '48px', color: tokens.colorNeutralForeground3 }} />
-                                <div style={{ textAlign: 'center' }}>
-                                    <Text weight="semibold" size={400}>{isDragging ? "Drop ZIP file here" : "Upload Drawings ZIP"}</Text>
-                                    <br />
-                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Drag & drop or Click to browse</Text>
-                                </div>
-                                <input
-                                    type="file"
-                                    id="file-upload-dialog"
-                                    style={{ display: 'none' }}
-                                    accept=".zip"
-                                    onChange={(e) => { if (e.target.files?.[0]) setFile(e.target.files[0]); }}
-                                />
-                                {file && (
-                                    <Badge appearance="tint" color="brand" icon={<BoxRegular />}>
-                                        {file.name}
-                                    </Badge>
+                                {status === 'processing' ? (
+                                    <div style={{ width: '100%', maxWidth: '300px', textAlign: 'center' }}>
+                                        <Text weight="semibold" size={400}>Processing Drawings...</Text>
+                                        <div style={{ marginTop: '16px' }}>
+                                            <ProgressBar value={progress} max={100} />
+                                            <Text size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: '8px', display: 'block' }}>{progress}% Complete</Text>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <ArrowUploadRegular style={{ fontSize: '48px', color: tokens.colorNeutralForeground3 }} />
+                                        <div style={{ textAlign: 'center' }}>
+                                            <Text weight="semibold" size={400}>{isDragging ? "Drop ZIP file here" : "Upload Drawings ZIP"}</Text>
+                                            <br />
+                                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Drag & drop or Click to browse</Text>
+                                        </div>
+                                        <input
+                                            type="file"
+                                            id="file-upload-dialog"
+                                            style={{ display: 'none' }}
+                                            accept=".zip"
+                                            onChange={(e) => { if (e.target.files?.[0]) setFile(e.target.files[0]); }}
+                                        />
+                                        {file && (
+                                            <Badge appearance="tint" color="brand" icon={<BoxRegular />}>
+                                                {file.name}
+                                            </Badge>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         )}

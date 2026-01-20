@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { ParsedPart, ParsedAssembly } from '@/app/actions/drawings'
 import { toast } from 'sonner'
-import { parseDrawingsZip, parseAssemblyZip } from '@/app/actions/drawings'
+import { parseDrawingsZip, parseAssemblyZip, processSingleDrawing } from '@/app/actions/drawings'
 
 interface ImportState {
     isProcessing: boolean
@@ -62,53 +62,100 @@ export function ImportProvider({ children }: { children: ReactNode }) {
             ...prev,
             isProcessing: true,
             status: 'uploading',
-            progress: 10,
+            progress: 0,
             mode,
             fileName: file.name,
             resultParts: [],
             resultAssemblies: []
         }))
 
-        // Simulate upload progress
-        setTimeout(() => setState(prev => ({ ...prev, status: 'processing', progress: 30 })), 1000)
-
-        // Start polling simulation for progress (since we don't have real streaming yet)
-        const progressInterval = setInterval(() => {
-            setState(prev => {
-                if (prev.status === 'processing' && prev.progress < 90) {
-                    return { ...prev, progress: prev.progress + (Math.random() * 5) }
-                }
-                return prev
-            })
-        }, 2000)
-
-        const formData = new FormData()
-        formData.append('file', file)
-
         try {
             if (mode === 'parts') {
-                const res = await parseDrawingsZip(formData, projectId)
-                clearInterval(progressInterval)
-                if (res.success && res.parts) {
+                const JSZip = (await import('jszip')).default
+                const zip = new JSZip()
+                const zipContent = await zip.loadAsync(file)
+
+                const pdfFiles = Object.values(zipContent.files).filter(file =>
+                    file.name.toLowerCase().endsWith('.pdf') &&
+                    !file.name.startsWith('__MACOSX') &&
+                    !file.name.split('/').pop()?.startsWith('._') &&
+                    !file.dir
+                )
+
+                if (pdfFiles.length === 0) {
+                    throw new Error("No PDF files found in ZIP")
+                }
+
+                const totalFiles = pdfFiles.length
+                let processedCount = 0
+                const allParts: any[] = []
+                const CONCURRENCY = 3
+
+                setState(prev => ({ ...prev, status: 'processing', progress: 0 }))
+
+                // Helper to process a single file from the zip
+                const processFile = async (zipEntry: any) => {
+                    const blob = await zipEntry.async('blob')
+                    // Create a proper File object to preserve filename
+                    const singleFile = new File([blob], zipEntry.name.split('/').pop() || zipEntry.name, { type: 'application/pdf' })
+
+                    const formData = new FormData()
+                    formData.append('file', singleFile)
+
+                    const res = await processSingleDrawing(formData, projectId)
+
+                    processedCount++
+                    const percentage = Math.round((processedCount / totalFiles) * 100)
+
                     setState(prev => ({
                         ...prev,
-                        isProcessing: false,
-                        status: 'reviewing',
-                        progress: 100,
-                        resultParts: res.parts?.map(p => ({ ...p, include: true, status: 'PENDING' })) || []
+                        progress: percentage
                     }))
-                    toast.success("Drawings processed!", {
-                        action: {
-                            label: "Review",
-                            onClick: () => { /* Logic is handled by components listening to status */ }
-                        }
-                    })
-                } else {
-                    throw new Error(res.error)
+
+                    if (res.success && res.parts) {
+                        return res.parts
+                    }
+                    return []
                 }
+
+                // Batch processing with concurrency limit
+                for (let i = 0; i < pdfFiles.length; i += CONCURRENCY) {
+                    const chunk = pdfFiles.slice(i, i + CONCURRENCY)
+                    const results = await Promise.all(chunk.map(entry => processFile(entry)))
+
+                    for (const batch of results) {
+                        allParts.push(...batch)
+                    }
+                }
+
+                setState(prev => ({
+                    ...prev,
+                    isProcessing: false,
+                    status: 'reviewing',
+                    progress: 100,
+                    resultParts: allParts.map(p => ({ ...p, include: true, status: 'PENDING' })) || []
+                }))
+
+                toast.success(`Processed ${allParts.length} parts from ${totalFiles} drawings`)
+
             } else {
+                // Keep server-side for assemblies for now or refactor later if needed
+                // Simulate some progress
+                const progressInterval = setInterval(() => {
+                    setState(prev => {
+                        if (prev.status === 'processing' && prev.progress < 90) {
+                            return { ...prev, progress: prev.progress + (Math.random() * 5) }
+                        }
+                        return prev
+                    })
+                }, 2000)
+
+                const formData = new FormData()
+                formData.append('file', file)
+
                 const res = await parseAssemblyZip(formData, projectId)
                 clearInterval(progressInterval)
+
                 if (res.success && res.assemblies) {
                     setState(prev => ({
                         ...prev,
@@ -117,18 +164,13 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                         progress: 100,
                         resultAssemblies: res.assemblies?.map(a => ({ ...a, include: true, status: 'PENDING' })) || []
                     }))
-                    toast.success("Assemblies processed!", {
-                        action: {
-                            label: "Review",
-                            onClick: () => { }
-                        }
-                    })
+                    toast.success("Assemblies processed!")
                 } else {
                     throw new Error(res.error)
                 }
             }
         } catch (error: any) {
-            clearInterval(progressInterval)
+            console.error("Import Error:", error)
             setState(prev => ({
                 ...prev,
                 isProcessing: false,
