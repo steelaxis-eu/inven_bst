@@ -269,9 +269,17 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                         let pType = data.profileType?.toUpperCase() || "";
                         let pDims = data.profileDimensions || "";
 
-                        // 1. Clean Profile Dimensions (replace * with x)
+                        // 1. Clean Profile Dimensions (replace * with x, remove type prefix)
                         if (pDims) {
                             pDims = pDims.replace(/\*/g, 'x').toLowerCase()
+
+                            // Remove profile type from dimensions if present (e.g. "HEA 140" -> "140", "ipe140" -> "140")
+                            const typePrefix = pType.toLowerCase()
+                            if (pDims.startsWith(typePrefix)) {
+                                pDims = pDims.substring(typePrefix.length).trim()
+                            }
+                            // Also handle cases like "hea140" where type is HEA but pDims is lower
+
                             data.profileDimensions = pDims
                         }
 
