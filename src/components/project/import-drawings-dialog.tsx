@@ -130,15 +130,15 @@ const useStyles = makeStyles({
         marginTop: '16px',
     },
     inputSmall: {
-        minWidth: '60px',
-        maxWidth: '80px',
+        minWidth: '70px',
+        maxWidth: '90px',
     },
     inputMedium: {
-        minWidth: '100px',
+        minWidth: '140px',
     },
     actionRow: {
         display: 'flex',
-        gap: '4px',
+        gap: '8px',
         alignItems: 'center',
     }
 })
@@ -398,17 +398,17 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHeaderCell style={{ width: '40px' }}><Checkbox /></TableHeaderCell>
-                                                <TableHeaderCell>Part Number</TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '100px' }}>Type</TableHeaderCell>
-                                                <TableHeaderCell style={{ width: '60px' }}>Qty</TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '150px' }}>Grade</TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '300px' }}>Dimensions</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '140px' }}>Part Number</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '110px' }}>Type</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '70px' }}>Qty</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '160px' }}>Grade</TableHeaderCell>
+                                                <TableHeaderCell style={{ minWidth: '350px' }}>Dimensions</TableHeaderCell>
                                                 <TableHeaderCell style={{ width: '40px' }}></TableHeaderCell>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {parts.map(part => (
-                                                <TableRow key={part.id} style={{ opacity: part.status === 'CREATED' ? 0.5 : 1, backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined }}>
+                                                <TableRow key={part.id} style={{ opacity: part.status === 'CREATED' ? 0.5 : 1, backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined, padding: '8px 12px' }}>
                                                     <TableCell>
                                                         <Checkbox checked={part.include} onChange={(e, d) => updatePart(part.id, { include: d.checked as boolean })} disabled={part.status === 'CREATED'} />
                                                     </TableCell>
@@ -421,7 +421,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                             value={part.type === 'PLATE' ? "Plate" : "Profile"}
                                                             selectedOptions={[part.type]}
                                                             onOptionSelect={(e, d) => updatePart(part.id, { type: d.optionValue as any })}
-                                                            style={{ minWidth: '90px' }}
+                                                            style={{ minWidth: '100px' }}
                                                         >
                                                             <Option value="PLATE">Plate</Option>
                                                             <Option value="PROFILE">Profile</Option>
@@ -468,7 +468,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                                     selectedOptions={part.selectedProfileType ? [part.selectedProfileType] : []}
                                                                     onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileType: d.optionValue as string })}
                                                                     placeholder="Type"
-                                                                    style={{ minWidth: '80px' }}
+                                                                    style={{ minWidth: '110px' }}
                                                                 >
                                                                     {profileTypes.map(t => <Option key={t} value={t}>{t}</Option>)}
                                                                 </Dropdown>
