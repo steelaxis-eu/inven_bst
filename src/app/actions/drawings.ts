@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType, GenerationConfig } from '@google/generative-ai'
 
 // Allow up to 5 minutes for execution
-export const maxDuration = 300;
+
 
 // Update Interface
 export interface ParsedPart {
