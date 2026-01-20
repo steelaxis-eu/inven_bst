@@ -30,24 +30,32 @@ const GENERATION_CONFIG: GenerationConfig = {
     responseSchema: {
         type: SchemaType.OBJECT,
         properties: {
-            partNumber: { type: SchemaType.STRING, description: "The unique part identifier." },
-            title: { type: SchemaType.STRING },
-            quantity: { type: SchemaType.NUMBER },
-            material: { type: SchemaType.STRING },
-            thickness: { type: SchemaType.NUMBER },
-            width: { type: SchemaType.NUMBER },
-            length: { type: SchemaType.NUMBER },
-            confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" },
-            type: {
-                type: SchemaType.STRING,
-                format: "enum",
-                description: "Type of part: 'PROFILE' or 'PLATE' only.",
-                enum: ["PROFILE", "PLATE"]
-            },
-            profileType: { type: SchemaType.STRING, description: "Type of profile if applicable (RHS, SHS, IPE, HEA, UNP, etc.)" },
-            profileDimensions: { type: SchemaType.STRING, description: "Dimensions string for profile (e.g. 100x100x5)" }
-        },
-        required: ["partNumber", "quantity", "type", "confidence"]
+            parts: {
+                type: SchemaType.ARRAY,
+                items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        partNumber: { type: SchemaType.STRING, description: "The unique part identifier." },
+                        title: { type: SchemaType.STRING },
+                        quantity: { type: SchemaType.NUMBER },
+                        material: { type: SchemaType.STRING },
+                        thickness: { type: SchemaType.NUMBER },
+                        width: { type: SchemaType.NUMBER },
+                        length: { type: SchemaType.NUMBER },
+                        confidence: { type: SchemaType.NUMBER, description: "Confidence score 0-100" },
+                        type: {
+                            type: SchemaType.STRING,
+                            format: "enum",
+                            description: "Type of part: 'PROFILE' or 'PLATE' only.",
+                            enum: ["PROFILE", "PLATE"]
+                        },
+                        profileType: { type: SchemaType.STRING, description: "Type of profile if applicable (RHS, SHS, IPE, HEA, UNP, etc.)" },
+                        profileDimensions: { type: SchemaType.STRING, description: "Dimensions string for profile (e.g. 100x100x5)" }
+                    },
+                    required: ["partNumber", "quantity", "type", "confidence"]
+                }
+            }
+        }
     }
 }
 
@@ -147,8 +155,12 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                 }
 
                 // ... Gemini Prompt ...
+                // ... Gemini Prompt ...
                 const prompt = `
-          Analyze this technical drawing (PDF) and extract the Part Information into the specified JSON structure.
+          Analyze this technical drawing (PDF) and extract ALL distinct parts found into the 'parts' array.
+          
+          If there is only one part, return an array with one item.
+          If there are multiple parts (e.g. a sheet with several cutting profiles), extract each one as a separate item.
 
           CRITICAL CLASSIFICATION RULES:
           1. **PROFILE**: Any part that is a standard section beam, tube, or angle.
@@ -215,66 +227,98 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                 const text = response.text()
                 console.log(`[AI] Response for ${entry.name}: `, text)
 
-                let data: any = {}
+                let rootData: any = {}
                 try {
-                    data = JSON.parse(text)
-
-                    // ... post processing ...
-                    // 1. Clean Profile Dimensions (replace * with x)
-                    if (data.profileDimensions) {
-                        data.profileDimensions = data.profileDimensions.replace(/\*/g, 'x').toLowerCase()
-                    }
-
-                    // 2. Fix SHS/RHS Confusion
-                    // Logic: If identified as RHS but dims are like "60x4" (WxT), convert to SHS 60x60x4
-                    if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('RHS')) {
-                        const dims = data.profileDimensions?.split('x') || []
-                        // Case: "60x4" -> [60, 4]
-                        if (dims.length === 2) {
-                            const side = dims[0]
-                            const wall = dims[1]
-                            // Assume it implies a square tube
-                            data.profileType = "SHS"
-                            data.profileDimensions = `${side}x${side}x${wall}`
-                        }
-                    }
-
-                    // 2.1 Ensure SHS has 3 dims "60x60x4" if only 2 provided "60x4" even if AI called it SHS
-                    if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('SHS')) {
-                        const dims = data.profileDimensions?.split('x') || []
-                        if (dims.length === 2) {
-                            const side = dims[0]
-                            const wall = dims[1]
-                            data.profileDimensions = `${side}x${side}x${wall}`
-                        }
-                    }
-
-                    // 3. Normalize Profile Type (Uppercase)
-                    if (data.profileType) {
-                        data.profileType = data.profileType.toUpperCase()
-                    }
-
+                    rootData = JSON.parse(text)
                 } catch (e) {
                     console.error("Failed to parse Gemini JSON", text)
-                    data = { partNumber: "PARSE_ERROR" }
+                    if (text.includes('{')) {
+                        // Emergency fallback slightly broken
+                        console.log("Attempting partial parse")
+                    }
                 }
 
-                parsedParts.push({
-                    id: uuidv4(),
-                    filename: entry.name,
-                    partNumber: data.partNumber || entry.name.replace('.pdf', ''),
-                    description: data.title || "", // data.title corresponds to description in ParsedPart based on context
-                    quantity: data.quantity || 1,
-                    material: data.material || "",
-                    thickness: data.thickness || 0,
-                    width: data.width || 0,
-                    length: data.length || 0,
-                    profileType: data.profileType || "",
-                    profileDimensions: data.profileDimensions || "",
-                    confidence: data.confidence || 0,
-                    thumbnail: undefined,
-                    drawingRef: storagePath // Return path
-                })
+                const partsList = Array.isArray(rootData.parts) ? rootData.parts : []
+                if (partsList.length === 0 && rootData.partNumber) {
+                    // Fallback if AI returned old single-object format by mistake
+                    partsList.push(rootData)
+                }
+
+                if (partsList.length === 0) {
+                    console.warn(`No parts extracted for ${entry.name}`)
+                    // Push an error part so user knows
+                    parsedParts.push({
+                        id: uuidv4(),
+                        filename: entry.name,
+                        partNumber: entry.name.replace('.pdf', ''),
+                        description: "AI FOUND NO PARTS",
+                        quantity: 0,
+                        material: "",
+                        thickness: 0,
+                        width: 0,
+                        length: 0,
+                        confidence: 0
+                    })
+                }
+
+                for (const data of partsList) {
+                    try {
+                        // ... post processing ...
+                        // 1. Clean Profile Dimensions (replace * with x)
+                        if (data.profileDimensions) {
+                            data.profileDimensions = data.profileDimensions.replace(/\*/g, 'x').toLowerCase()
+                        }
+
+                        // 2. Fix SHS/RHS Confusion
+                        // Logic: If identified as RHS but dims are like "60x4" (WxT), convert to SHS 60x60x4
+                        if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('RHS')) {
+                            const dims = data.profileDimensions?.split('x') || []
+                            // Case: "60x4" -> [60, 4]
+                            if (dims.length === 2) {
+                                const side = dims[0]
+                                const wall = dims[1]
+                                // Assume it implies a square tube
+                                data.profileType = "SHS"
+                                data.profileDimensions = `${side}x${side}x${wall}`
+                            }
+                        }
+
+                        // 2.1 Ensure SHS has 3 dims "60x60x4" if only 2 provided "60x4" even if AI called it SHS
+                        if (data.type === 'PROFILE' && data.profileType?.toUpperCase().includes('SHS')) {
+                            const dims = data.profileDimensions?.split('x') || []
+                            if (dims.length === 2) {
+                                const side = dims[0]
+                                const wall = dims[1]
+                                data.profileDimensions = `${side}x${side}x${wall}`
+                            }
+                        }
+
+                        // 3. Normalize Profile Type (Uppercase)
+                        if (data.profileType) {
+                            data.profileType = data.profileType.toUpperCase()
+                        }
+
+                        parsedParts.push({
+                            id: uuidv4(),
+                            filename: entry.name,
+                            partNumber: data.partNumber || entry.name.replace('.pdf', ''),
+                            description: data.title || "",
+                            quantity: data.quantity || 1,
+                            material: data.material || "",
+                            thickness: data.thickness || 0,
+                            width: data.width || 0,
+                            length: data.length || 0,
+                            profileType: data.profileType || "",
+                            profileDimensions: data.profileDimensions || "",
+                            confidence: data.confidence || 0,
+                            thumbnail: undefined,
+                            drawingRef: storagePath
+                        })
+
+                    } catch (e) {
+                        console.error("Error processing part in list", e)
+                    }
+                }
 
             } catch (e) {
                 console.error(`Failed to process ${entry.name} with Gemini: `, e)
