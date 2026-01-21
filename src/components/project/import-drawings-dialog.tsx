@@ -98,7 +98,7 @@ const useStyles = makeStyles({
     dialogContent: {
         height: '90vh',
         width: '95vw',
-        maxWidth: '1400px',
+        maxWidth: '1600px',
         display: 'flex',
         flexDirection: 'column',
     },
@@ -215,7 +215,8 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     const profileTypes = Array.from(new Set([
         ...standardProfiles.map(p => p.type),
         ...shapes.map(s => s.id),
-        "RHS", "SHS", "CHS"
+        "RHS-EN10219", "SHS-EN10219", "CHS-EN10219", // Explicit listing of standard types
+        "IPE", "HEA", "HEB", "UPN", "UPE"
     ])).sort()
 
     const handleUpload = async () => {
@@ -407,41 +408,46 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         {step === 'review' && (
                             <div className={styles.tableContainer}>
                                 {mode === 'parts' ? (
-                                    <Table size="small">
+                                    <Table size="medium" style={{ tableLayout: 'fixed' }}>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHeaderCell style={{ width: '40px' }}><Checkbox /></TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '140px' }}>Part Number</TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '110px' }}>Type</TableHeaderCell>
-                                                <TableHeaderCell style={{ width: '70px' }}>Qty</TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '160px' }}>Grade</TableHeaderCell>
-                                                <TableHeaderCell style={{ minWidth: '350px' }}>Dimensions</TableHeaderCell>
-                                                <TableHeaderCell style={{ width: '40px' }}></TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '48px' }}><Checkbox /></TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '180px' }}>Part Number</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '130px' }}>Type</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '80px' }}>Qty</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '180px' }}>Grade</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: 'auto', minWidth: '400px' }}>Dimensions</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '48px' }}></TableHeaderCell>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {parts.map(part => (
-                                                <TableRow key={part.id} style={{ opacity: part.status === 'CREATED' ? 0.5 : 1, backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined, padding: '8px 12px' }}>
+                                                <TableRow key={part.id} style={{
+                                                    opacity: part.status === 'CREATED' ? 0.5 : 1,
+                                                    backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined,
+                                                }}>
                                                     <TableCell>
                                                         <Checkbox checked={part.include} onChange={(e, d) => updatePart(part.id, { include: d.checked as boolean })} disabled={part.status === 'CREATED'} />
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input value={part.partNumber} onChange={(e, d) => updatePart(part.id, { partNumber: d.value })} className={styles.inputMedium} />
-                                                        <div style={{ fontSize: '10px', color: tokens.colorNeutralForeground3 }}>{part.filename}</div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                            <Input value={part.partNumber} onChange={(e, d) => updatePart(part.id, { partNumber: d.value })} />
+                                                            <Text size={100} style={{ color: tokens.colorNeutralForeground3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{part.filename}</Text>
+                                                        </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <Dropdown
                                                             value={part.type === 'PLATE' ? "Plate" : "Profile"}
                                                             selectedOptions={[part.type]}
                                                             onOptionSelect={(e, d) => updatePart(part.id, { type: d.optionValue as any })}
-                                                            style={{ minWidth: '100px' }}
+                                                            style={{ width: '100%' }}
                                                         >
                                                             <Option value="PLATE">Plate</Option>
                                                             <Option value="PROFILE">Profile</Option>
                                                         </Dropdown>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Input type="number" value={part.quantity.toString()} onChange={(e, d) => updatePart(part.id, { quantity: parseInt(d.value) || 0 })} className={styles.inputSmall} />
+                                                        <Input type="number" value={part.quantity.toString()} onChange={(e, d) => updatePart(part.id, { quantity: parseInt(d.value) || 0 })} />
                                                     </TableCell>
                                                     <TableCell>
                                                         <Combobox
@@ -457,7 +463,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                             }}
                                                             placeholder={(!part.selectedGradeId && part.material) ? `Add ${part.material}?` : "Grade"}
                                                             style={{
-                                                                minWidth: '140px',
+                                                                width: '100%',
                                                                 border: (!part.selectedGradeId && part.material) ? `1px solid ${tokens.colorPaletteDarkOrangeBorder1}` : undefined
                                                             }}
                                                         >
@@ -469,19 +475,19 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                         {part.type === 'PLATE' ? (
                                                             <div className={styles.actionRow}>
                                                                 <Input placeholder="T" value={part.thickness?.toString()} onChange={(e, d) => updatePart(part.id, { thickness: parseFloat(d.value) })} className={styles.inputSmall} />
-                                                                <span>x</span>
+                                                                <Text>x</Text>
                                                                 <Input placeholder="W" value={part.width?.toString()} onChange={(e, d) => updatePart(part.id, { width: parseFloat(d.value) })} className={styles.inputSmall} />
-                                                                <span>x</span>
+                                                                <Text>x</Text>
                                                                 <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} className={styles.inputSmall} />
                                                             </div>
                                                         ) : (
-                                                            <div className={styles.actionRow}>
+                                                            <div className={styles.actionRow} style={{ width: '100%' }}>
                                                                 <Dropdown
                                                                     value={part.selectedProfileType || ''}
                                                                     selectedOptions={part.selectedProfileType ? [part.selectedProfileType] : []}
                                                                     onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileType: d.optionValue as string })}
                                                                     placeholder="Type"
-                                                                    style={{ minWidth: '110px' }}
+                                                                    style={{ minWidth: '130px' }}
                                                                 >
                                                                     {profileTypes.map(t => <Option key={t} value={t}>{t}</Option>)}
                                                                 </Dropdown>
@@ -490,14 +496,14 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                                     onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileDim: d.optionValue as string })}
                                                                     onInput={(e) => updatePart(part.id, { selectedProfileDim: (e.target as HTMLInputElement).value })}
                                                                     placeholder="Dim"
-                                                                    style={{ minWidth: '100px' }}
+                                                                    style={{ minWidth: '140px', flex: 1 }}
                                                                     freeform
                                                                 >
                                                                     {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => (
                                                                         <Option key={p.dimensions} value={p.dimensions}>{p.dimensions}</Option>
                                                                     ))}
                                                                 </Combobox>
-                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} className={styles.inputSmall} />
+                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} style={{ width: '90px' }} />
                                                             </div>
                                                         )}
                                                     </TableCell>

@@ -163,7 +163,7 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
           CRITICAL CLASSIFICATION RULES:
           1. **PROFILE**: Any part that is a standard section beam, tube, or angle.
              - Keywords: RHS, SHS, IPE, HEA, HEB, UNP, UPE, L-Profile, Angle, Tube, Pipe, Beam, Round Bar.
-             - **Standard Nomenclature**: Use "CHS", "RHS 10219", "SHS 10219", "UPN", "ROUND BAR" where applicable.
+             - **Standard Nomenclature**: Use "CHS-EN10219", "RHS-EN10219", "SHS-EN10219", "UPN", "ROUND BAR" where applicable.
              - **RHS vs SHS Rule**: 
                 - If a tube is SQUARE (e.g. 60x60x4 or Side=60, Wall=4), classify as **SHS**.
                 - If a tube is RECTANGULAR (e.g. 100x50x5), classify as **RHS**.
@@ -304,8 +304,9 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                             }
                         }
 
-                        if (pType === 'RHS' && !pType.includes('10219')) pType = 'RHS 10219';
-                        if (pType === 'SHS' && !pType.includes('10219')) pType = 'SHS 10219';
+                        if (pType === 'RHS' || pType === 'RHS 10219' || pType === 'RHS-EN10219') pType = 'RHS-EN10219';
+                        if (pType === 'SHS' || pType === 'SHS 10219' || pType === 'SHS-EN10219') pType = 'SHS-EN10219';
+                        if (pType === 'CHS' || pType === 'CHS 10219' || pType === 'CHS-EN10219') pType = 'CHS-EN10219';
 
                         data.profileType = pType;
 
@@ -315,7 +316,7 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                             if (dims.length === 2) {
                                 const side = dims[0]
                                 const wall = dims[1]
-                                data.profileType = "SHS 10219"
+                                data.profileType = "SHS-EN10219"
                                 data.profileDimensions = `${side}x${side}x${wall}`
                             }
                         }
@@ -330,7 +331,11 @@ export async function parseDrawingsZip(formData: FormData, projectId: string): P
                         }
 
                         if (data.profileType) {
-                            data.profileType = data.profileType.toUpperCase()
+                            data.profileType = data.profileType.toUpperCase().replace(/\s+/g, '-')
+                            data.profileType = data.profileType.replace(/--/g, '-')
+                            if (data.profileType.includes('SHS') && data.profileType.includes('10219')) data.profileType = 'SHS-EN10219'
+                            if (data.profileType.includes('RHS') && data.profileType.includes('10219')) data.profileType = 'RHS-EN10219'
+                            if (data.profileType.includes('CHS') && data.profileType.includes('10219')) data.profileType = 'CHS-EN10219'
                         }
 
                         processedParts.push({
@@ -633,7 +638,7 @@ export async function processSingleDrawing(formData: FormData, projectId: string
           CRITICAL CLASSIFICATION RULES:
           1. **PROFILE**: Any part that is a standard section beam, tube, or angle.
              - Keywords: RHS, SHS, IPE, HEA, HEB, UNP, UPE, L-Profile, Angle, Tube, Pipe, Beam, Round Bar.
-             - **Standard Nomenclature**: Use "CHS", "RHS 10219", "SHS 10219", "UPN", "ROUND BAR" where applicable.
+             - **Standard Nomenclature**: Use "CHS-EN10219", "RHS-EN10219", "SHS-EN10219", "UPN", "ROUND BAR" where applicable.
              - **RHS vs SHS Rule**: 
                 - If a tube is SQUARE (e.g. 60x60x4 or Side=60, Wall=4), classify as **SHS**.
                 - If a tube is RECTANGULAR (e.g. 100x50x5), classify as **RHS**.
@@ -761,8 +766,9 @@ export async function processSingleDrawing(formData: FormData, projectId: string
                     }
                 }
 
-                if (pType === 'RHS' && !pType.includes('10219')) pType = 'RHS 10219';
-                if (pType === 'SHS' && !pType.includes('10219')) pType = 'SHS 10219';
+                if (pType === 'RHS' || pType === 'RHS 10219' || pType === 'RHS-EN10219') pType = 'RHS-EN10219';
+                if (pType === 'SHS' || pType === 'SHS 10219' || pType === 'SHS-EN10219') pType = 'SHS-EN10219';
+                if (pType === 'CHS' || pType === 'CHS 10219' || pType === 'CHS-EN10219') pType = 'CHS-EN10219';
 
                 data.profileType = pType;
 
@@ -771,7 +777,7 @@ export async function processSingleDrawing(formData: FormData, projectId: string
                     if (dims.length === 2) {
                         const side = dims[0]
                         const wall = dims[1]
-                        data.profileType = "SHS 10219"
+                        data.profileType = "SHS-EN10219"
                         data.profileDimensions = `${side}x${side}x${wall}`
                     }
                 }
@@ -786,7 +792,13 @@ export async function processSingleDrawing(formData: FormData, projectId: string
                 }
 
                 if (data.profileType) {
-                    data.profileType = data.profileType.toUpperCase()
+                    data.profileType = data.profileType.toUpperCase().replace(/\s+/g, '-') // Ensure no spaces if mixed up
+                    // Clean up if double dash
+                    data.profileType = data.profileType.replace(/--/g, '-')
+                    // Enforce known good IDs if close match
+                    if (data.profileType.includes('SHS') && data.profileType.includes('10219')) data.profileType = 'SHS-EN10219'
+                    if (data.profileType.includes('RHS') && data.profileType.includes('10219')) data.profileType = 'RHS-EN10219'
+                    if (data.profileType.includes('CHS') && data.profileType.includes('10219')) data.profileType = 'CHS-EN10219'
                 }
 
                 processedParts.push({
