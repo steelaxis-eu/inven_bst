@@ -11,15 +11,19 @@ interface ImportState {
     status: 'idle' | 'uploading' | 'processing' | 'reviewing' | 'complete' | 'error'
     mode: 'parts' | 'assemblies'
     fileName: string | null
+    projectName: string | null
     resultParts: any[] // Using any to avoid strict type duplication for now, or import ReviewPart if possible
     resultAssemblies: any[]
+    isDialogOpen: boolean
 }
 
 interface ImportContextType extends ImportState {
-    startImport: (file: File, mode: 'parts' | 'assemblies', projectId: string) => Promise<void>
+    startImport: (file: File, mode: 'parts' | 'assemblies', projectId: string, projectName: string) => Promise<void>
     reset: () => void
     setReviewing: () => void
     dismiss: () => void
+    openDialog: () => void
+    closeDialog: () => void
 }
 
 const ImportContext = createContext<ImportContextType | undefined>(undefined)
@@ -31,8 +35,10 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         status: 'idle',
         mode: 'parts',
         fileName: null,
+        projectName: null,
         resultParts: [],
-        resultAssemblies: []
+        resultAssemblies: [],
+        isDialogOpen: false
     })
 
     // Load from localStorage on mount
@@ -57,7 +63,7 @@ export function ImportProvider({ children }: { children: ReactNode }) {
         }
     }, [state])
 
-    const startImport = async (file: File, mode: 'parts' | 'assemblies', projectId: string) => {
+    const startImport = async (file: File, mode: 'parts' | 'assemblies', projectId: string, projectName: string) => {
         setState(prev => ({
             ...prev,
             isProcessing: true,
@@ -65,8 +71,10 @@ export function ImportProvider({ children }: { children: ReactNode }) {
             progress: 0,
             mode,
             fileName: file.name,
+            projectName,
             resultParts: [],
-            resultAssemblies: []
+            resultAssemblies: [],
+            isDialogOpen: true // Keep open explicitly
         }))
 
         try {
@@ -133,7 +141,8 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                     isProcessing: false,
                     status: 'reviewing',
                     progress: 100,
-                    resultParts: allParts.map(p => ({ ...p, include: true, status: 'PENDING' })) || []
+                    resultParts: allParts.map(p => ({ ...p, include: true, status: 'PENDING' })) || [],
+                    isDialogOpen: true // Ensure open for review
                 }))
 
                 toast.success(`Processed ${allParts.length} parts from ${totalFiles} drawings`)
@@ -162,7 +171,8 @@ export function ImportProvider({ children }: { children: ReactNode }) {
                         isProcessing: false,
                         status: 'reviewing',
                         progress: 100,
-                        resultAssemblies: res.assemblies?.map(a => ({ ...a, include: true, status: 'PENDING' })) || []
+                        resultAssemblies: res.assemblies?.map(a => ({ ...a, include: true, status: 'PENDING' })) || [],
+                        isDialogOpen: true
                     }))
                     toast.success("Assemblies processed!")
                 } else {
@@ -189,21 +199,26 @@ export function ImportProvider({ children }: { children: ReactNode }) {
             status: 'idle',
             mode: 'parts',
             fileName: null,
+            projectName: null,
             resultParts: [],
-            resultAssemblies: []
+            resultAssemblies: [],
+            isDialogOpen: false
         })
     }
 
     const setReviewing = () => {
-        setState(prev => ({ ...prev, status: 'reviewing' }))
+        setState(prev => ({ ...prev, status: 'reviewing', isDialogOpen: true }))
     }
+
+    const openDialog = () => setState(prev => ({ ...prev, isDialogOpen: true }))
+    const closeDialog = () => setState(prev => ({ ...prev, isDialogOpen: false }))
 
     const dismiss = () => {
         setState(prev => ({ ...prev, status: 'idle' })) // Hides the progress bar
     }
 
     return (
-        <ImportContext.Provider value={{ ...state, startImport, reset, setReviewing, dismiss }}>
+        <ImportContext.Provider value={{ ...state, startImport, reset, setReviewing, dismiss, openDialog, closeDialog }}>
             {children}
         </ImportContext.Provider>
     )

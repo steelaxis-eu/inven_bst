@@ -88,6 +88,7 @@ interface ReviewAssembly {
 
 interface ImportDrawingsDialogProps {
     projectId: string
+    projectName: string
     profiles: { id: string; type: string; dimensions: string; weightPerMeter: number }[]
     standardProfiles: { type: string; dimensions: string; weightPerMeter: number }[]
     grades: { id: string; name: string }[]
@@ -166,12 +167,13 @@ const useStyles = makeStyles({
     }
 })
 
-export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, grades, shapes }: ImportDrawingsDialogProps) {
+export function ImportDrawingsDialog({ projectId, projectName, profiles, standardProfiles, grades, shapes }: ImportDrawingsDialogProps) {
     const styles = useStyles()
-    const { startImport, resultParts, resultAssemblies, status, progress, dismiss, reset } = useImport()
+    // @ts-ignore
+    const { startImport, resultParts, resultAssemblies, status, progress, dismiss, reset, isDialogOpen, openDialog, closeDialog } = useImport()
 
     // Local state
-    const [open, setOpen] = useState(false)
+    // const [open, setOpen] = useState(false) // Removed in favor of context
     const [mode, setMode] = useState<'parts' | 'assemblies'>('parts')
     const [file, setFile] = useState<File | null>(null)
     const [parts, setParts] = useState<ReviewPart[]>([])
@@ -200,7 +202,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
 
     useEffect(() => {
         if (status === 'reviewing') {
-            setOpen(true)
+            // setOpen(true) // Context handles this now
             if (resultParts.length > 0 && parts.length === 0) {
                 const mappedParts = resultParts
                     .filter(p => p.confidence > 90)
@@ -244,7 +246,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     const handleUpload = async () => {
         if (!file) return
         // Don't close dialog here, stay open to show progress
-        await startImport(file, mode, projectId)
+        await startImport(file, mode, projectId, projectName)
     }
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
@@ -364,9 +366,9 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
     }
 
     return (
-        <Dialog open={open} onOpenChange={(e, data) => setOpen(data.open)}>
+        <Dialog open={isDialogOpen} onOpenChange={(e, data) => data.open ? openDialog() : closeDialog()}>
             <DialogTrigger disableButtonEnhancement>
-                <Button icon={<ArrowUploadRegular />}>Import Drawings</Button>
+                <Button icon={<ArrowUploadRegular />} onClick={openDialog}>Import Drawings</Button>
             </DialogTrigger>
 
             <DialogSurface className={styles.dialogContent}>

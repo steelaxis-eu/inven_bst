@@ -47,8 +47,14 @@ export function ImportStatus() {
                                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                                     <span style={{ fontSize: '14px', fontWeight: 600 }}>Ready for Review</span>
                                     <span style={{ fontSize: '12px', color: tokens.colorNeutralForeground2 }}>{fileName}</span>
+                                    {/* @ts-ignore */}
+                                    {useImport().projectName && (
+                                        /* @ts-ignore */
+                                        <Badge size="small" appearance="tint" color="brand">{useImport().projectName}</Badge>
+                                    )}
                                 </div>
-                                <Button size="small" appearance="primary" onClick={setReviewing} icon={<OpenRegular />}>
+                                {/* @ts-ignore */}
+                                <Button size="small" appearance="primary" onClick={useImport().openDialog} icon={<OpenRegular />}>
                                     Open
                                 </Button>
                             </>

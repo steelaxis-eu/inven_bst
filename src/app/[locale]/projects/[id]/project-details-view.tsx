@@ -11,6 +11,7 @@ import {
     tokens
 } from "@fluentui/react-components"
 import { WarningRegular } from "@fluentui/react-icons"
+import { ImportDrawingsDialog } from "@/components/project/import-drawings-dialog"
 import { DownloadCertificatesButton } from "@/components/download-certificates-button"
 import { EditProjectDialog } from "@/components/project/edit-project-dialog"
 import { BackgroundTasksIndicator } from "@/components/project/background-tasks-indicator"
@@ -98,6 +99,14 @@ export function ProjectDetailsView({
                         coatingType: project.coatingType,
                         coatingSpec: project.coatingSpec
                     }} />
+                    <ImportDrawingsDialog
+                        projectId={cleanId}
+                        projectName={project.name}
+                        profiles={profiles}
+                        standardProfiles={standardProfiles}
+                        grades={grades}
+                        shapes={shapes}
+                    />
                 </div>
             </div>
 
