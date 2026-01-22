@@ -25,7 +25,6 @@ import {
 import { useState } from "react"
 
 import { UnifiedPartsTable, UnifiedPartItem } from "@/components/project/unified-parts-table"
-import { ImportDrawingsDialog } from '@/components/project/import-drawings-dialog'
 import { CreatePartDialog } from "@/components/project/create-part-dialog"
 import { CreateAssemblyDialog } from "@/components/project/create-assembly-dialog"
 import { AssembliesTree, AssemblySummary } from "@/components/project/assemblies-tree"
@@ -136,14 +135,6 @@ export function ProjectTabs({
                             </div>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <RecalculateWeightsButton projectId={projectId} />
-                                <ImportDrawingsDialog
-                                    projectId={projectId}
-                                    projectName={project.name}
-                                    profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                                    standardProfiles={standardProfiles.map((p: any) => ({ type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}
-                                    grades={grades.map((g: any) => ({ id: g.id, name: g.name }))}
-                                    shapes={shapes.map((s: any) => ({ id: s.id, params: (s.params as string[]) || [] }))}
-                                />
                                 <CreatePartDialog
                                     projectId={projectId}
                                     profiles={profiles.map((p: any) => ({ id: p.id, type: p.type, dimensions: p.dimensions, weightPerMeter: p.weightPerMeter }))}

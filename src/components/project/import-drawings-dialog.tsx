@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useImport } from "@/context/import-context"
 import {
     Dialog,
@@ -365,9 +365,14 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
         setCreating(false)
     }
 
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // ... (rendering logic) 
+
     return (
         <Dialog open={isDialogOpen} onOpenChange={(e, data) => data.open ? openDialog() : closeDialog()}>
             <DialogTrigger disableButtonEnhancement>
+                {/* Trigger button usage handled by parent/context usually, but if here: */}
                 <Button icon={<ArrowUploadRegular />} onClick={openDialog}>Import Drawings</Button>
             </DialogTrigger>
 
@@ -391,10 +396,10 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                 onDrop={(e) => {
                                     e.preventDefault();
                                     setIsDragging(false);
-                                    if (e.dataTransfer.files?.[0]?.name.endsWith('.zip')) setFile(e.dataTransfer.files[0]);
+                                    if (e.dataTransfer.files?.[0]?.name.toLowerCase().endsWith('.zip')) setFile(e.dataTransfer.files[0]);
                                     else toast.error("ZIP files only");
                                 }}
-                                onClick={() => document.getElementById('file-upload-dialog')?.click()}
+                                onClick={() => fileInputRef.current?.click()}
                             >
                                 {status === 'processing' ? (
                                     <div style={{ width: '100%', maxWidth: '300px', textAlign: 'center' }}>
@@ -413,8 +418,8 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                             <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Drag & drop or Click to browse</Text>
                                         </div>
                                         <input
+                                            ref={fileInputRef}
                                             type="file"
-                                            id="file-upload-dialog"
                                             style={{ display: 'none' }}
                                             accept=".zip"
                                             onChange={(e) => { if (e.target.files?.[0]) setFile(e.target.files[0]); }}
