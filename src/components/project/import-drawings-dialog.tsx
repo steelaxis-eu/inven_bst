@@ -129,18 +129,40 @@ const useStyles = makeStyles({
         border: `1px solid ${tokens.colorNeutralStroke1}`,
         borderRadius: tokens.borderRadiusMedium,
         marginTop: '16px',
+        position: 'relative', // Context for sticky
+    },
+    stickyHeader: {
+        position: 'sticky',
+        top: 0,
+        zIndex: 2,
+        backgroundColor: tokens.colorNeutralBackground1, // Opaque background
+        boxShadow: tokens.shadow2, // Slight shadow to separate from content
     },
     inputSmall: {
-        minWidth: '70px',
-        maxWidth: '90px',
+        width: '80px',
     },
     inputMedium: {
-        minWidth: '140px',
+        width: '100%',
+        minWidth: '120px',
     },
     actionRow: {
         display: 'flex',
         gap: '8px',
         alignItems: 'center',
+        width: '100%',
+    },
+    dimensionRow: {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(140px, 1fr) 1fr 100px', // Type, Dimensions, Length
+        gap: '8px',
+        alignItems: 'center',
+        width: '100%',
+    },
+    plateRow: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 16px 1fr 16px 1fr', // T x W x L
+        alignItems: 'center',
+        gap: '4px',
     }
 })
 
@@ -408,15 +430,15 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                         {step === 'review' && (
                             <div className={styles.tableContainer}>
                                 {mode === 'parts' ? (
-                                    <Table size="medium" style={{ tableLayout: 'fixed' }}>
-                                        <TableHeader>
+                                    <Table size="medium" style={{ tableLayout: 'fixed', minWidth: '1000px' }}>
+                                        <TableHeader className={styles.stickyHeader}>
                                             <TableRow>
                                                 <TableHeaderCell style={{ width: '48px' }}><Checkbox /></TableHeaderCell>
-                                                <TableHeaderCell style={{ width: '180px' }}>Part Number</TableHeaderCell>
-                                                <TableHeaderCell style={{ width: '130px' }}>Type</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '220px' }}>Part Number</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '140px' }}>Type</TableHeaderCell>
                                                 <TableHeaderCell style={{ width: '80px' }}>Qty</TableHeaderCell>
-                                                <TableHeaderCell style={{ width: '180px' }}>Grade</TableHeaderCell>
-                                                <TableHeaderCell style={{ width: 'auto', minWidth: '400px' }}>Dimensions</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: '200px' }}>Grade</TableHeaderCell>
+                                                <TableHeaderCell style={{ width: 'auto', minWidth: '500px' }}>Dimensions</TableHeaderCell>
                                                 <TableHeaderCell style={{ width: '48px' }}></TableHeaderCell>
                                             </TableRow>
                                         </TableHeader>
@@ -426,16 +448,16 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                     opacity: part.status === 'CREATED' ? 0.5 : 1,
                                                     backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined,
                                                 }}>
-                                                    <TableCell>
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                         <Checkbox checked={part.include} onChange={(e, d) => updatePart(part.id, { include: d.checked as boolean })} disabled={part.status === 'CREATED'} />
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                            <Input value={part.partNumber} onChange={(e, d) => updatePart(part.id, { partNumber: d.value })} />
+                                                            <Input value={part.partNumber} onChange={(e, d) => updatePart(part.id, { partNumber: d.value })} className={styles.inputMedium} />
                                                             <Text size={100} style={{ color: tokens.colorNeutralForeground3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{part.filename}</Text>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                         <Dropdown
                                                             value={part.type === 'PLATE' ? "Plate" : "Profile"}
                                                             selectedOptions={[part.type]}
@@ -446,10 +468,10 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                             <Option value="PROFILE">Profile</Option>
                                                         </Dropdown>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <Input type="number" value={part.quantity.toString()} onChange={(e, d) => updatePart(part.id, { quantity: parseInt(d.value) || 0 })} />
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
+                                                        <Input type="number" value={part.quantity.toString()} onChange={(e, d) => updatePart(part.id, { quantity: parseInt(d.value) || 0 })} className={styles.inputSmall} />
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                         <Combobox
                                                             value={availableGrades.find(g => g.id === part.selectedGradeId)?.name || part.material || ''}
                                                             selectedOptions={part.selectedGradeId ? [part.selectedGradeId] : []}
@@ -471,23 +493,23 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                             <Option value="new" text="+ Add New Grade">+ Add New Grade</Option>
                                                         </Combobox>
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                         {part.type === 'PLATE' ? (
-                                                            <div className={styles.actionRow}>
-                                                                <Input placeholder="T" value={part.thickness?.toString()} onChange={(e, d) => updatePart(part.id, { thickness: parseFloat(d.value) })} className={styles.inputSmall} />
-                                                                <Text>x</Text>
-                                                                <Input placeholder="W" value={part.width?.toString()} onChange={(e, d) => updatePart(part.id, { width: parseFloat(d.value) })} className={styles.inputSmall} />
-                                                                <Text>x</Text>
-                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} className={styles.inputSmall} />
+                                                            <div className={styles.plateRow}>
+                                                                <Input placeholder="T" value={part.thickness?.toString()} onChange={(e, d) => updatePart(part.id, { thickness: parseFloat(d.value) })} style={{ width: '100%' }} />
+                                                                <Text align="center">x</Text>
+                                                                <Input placeholder="W" value={part.width?.toString()} onChange={(e, d) => updatePart(part.id, { width: parseFloat(d.value) })} style={{ width: '100%' }} />
+                                                                <Text align="center">x</Text>
+                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} style={{ width: '100%' }} />
                                                             </div>
                                                         ) : (
-                                                            <div className={styles.actionRow} style={{ width: '100%' }}>
+                                                            <div className={styles.dimensionRow}>
                                                                 <Dropdown
                                                                     value={part.selectedProfileType || ''}
                                                                     selectedOptions={part.selectedProfileType ? [part.selectedProfileType] : []}
                                                                     onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileType: d.optionValue as string })}
                                                                     placeholder="Type"
-                                                                    style={{ minWidth: '130px' }}
+                                                                    style={{ width: '100%' }}
                                                                 >
                                                                     {profileTypes.map(t => <Option key={t} value={t}>{t}</Option>)}
                                                                 </Dropdown>
@@ -496,18 +518,18 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                                                     onOptionSelect={(e, d) => updatePart(part.id, { selectedProfileDim: d.optionValue as string })}
                                                                     onInput={(e) => updatePart(part.id, { selectedProfileDim: (e.target as HTMLInputElement).value })}
                                                                     placeholder="Dim"
-                                                                    style={{ minWidth: '140px', flex: 1 }}
+                                                                    style={{ width: '100%' }}
                                                                     freeform
                                                                 >
                                                                     {standardProfiles.filter(p => p.type === part.selectedProfileType).map(p => (
                                                                         <Option key={p.dimensions} value={p.dimensions}>{p.dimensions}</Option>
                                                                     ))}
                                                                 </Combobox>
-                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} style={{ width: '90px' }} />
+                                                                <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} style={{ width: '100px' }} />
                                                             </div>
                                                         )}
                                                     </TableCell>
-                                                    <TableCell>
+                                                    <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                         {part.status === 'CREATED' && <CheckmarkCircleRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
                                                         {part.status === 'ERROR' && <ErrorCircleRegular style={{ color: tokens.colorPaletteRedForeground1 }} title={part.errorMsg} />}
                                                     </TableCell>
@@ -517,7 +539,7 @@ export function ImportDrawingsDialog({ projectId, profiles, standardProfiles, gr
                                     </Table>
                                 ) : (
                                     <Table>
-                                        <TableHeader>
+                                        <TableHeader className={styles.stickyHeader}>
                                             <TableRow>
                                                 <TableHeaderCell style={{ width: '40px' }}><Checkbox /></TableHeaderCell>
                                                 <TableHeaderCell>Assembly #</TableHeaderCell>
