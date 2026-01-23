@@ -31,11 +31,7 @@ export function AppFluentProvider({ children }: AppProviderProps) {
     // However, for pure client side theme switch, we can just use the theme.
 
     if (!mounted) {
-        return (
-            <FluentProvider theme={appLightTheme}>
-                {children}
-            </FluentProvider>
-        )
+        return null
     }
 
     return (

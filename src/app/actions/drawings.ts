@@ -827,3 +827,312 @@ export async function processSingleDrawing(formData: FormData, projectId: string
         return { success: false, error: error.message || "Failed to process file" }
     }
 }
+
+export async function uploadSingleDrawing(formData: FormData, projectId: string): Promise<{ success: boolean, filename?: string, storagePath?: string, error?: string }> {
+    try {
+        const file = formData.get('file') as File
+        if (!file) return { success: false, error: "No file provided" }
+
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { projectNumber: true, createdAt: true }
+        })
+        if (!project) return { success: false, error: "Project not found" }
+
+        const year = new Date(project.createdAt).getFullYear()
+        const projectNumber = project.projectNumber // Adjust if your project number format differs
+
+        const supabase = await createClient()
+        const arrayBuffer = await file.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+
+        const storagePath = `${year}/${projectNumber}/uploads/parts/${file.name}`
+
+        const { error } = await supabase.storage
+            .from('Projects')
+            .upload(storagePath, buffer, {
+                contentType: 'application/pdf',
+                upsert: true
+            })
+
+        if (error) throw error
+
+        return { success: true, filename: file.name, storagePath }
+    } catch (e: any) {
+        console.error("Upload Error:", e)
+        return { success: false, error: e.message }
+    }
+}
+
+// ============================================================================
+// NEW: Robust Server-Side Queue Implementation
+// ============================================================================
+
+export async function createImportBatch(files: { filename: string, storagePath: string }[], projectId: string): Promise<{ success: boolean, batchId?: string, error?: string }> {
+    try {
+        const batchId = uuidv4()
+        const records = files.map(f => ({
+            jobId: batchId,
+            projectId,
+            filename: f.filename,
+            fileUrl: f.storagePath,
+            status: 'PENDING'
+        }))
+
+        // Create batches of 50 to avoid limits if many files
+        const BATCH_SIZE = 50
+        for (let i = 0; i < records.length; i += BATCH_SIZE) {
+            await prisma.parsedDrawing.createMany({
+                data: records.slice(i, i + BATCH_SIZE)
+            })
+        }
+
+        // TRIGGER QUEUE PROCESSING (Fire & Forget)
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+        // Trigger a few workers to start parallel processing
+        // We use fetch without await to not block the response
+        fetch(`${baseUrl}/api/process-queue`, {
+            method: 'POST',
+            body: JSON.stringify({ batchId }),
+            headers: { 'Content-Type': 'application/json' }
+        }).catch(err => console.error("Failed to trigger queue:", err))
+
+        return { success: true, batchId }
+    } catch (e: any) {
+        console.error("Failed to create batch:", e)
+        return { success: false, error: e.message }
+    }
+}
+
+export async function getBatchStatus(batchId: string): Promise<{
+    total: number,
+    completed: number,
+    pending: number,
+    failed: number,
+    results: ParsedPart[]
+}> {
+    const jobs = await prisma.parsedDrawing.findMany({
+        where: { jobId: batchId }
+    })
+
+    const total = jobs.length
+    const completed = jobs.filter(j => j.status === 'COMPLETED').length
+    const failed = jobs.filter(j => j.status === 'FAILED').length
+    const pending = jobs.filter(j => j.status === 'PENDING' || j.status === 'PROCESSING').length
+
+    const results: ParsedPart[] = jobs
+        .filter(j => j.status === 'COMPLETED' && j.result)
+        .flatMap(j => {
+            const res = j.result as any
+            return Array.isArray(res) ? res : [res]
+        })
+
+    return { total, completed, pending, failed, results }
+}
+
+export async function processNextPendingJob(batchId?: string): Promise<{ processed: boolean, jobId?: string, remaining?: number }> {
+    // 1. Find next pending job
+    const job = await prisma.parsedDrawing.findFirst({
+        where: {
+            status: 'PENDING',
+            ...(batchId ? { jobId: batchId } : {})
+        },
+        orderBy: { createdAt: 'asc' }
+    })
+
+    if (!job) return { processed: false }
+
+    // 2. Optimistic Locking: Set to PROCESSING
+    try {
+        await prisma.parsedDrawing.update({
+            where: { id: job.id, status: 'PENDING' },
+            data: { status: 'PROCESSING' }
+        })
+    } catch (e) {
+        // Race condition: someone else took it
+        return { processed: false }
+    }
+
+    // 3. Process
+    try {
+        const { parts: processedParts, raw } = await processDrawingWithGemini(job.fileUrl, job.projectId, job.filename)
+
+        await prisma.parsedDrawing.update({
+            where: { id: job.id },
+            data: {
+                status: 'COMPLETED',
+                result: processedParts as any,
+                rawResponse: raw // Save raw JSON
+            }
+        })
+
+        // check if more exist
+        const remaining = await prisma.parsedDrawing.count({
+            where: {
+                status: 'PENDING',
+                ...(batchId ? { jobId: batchId } : {})
+            }
+        })
+
+        return { processed: true, jobId: job.id, remaining }
+
+    } catch (e: any) {
+        console.error(`Job ${job.id} failed:`, e)
+        await prisma.parsedDrawing.update({
+            where: { id: job.id },
+            data: {
+                status: 'FAILED',
+                error: e.message || "Unknown error"
+            }
+        })
+        return { processed: true, jobId: job.id }
+    }
+}
+
+// Logic extracted from old function
+async function processDrawingWithGemini(storagePath: string, projectId: string, filename: string): Promise<{ parts: ParsedPart[], raw: any }> {
+    const supabase = await createClient()
+
+    // Download
+    const { data: fileData, error: downloadError } = await supabase.storage
+        .from('Projects')
+        .download(storagePath)
+
+    if (downloadError || !fileData) throw new Error("Failed to download file from storage")
+
+    const arrayBuffer = await fileData.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const base64Pdf = buffer.toString('base64')
+
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) throw new Error("GEMINI_API_KEY missing")
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+
+    // Configs
+    const schema = {
+        type: SchemaType.OBJECT,
+        properties: {
+            parts: {
+                type: SchemaType.ARRAY,
+                items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        partNumber: { type: SchemaType.STRING },
+                        title: { type: SchemaType.STRING },
+                        quantity: { type: SchemaType.NUMBER },
+                        material: { type: SchemaType.STRING },
+                        thickness: { type: SchemaType.NUMBER },
+                        width: { type: SchemaType.NUMBER },
+                        length: { type: SchemaType.NUMBER },
+                        confidence: { type: SchemaType.NUMBER },
+                        type: { type: SchemaType.STRING, enum: ["PROFILE", "PLATE"] },
+                        profileType: { type: SchemaType.STRING },
+                        profileDimensions: { type: SchemaType.STRING }
+                    },
+                    required: ["partNumber", "quantity", "type"]
+                }
+            }
+        }
+    } as any
+
+    const modelCandidates = [
+        { id: "gemini-2.0-flash-exp", retries: 3 },
+        { id: "gemini-1.5-flash", retries: 3 },
+        { id: "gemini-1.5-pro", retries: 2 }
+    ]
+
+    const prompt = `
+      Analyze this technical drawing (PDF) and extract ALL distinct parts found into the 'parts' array.
+      CRITICAL CLASSIFICATION RULES:
+      1. **PROFILE**: Any part that is a standard section (RHS, SHS, IPE, HEA, HEB, UNP/UPE, CHS, Angle, Round Bar).
+      2. **PLATE**: Any part that is a flat sheet (Thickness x Width x Length).
+      
+      PARSING RULES:
+      - Clean profile dimensions (e.g. "100x100x5").
+      - Split Round Bar (1 dim) vs CHS (2 dims).
+      - Square tube = SHS, Rect tube = RHS.
+      `
+
+    let result;
+    for (const candidate of modelCandidates) {
+        try {
+            const model = genAI.getGenerativeModel({ model: candidate.id, generationConfig: { responseMimeType: "application/json", responseSchema: schema } })
+            result = await retryWithBackoff(() => model.generateContent([{ inlineData: { data: base64Pdf, mimeType: "application/pdf" } }, prompt]), candidate.retries)
+            break;
+        } catch (error) { continue }
+    }
+
+    if (!result) throw new Error("AI Processing failed")
+
+    const text = result.response.text()
+    let rootData: any = {}
+    try { rootData = JSON.parse(text) } catch (e) { throw new Error("Invalid JSON from AI") }
+
+    let partsList = rootData.parts || (rootData.partNumber ? [rootData] : [])
+
+    if (partsList.length === 0) {
+        return {
+            parts: [{
+                id: uuidv4(),
+                filename,
+                partNumber: filename.replace('.pdf', ''),
+                description: "AI FOUND NO PARTS",
+                quantity: 0,
+                material: "",
+                thickness: 0,
+                width: 0,
+                length: 0,
+                confidence: 0,
+                drawingRef: storagePath,
+                type: 'PLATE'
+            } as ParsedPart], raw: rootData
+        }
+    }
+
+    const processedParts = partsList.map((data: any) => {
+        let pType = data.profileType?.toUpperCase() || "";
+        let pDims = data.profileDimensions || "";
+
+        // Basic cleaning
+        if (pDims) {
+            pDims = pDims.replace(/\*/g, 'x').toLowerCase()
+            const typePrefix = pType.toLowerCase()
+            if (pDims.startsWith(typePrefix)) pDims = pDims.substring(typePrefix.length).trim()
+        }
+
+        // Normalize logic
+        if (pType === 'UNP') pType = 'UPN';
+        if (['TUBE', 'PIPE'].some(t => pType.includes(t))) pType = 'CHS-EN10219';
+
+        // Detect RHS/SHS
+        if (pType.includes('RHS') || pType.includes('SHS') || pType === 'HOLLOW SECTION') {
+            const dims = pDims.split('x')
+            if (dims.length === 2 && dims[0] === dims[1]) pType = 'SHS-EN10219'
+            else if (dims.length > 0) pType = 'RHS-EN10219'
+        }
+
+        if (pType === 'RHS') pType = 'RHS-EN10219';
+        if (pType === 'SHS') pType = 'SHS-EN10219';
+
+        return {
+            id: uuidv4(),
+            filename,
+            partNumber: String(data.partNumber || "UNKNOWN"),
+            description: data.title || filename,
+            quantity: Number(data.quantity) || 1,
+            material: data.material || "S355",
+            thickness: Number(data.thickness) || 0,
+            width: Number(data.width) || 0,
+            length: Number(data.length) || 0,
+            profileType: pType,
+            profileDimensions: pDims,
+            type: (data.type === 'PROFILE' || !!data.profileType) ? 'PROFILE' : 'PLATE',
+            confidence: Number(data.confidence) || 80,
+            drawingRef: storagePath
+        }
+    })
+
+    return { parts: processedParts, raw: rootData }
+}

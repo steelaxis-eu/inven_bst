@@ -781,3 +781,21 @@ model OptimizationJob {
   @@index([projectId])
   @@index([status])
 }
+
+model ParsedDrawing {
+  id          String   @id @default(uuid())
+  jobId       String   // Batch ID for grouping
+  projectId   String
+  filename    String
+  fileUrl     String   // Storage path
+  status      String   // PENDING, PROCESSING, COMPLETED, FAILED
+  result      Json?    // confirm to ParsedPart interface
+  rawResponse Json?    // Raw JSON from Gemini for auditing
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([jobId])
+  @@index([status])
+  @@index([projectId])
+}

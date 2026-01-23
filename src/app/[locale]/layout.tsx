@@ -49,7 +49,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col bg-gradient-to-br from-white to-gray-50 dark:from-neutral-900 dark:to-neutral-950`}
       >
         <StyledComponentsRegistry>
           <NextIntlClientProvider messages={messages} locale={locale}>
@@ -63,7 +63,7 @@ export default async function RootLayout({
                 <AppFluentProvider>
                   <Header userEmail={user?.email ?? undefined} />
                   <ImportStatus />
-                  <main className="flex-1 bg-gradient-to-br from-white to-gray-50 dark:from-neutral-900 dark:to-neutral-950">
+                  <main className="flex-1">
                     <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
                       {children}
                     </div>
