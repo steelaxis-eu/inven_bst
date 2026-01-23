@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     if (result.processed) {
         // If there are more jobs remaining, trigger the next one recursively
         if (result.remaining && result.remaining > 0) {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+            const baseUrl = req.nextUrl.origin
             console.log(`[Queue] Triggering next job (Remaining: ${result.remaining})...`)
 
             // Fire and forget next call

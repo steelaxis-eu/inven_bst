@@ -888,7 +888,11 @@ export async function createImportBatch(files: { filename: string, storagePath: 
         }
 
         // TRIGGER QUEUE PROCESSING (Fire & Forget)
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        // Need to determine base URL dynamically from headers since env var might be missing
+        const headersList = await headers()
+        const protocol = headersList.get('x-forwarded-proto') || 'http'
+        const host = headersList.get('host')
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`
 
         // Trigger a few workers to start parallel processing
         // We use fetch without await to not block the response
