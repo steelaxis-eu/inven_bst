@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { createClient } from '@/lib/supabase-server'
+import { headers } from 'next/headers'
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType, GenerationConfig } from '@google/generative-ai'
