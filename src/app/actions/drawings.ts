@@ -1066,9 +1066,9 @@ async function processDrawingWithGemini(storagePath: string, projectId: string, 
     } as any
 
     const modelCandidates = [
-        { id: "gemini-2.0-flash", retries: 3 },
-        { id: "gemini-1.5-flash", retries: 3 },
-        { id: "gemini-1.5-pro", retries: 2 }
+        { id: "gemini-3-flash-preview", retries: 3 },
+        { id: "gemini-2.5-flash", retries: 3 },
+        { id: "gemini-2.5-pro", retries: 2 }
     ]
 
     const prompt = `
