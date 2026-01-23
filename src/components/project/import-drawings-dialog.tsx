@@ -49,7 +49,7 @@ import { getProjectPartsCount, createPart } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
 import { createAssembly } from '@/app/actions/assemblies'
 import { createGrade } from '@/app/actions/grades'
-import { createImportBatch, getBatchStatus, uploadSingleDrawing, ParsedPart } from '@/app/actions/drawings'
+import { createImportBatch, getBatchStatus, uploadSingleDrawing, cancelImportBatch, ParsedPart } from '@/app/actions/drawings'
 import JSZip from 'jszip'
 
 // Interfaces
@@ -300,11 +300,16 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
         }
     }
 
-    const resetImport = () => {
-        if (batchId) localStorage.removeItem(`import_batch_${projectId}`)
+    const resetImport = async () => {
+        if (batchId) {
+            // Clean up database records
+            await cancelImportBatch(batchId)
+            localStorage.removeItem(`import_batch_${projectId}`)
+        }
         setBatchId(null)
         setFile(null)
         setParts([])
+        setProcessingStats({ total: 0, completed: 0, failed: 0, pending: 0 })
         setStep('upload')
     }
 

@@ -937,6 +937,18 @@ export async function getBatchStatus(batchId: string): Promise<{
     return { total, completed, pending, failed, results }
 }
 
+export async function cancelImportBatch(batchId: string): Promise<{ success: boolean, deleted?: number }> {
+    try {
+        const result = await prisma.parsedDrawing.deleteMany({
+            where: { jobId: batchId }
+        })
+        return { success: true, deleted: result.count }
+    } catch (e: any) {
+        console.error("Failed to cancel batch:", e)
+        return { success: false }
+    }
+}
+
 export async function processNextPendingJob(batchId?: string): Promise<{ processed: boolean, jobId?: string, remaining?: number }> {
     // 1. Find next pending job
     const job = await prisma.parsedDrawing.findFirst({
@@ -994,6 +1006,15 @@ export async function processNextPendingJob(batchId?: string): Promise<{ process
         })
         return { processed: true, jobId: job.id }
     }
+
+    // Always return remaining count so queue continues after failure
+    const remainingAfterError = await prisma.parsedDrawing.count({
+        where: {
+            status: 'PENDING',
+            ...(batchId ? { jobId: batchId } : {})
+        }
+    })
+    return { processed: true, jobId: job.id, remaining: remainingAfterError }
 }
 
 // Logic extracted from old function
@@ -1045,7 +1066,7 @@ async function processDrawingWithGemini(storagePath: string, projectId: string, 
     } as any
 
     const modelCandidates = [
-        { id: "gemini-2.0-flash-exp", retries: 3 },
+        { id: "gemini-2.0-flash", retries: 3 },
         { id: "gemini-1.5-flash", retries: 3 },
         { id: "gemini-1.5-pro", retries: 2 }
     ]
