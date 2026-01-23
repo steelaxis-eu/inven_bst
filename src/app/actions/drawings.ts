@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import { createClient } from '@/lib/supabase-server'
+import { createServiceClient } from '@/lib/supabase-service'
 import { headers } from 'next/headers'
 import AdmZip from 'adm-zip'
 import { v4 as uuidv4 } from 'uuid'
@@ -997,7 +998,8 @@ export async function processNextPendingJob(batchId?: string): Promise<{ process
 
 // Logic extracted from old function
 async function processDrawingWithGemini(storagePath: string, projectId: string, filename: string): Promise<{ parts: ParsedPart[], raw: any }> {
-    const supabase = await createClient()
+    // Use service-role client since this runs in background without user cookies
+    const supabase = createServiceClient()
 
     // Download
     const { data: fileData, error: downloadError } = await supabase.storage
