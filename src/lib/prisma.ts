@@ -2,7 +2,9 @@ import { PrismaClient } from '@prisma/client'
 
 // Singleton Prisma Client
 const prismaClientSingleton = () => {
-    return new PrismaClient()
+    return new PrismaClient({
+        datasourceUrl: process.env.POSTGRES_PRISMA_URL
+    })
 }
 
 declare global {

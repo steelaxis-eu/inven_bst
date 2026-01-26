@@ -24,6 +24,8 @@ export interface ParsedPart {
     drawingRef?: string
     warnings?: string[]
     raw?: any
+    isSplit?: boolean
+    cutAngles?: string
 }
 
 // ============================================================================
@@ -95,7 +97,9 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
                         confidence: { type: SchemaType.NUMBER },
                         type: { type: SchemaType.STRING, enum: ["PROFILE", "PLATE"] },
                         profileType: { type: SchemaType.STRING },
-                        profileDimensions: { type: SchemaType.STRING }
+                        profileDimensions: { type: SchemaType.STRING },
+                        isSplit: { type: SchemaType.BOOLEAN, description: "True if profile is split/cut in half (e.g. 1/2 HEA)" },
+                        cutAngles: { type: SchemaType.STRING, description: "Cut angles if specified (e.g. 45/90)" }
                     },
                     required: ["partNumber", "quantity", "type"]
                 }
@@ -120,6 +124,10 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
       - Clean profile dimensions (e.g. "100x100x5").
       - Split Round Bar (1 dim) vs CHS (2 dims).
       - Square tube = SHS, Rect tube = RHS.
+      
+      NEW FIELDS:
+      - **isSplit**: set to true if part is described as "1/2", "Half", or "Split" (e.g. "1/2 HEA 140").
+      - **cutAngles**: extract any cut angles shown (e.g. "45°", "45-90"). Format as "45/90".
       `
 
     let resultText = "";
@@ -201,6 +209,30 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             // Normalize logic
             if (pType === 'UNP') pType = 'UPN';
 
+            // Round Bar Normalization
+            // Handle "Round bar", "RD", "R", etc. -> "R"
+            if (pType.toUpperCase() === 'ROUND BAR' || pType.toUpperCase() === 'RD' || pType.toUpperCase().includes('ROUND')) {
+                pType = 'R';
+            }
+            // If type is R, clean dimensions to digits only (e.g. RD12 -> 12)
+            if (pType === 'R') {
+                pDims = pDims.replace(/[^0-9.,]/g, '').replace(',', '.');
+            }
+
+            // Clean beam dimensions (strip prefix like U200 -> 200, IPE200 -> 200)
+            if (['UPN', 'UPE', 'IPE', 'HEA', 'HEB', 'HEM'].includes(pType)) {
+                // Remove all non-digit/decimal/separator characters from start
+                // e.g. "U 200" -> "200", "IPE200" -> "200"
+                pDims = pDims.replace(/^[a-zA-Z\s]+/, '')
+            }
+
+            // Flag U-Profiles for manual verification (AI often guesses UPN vs UPE)
+            if (['UPN', 'UPE'].includes(pType)) {
+                if (!warnings.includes('Verify UPN vs UPE')) {
+                    warnings.push('Verify UPN vs UPE');
+                }
+            }
+
             // QRO Logic (Quadratrohr/Rectangular)
             if (pType === 'QRO') {
                 const dims = pDims.split('x');
@@ -231,9 +263,42 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
 
             // Detect RHS/SHS
             if (pType.includes('RHS') || pType.includes('SHS') || pType === 'HOLLOW SECTION') {
-                const dims = pDims.split('x')
-                if (dims.length === 2 && dims[0] === dims[1]) pType = 'SHS-EN10219'
-                else if (dims.length > 0) pType = 'RHS-EN10219'
+                const dims = pDims.split('x');
+                const d1 = parseFloat(dims[0]);
+                const d2 = parseFloat(dims[1]);
+                const isThickFormat = dims.length === 2 && d2 < d1 * 0.4; // e.g. 50x5 (10%) = Side x Thick. 100x50 (50%) = W x H.
+
+                if (pType.includes('SHS')) {
+                    // Start with SHS. Only switch to RHS if dims are CLEARLY rectangular W x H (not Side x Thick)
+                    // and not equal.
+
+                    // Case: 50x5 -> SHS (Side x Thick)
+                    // Case: 100x50 -> RHS (W x H)
+                    // Case: 100x100 -> SHS
+                    // Case: 100x50x5 -> RHS
+
+                    if (dims.length === 2 && d1 !== d2 && !isThickFormat) {
+                        pType = 'RHS-EN10219';
+                    } else if (dims.length === 3 && d1 !== d2) {
+                        pType = 'RHS-EN10219';
+                    } else {
+                        pType = 'SHS-EN10219';
+                    }
+                } else if (pType.includes('RHS')) {
+                    pType = 'RHS-EN10219';
+                } else {
+                    // Indeterminate "HOLLOW SECTION"
+                    if (dims.length === 2) {
+                        if (d1 === d2 || isThickFormat) pType = 'SHS-EN10219';
+                        else pType = 'RHS-EN10219';
+                    } else if (dims.length > 2) {
+                        if (d1 === d2) pType = 'SHS-EN10219';
+                        else pType = 'RHS-EN10219';
+                    } else {
+                        // Default
+                        pType = 'RHS-EN10219';
+                    }
+                }
             }
 
             if (pType === 'RHS') pType = 'RHS-EN10219';
@@ -246,6 +311,15 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
 
             if (isAmbiguousU || (pType.includes('U') && !pType.includes('UPN') && !pType.includes('UPE'))) {
                 warnings.push("Ambiguous U-Profile: Verify UPN vs UPE");
+            }
+
+            // Detect Split Profile manually if AI missed it
+            let isSplit = !!data.isSplit;
+            if (pDims.includes('1/2') || pType.includes('1/2') || pType.includes('HALF') || pDims.includes('SPLIT')) {
+                isSplit = true;
+                // Remove "1/2" trash from dims/type to normalize
+                pDims = pDims.replace('1/2', '').replace('HALF', '').trim();
+                pType = pType.replace('1/2', '').replace('HALF', '').trim();
             }
 
             return {
@@ -263,7 +337,9 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
                 type: (data.type === 'PROFILE' || !!data.profileType) ? 'PROFILE' : 'PLATE',
                 confidence: Number(data.confidence) || 80,
                 drawingRef: storagePath,
-                warnings
+                warnings,
+                isSplit,
+                cutAngles: data.cutAngles || null
             }
         })
     }

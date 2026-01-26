@@ -127,7 +127,12 @@ async function processRecalculateJob(jobId: string) {
             }
 
             if (weightPerMeter > 0 && part.length) {
-                const newWeight = (part.length / 1000) * weightPerMeter
+                let newWeight = (part.length / 1000) * weightPerMeter
+
+                // Split profile logic: Halve the weight
+                if (part.isSplit) {
+                    newWeight = newWeight / 2
+                }
 
                 // Update if different (or 0)
                 if (Math.abs(newWeight - part.unitWeight) > 0.001) {

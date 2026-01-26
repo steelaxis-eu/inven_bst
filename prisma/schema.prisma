@@ -5,8 +5,6 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
 // ============================================================================
@@ -383,6 +381,8 @@ model Part {
   isOutsourcedCut Boolean  @default(false) // Laser/plasma cut by external vendor
   cutVendor       String?             // Vendor name for outsourced cutting
   drawingRef      String?             // Drawing number/link
+  isSplit         Boolean  @default(false) // e.g. "1/2 HEA"
+  cutAngles       String?             // e.g. "45-90"
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

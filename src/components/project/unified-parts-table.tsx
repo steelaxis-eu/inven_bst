@@ -384,15 +384,27 @@ export function UnifiedPartsTable({ items, projectId }: UnifiedPartsTableProps) 
                                         </span>
                                     </TableCell>
                                     <TableCell>
-                                        {isPart ? (
-                                            <Badge appearance="outline" shape="rounded" icon={<BoxRegular />}>
-                                                Profile
-                                            </Badge>
-                                        ) : (
-                                            <Badge appearance="filled" shape="rounded" color="brand" icon={<CutRegular />}>
-                                                Plate
-                                            </Badge>
-                                        )}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                {isPart ? (
+                                                    <Badge appearance="outline" shape="rounded" icon={<BoxRegular />}>
+                                                        Profile
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge appearance="filled" shape="rounded" color="brand" icon={<CutRegular />}>
+                                                        Plate
+                                                    </Badge>
+                                                )}
+                                                {isPart && data.isSplit && (
+                                                    <Badge appearance="tint" color="warning" shape="rounded" size="small">1/2</Badge>
+                                                )}
+                                            </div>
+                                            {isPart && data.cutAngles && (
+                                                <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>
+                                                    Angles: {data.cutAngles}
+                                                </Text>
+                                            )}
+                                        </div>
                                     </TableCell>
                                     <TableCell>
                                         {(isPart ? data.drawingRef : data.dxfStoragePath) && (
