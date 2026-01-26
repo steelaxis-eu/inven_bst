@@ -14,7 +14,7 @@ export default defineConfig({
     runtime: "node",
     logLevel: "log",
     // The project ID is usually required. I will use a placeholder and notify the user.
-    project: "YOUR_PROJECT_ID_HERE",
+    project: "proj_bgflxruuqqqbujtgkhry",
     retries: {
         enabledInDev: true,
         default: {
