@@ -22,6 +22,7 @@ export interface ParsedPart {
     confidence: number
     thumbnail?: string
     drawingRef?: string
+    warnings?: string[]
 }
 
 // ============================================================================
@@ -119,20 +120,47 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
       - Square tube = SHS, Rect tube = RHS.
       `
 
-    let result;
+    let resultText = "";
+    let rootData: any = {};
+    let lastError: Error | null = null;
+
     for (const candidate of modelCandidates) {
         try {
-            const model = genAI.getGenerativeModel({ model: candidate.id, generationConfig: { responseMimeType: "application/json", responseSchema: schema } })
-            result = await retryWithBackoff(() => model.generateContent([{ inlineData: { data: base64Pdf, mimeType: "application/pdf" } }, prompt]), candidate.retries)
-            break;
-        } catch (error) { continue }
+            console.log(`[Gemini] Attempting with model ${candidate.id}...`);
+            const model = genAI.getGenerativeModel({
+                model: candidate.id,
+                generationConfig: { responseMimeType: "application/json", responseSchema: schema }
+            });
+
+            // Retry network errors
+            const result = await retryWithBackoff(() =>
+                model.generateContent([{ inlineData: { data: base64Pdf, mimeType: "application/pdf" } }, prompt]),
+                candidate.retries
+            );
+
+            resultText = result.response.text();
+
+            // Try to parse JSON immediately to validate
+            try {
+                rootData = JSON.parse(resultText);
+                // If successful, break the loop
+                break;
+            } catch (jsonError) {
+                console.warn(`[Gemini] Invalid JSON from model ${candidate.id}:`, jsonError);
+                throw new Error("Invalid JSON extraction"); // Throw to trigger catch block and continue loop
+            }
+
+        } catch (error: any) {
+            console.error(`[Gemini] Model ${candidate.id} failed:`, error.message);
+            lastError = error;
+            // Continue to next candidate
+            continue;
+        }
     }
 
-    if (!result) throw new Error("AI Processing failed")
-
-    const text = result.response.text()
-    let rootData: any = {}
-    try { rootData = JSON.parse(text) } catch (e) { throw new Error("Invalid JSON from AI") }
+    if (Object.keys(rootData).length === 0) {
+        throw new Error(`AI Processing failed after trying all models. Last error: ${lastError?.message || "Unknown"}`);
+    }
 
     let partsList = rootData.parts || (rootData.partNumber ? [rootData] : [])
 
@@ -151,12 +179,14 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             length: 0,
             confidence: 0,
             drawingRef: storagePath,
-            type: 'PLATE'
+            type: 'PLATE',
+            warnings: []
         } as ParsedPart]
     } else {
         processedParts = partsList.map((data: any) => {
             let pType = data.profileType?.toUpperCase() || "";
             let pDims = data.profileDimensions || "";
+            const warnings: string[] = [];
 
             // Basic cleaning
             if (pDims) {
@@ -167,6 +197,7 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
 
             // Normalize logic
             if (pType === 'UNP') pType = 'UPN';
+            if (pType === 'QRO') pType = 'SHS-EN10219'; // User Request: SHS is also QRO
             if (['TUBE', 'PIPE'].some(t => pType.includes(t))) pType = 'CHS-EN10219';
 
             // Detect RHS/SHS
@@ -178,6 +209,15 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
 
             if (pType === 'RHS') pType = 'RHS-EN10219';
             if (pType === 'SHS') pType = 'SHS-EN10219';
+
+            // User Request: U-profile Ambiguity Flag
+            // If we have "U200" or just "U" specific type, valid types are UPN or UPE.
+            // If the AI just says "U" or "Channel" or returns "U200" without UPN/UPE distinction.
+            const isAmbiguousU = pType === 'U' || pType === 'CHANNEL' || (pDims.toUpperCase().startsWith('U') && !pType.includes('UPN') && !pType.includes('UPE'));
+
+            if (isAmbiguousU || (pType.includes('U') && !pType.includes('UPN') && !pType.includes('UPE'))) {
+                warnings.push("Ambiguous U-Profile: Verify UPN vs UPE");
+            }
 
             return {
                 id: uuidv4(),
@@ -193,7 +233,8 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
                 profileDimensions: pDims,
                 type: (data.type === 'PROFILE' || !!data.profileType) ? 'PROFILE' : 'PLATE',
                 confidence: Number(data.confidence) || 80,
-                drawingRef: storagePath
+                drawingRef: storagePath,
+                warnings
             }
         })
     }

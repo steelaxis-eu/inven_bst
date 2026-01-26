@@ -41,7 +41,8 @@ import {
     ErrorCircleRegular,
     BoxRegular,
     AddRegular,
-    ArrowClockwiseRegular
+    ArrowClockwiseRegular,
+    WarningRegular
 } from "@fluentui/react-icons"
 import { toast } from 'sonner'
 import { getProjectPartsCount, createPart } from '@/app/actions/parts'
@@ -73,6 +74,7 @@ interface ReviewPart {
     selectedGradeId?: string
     status?: 'PENDING' | 'CREATED' | 'ERROR'
     errorMsg?: string
+    warnings?: string[]
 }
 
 interface ImportDrawingsDialogProps {
@@ -142,6 +144,10 @@ const useStyles = makeStyles({
         gridTemplateColumns: '1fr 16px 1fr 16px 1fr',
         alignItems: 'center',
         gap: '4px',
+    },
+    warningIcon: {
+        color: tokens.colorPaletteDarkOrangeForeground1,
+        cursor: 'help'
     }
 })
 
@@ -505,7 +511,8 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                         {parts.map(part => (
                                             <TableRow key={part.id} style={{
                                                 opacity: part.status === 'CREATED' ? 0.5 : 1,
-                                                backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 : undefined,
+                                                backgroundColor: part.status === 'CREATED' ? tokens.colorPaletteGreenBackground1 :
+                                                    (part.warnings && part.warnings.length > 0) ? tokens.colorPaletteYellowBackground1 : undefined,
                                             }}>
                                                 <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
                                                     <Checkbox checked={part.include} onChange={(e, d) => updatePart(part.id, { include: d.checked as boolean })} disabled={part.status === 'CREATED'} />
@@ -514,6 +521,12 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         <Input value={part.partNumber} onChange={(e, d) => updatePart(part.id, { partNumber: d.value })} className={styles.inputMedium} />
                                                         <Text size={100} style={{ color: tokens.colorNeutralForeground3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{part.filename}</Text>
+                                                        {part.warnings && part.warnings.map((w, i) => (
+                                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: tokens.colorPaletteDarkOrangeForeground1 }}>
+                                                                <WarningRegular className={styles.warningIcon} />
+                                                                <Text size={100} weight="semibold">{w}</Text>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
