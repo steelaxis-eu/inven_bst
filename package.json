@@ -21,6 +21,8 @@
     "@prisma/client": "^5.22.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.87.1",
+    "@trigger.dev/react": "^3.3.12",
+    "@trigger.dev/sdk": "^4.3.3",
     "@types/adm-zip": "^0.5.7",
     "@types/archiver": "^7.0.0",
     "@vercel/analytics": "^1.6.1",

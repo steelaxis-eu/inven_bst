@@ -2,32 +2,14 @@
 
 import prisma from '@/lib/prisma'
 import { createClient } from '@/lib/supabase-server'
-import { createServiceClient } from '@/lib/supabase-service'
 import { headers } from 'next/headers'
 import { v4 as uuidv4 } from 'uuid'
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
+import { tasks } from "@trigger.dev/sdk/v3"
+import { ParsedPart } from '@/lib/parsing-logic'
+import { processDrawingBatch } from '@/trigger/parsing' // Import task for type safety if needed, or just use string ID
 
-// ============================================================================
-// Interfaces
-// ============================================================================
-
-export interface ParsedPart {
-    id: string
-    filename: string
-    partNumber: string
-    description: string
-    quantity: number
-    material: string
-    thickness: number
-    width: number
-    length: number
-    profileType?: string
-    profileDimensions?: string
-    type?: string
-    confidence: number
-    thumbnail?: string
-    drawingRef?: string
-}
+// Re-export for compatibility
+export type { ParsedPart } from '@/lib/parsing-logic'
 
 // Kept for backward compatibility with import-context
 export interface ParsedAssembly {
@@ -48,33 +30,6 @@ export interface ParsedAssembly {
     confidence: number
     thumbnail?: string
     drawingRef?: string
-}
-
-// ============================================================================
-// Utilities
-// ============================================================================
-
-async function retryWithBackoff<T>(
-    operation: () => Promise<T>,
-    maxRetries: number = 3,
-    initialDelay: number = 2000
-): Promise<T> {
-    let lastError;
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            return await operation();
-        } catch (error: any) {
-            lastError = error;
-            if (error?.status === 503 || error?.status === 429 || error?.message?.includes('503') || error?.message?.includes('overloaded')) {
-                const delay = initialDelay * Math.pow(2, i);
-                console.log(`Gemini API busy (Attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                continue;
-            }
-            throw error;
-        }
-    }
-    throw lastError;
 }
 
 // ============================================================================
@@ -118,7 +73,7 @@ export async function uploadSingleDrawing(formData: FormData, projectId: string)
 }
 
 // ============================================================================
-// Batch Creation & Status
+// Batch Creation & Triggering
 // ============================================================================
 
 export async function createImportBatch(files: { filename: string, storagePath: string }[], projectId: string): Promise<{ success: boolean, batchId?: string, error?: string }> {
@@ -142,17 +97,16 @@ export async function createImportBatch(files: { filename: string, storagePath: 
             })
         }
 
-        // TRIGGER QUEUE PROCESSING (Fire & Forget)
-        const headersList = await headers()
-        const protocol = headersList.get('x-forwarded-proto') || 'http'
-        const host = headersList.get('host')
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`
-
-        fetch(`${baseUrl}/api/process-queue`, {
-            method: 'POST',
-            body: JSON.stringify({ batchId }),
-            headers: { 'Content-Type': 'application/json' }
-        }).catch(err => console.error("Failed to trigger queue:", err))
+        // TRIGGER REMOTE PROCESSING
+        try {
+            const handle = await tasks.trigger("process-drawing-batch", { batchId });
+            console.log(`[Batch] Triggered parsing job: ${handle.id} for batch ${batchId}`);
+        } catch (triggerError: any) {
+            console.error("Failed to trigger remote job:", triggerError);
+            // We don't fail the request, because the user might be offline or config missing
+            // But we should ideally let them know. For now we log it.
+            // If Trigger.dev is not configured, this will fail.
+        }
 
         return { success: true, batchId }
     } catch (e: any) {
@@ -197,224 +151,4 @@ export async function cancelImportBatch(batchId: string): Promise<{ success: boo
         console.error("Failed to cancel batch:", e)
         return { success: false }
     }
-}
-
-// ============================================================================
-// Queue Processor
-// ============================================================================
-
-export async function processNextPendingJob(batchId?: string): Promise<{ processed: boolean, jobId?: string, remaining?: number }> {
-    // 1. Find next pending job
-    const job = await prisma.parsedDrawing.findFirst({
-        where: {
-            status: 'PENDING',
-            ...(batchId ? { jobId: batchId } : {})
-        },
-        orderBy: { createdAt: 'asc' }
-    })
-
-    if (!job) return { processed: false }
-
-    // 2. Optimistic Locking: Set to PROCESSING
-    try {
-        await prisma.parsedDrawing.update({
-            where: { id: job.id, status: 'PENDING' },
-            data: { status: 'PROCESSING' }
-        })
-    } catch (e) {
-        // Race condition: someone else took it
-        return { processed: false }
-    }
-
-    // 3. Process
-    try {
-        const { parts: processedParts, raw } = await processDrawingWithGemini(job.fileUrl, job.projectId, job.filename)
-
-        await prisma.parsedDrawing.update({
-            where: { id: job.id },
-            data: {
-                status: 'COMPLETED',
-                result: processedParts as any,
-                rawResponse: raw
-            }
-        })
-
-        const remaining = await prisma.parsedDrawing.count({
-            where: {
-                status: 'PENDING',
-                ...(batchId ? { jobId: batchId } : {})
-            }
-        })
-
-        return { processed: true, jobId: job.id, remaining }
-
-    } catch (e: any) {
-        console.error(`Job ${job.id} failed:`, e)
-        await prisma.parsedDrawing.update({
-            where: { id: job.id },
-            data: {
-                status: 'FAILED',
-                error: e.message || "Unknown error"
-            }
-        })
-
-        // Always return remaining count so queue continues after failure
-        const remainingAfterError = await prisma.parsedDrawing.count({
-            where: {
-                status: 'PENDING',
-                ...(batchId ? { jobId: batchId } : {})
-            }
-        })
-        return { processed: true, jobId: job.id, remaining: remainingAfterError }
-    }
-}
-
-// ============================================================================
-// AI Processing
-// ============================================================================
-
-async function processDrawingWithGemini(storagePath: string, projectId: string, filename: string): Promise<{ parts: ParsedPart[], raw: any }> {
-    // Use service-role client since this runs in background without user cookies
-    const supabase = createServiceClient()
-
-    // Download
-    const { data: fileData, error: downloadError } = await supabase.storage
-        .from('Projects')
-        .download(storagePath)
-
-    if (downloadError || !fileData) throw new Error("Failed to download file from storage")
-
-    const arrayBuffer = await fileData.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const base64Pdf = buffer.toString('base64')
-
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing")
-
-    const genAI = new GoogleGenerativeAI(apiKey)
-
-    const schema = {
-        type: SchemaType.OBJECT,
-        properties: {
-            parts: {
-                type: SchemaType.ARRAY,
-                items: {
-                    type: SchemaType.OBJECT,
-                    properties: {
-                        partNumber: { type: SchemaType.STRING },
-                        title: { type: SchemaType.STRING },
-                        quantity: { type: SchemaType.NUMBER },
-                        material: { type: SchemaType.STRING },
-                        thickness: { type: SchemaType.NUMBER },
-                        width: { type: SchemaType.NUMBER },
-                        length: { type: SchemaType.NUMBER },
-                        confidence: { type: SchemaType.NUMBER },
-                        type: { type: SchemaType.STRING, enum: ["PROFILE", "PLATE"] },
-                        profileType: { type: SchemaType.STRING },
-                        profileDimensions: { type: SchemaType.STRING }
-                    },
-                    required: ["partNumber", "quantity", "type"]
-                }
-            }
-        }
-    } as any
-
-    const modelCandidates = [
-        { id: "gemini-3-flash-preview", retries: 3 },
-        { id: "gemini-2.5-flash", retries: 3 },
-        { id: "gemini-2.5-pro", retries: 2 }
-    ]
-
-    const prompt = `
-      Analyze this technical drawing (PDF) and extract ALL distinct parts found into the 'parts' array.
-      CRITICAL CLASSIFICATION RULES:
-      1. **PROFILE**: Any part that is a standard section (RHS, SHS, IPE, HEA, HEB, UNP/UPE, CHS, Angle, Round Bar).
-      2. **PLATE**: Any part that is a flat sheet (Thickness x Width x Length).
-      
-      PARSING RULES:
-      - Clean profile dimensions (e.g. "100x100x5").
-      - Split Round Bar (1 dim) vs CHS (2 dims).
-      - Square tube = SHS, Rect tube = RHS.
-      `
-
-    let result;
-    for (const candidate of modelCandidates) {
-        try {
-            const model = genAI.getGenerativeModel({ model: candidate.id, generationConfig: { responseMimeType: "application/json", responseSchema: schema } })
-            result = await retryWithBackoff(() => model.generateContent([{ inlineData: { data: base64Pdf, mimeType: "application/pdf" } }, prompt]), candidate.retries)
-            break;
-        } catch (error) { continue }
-    }
-
-    if (!result) throw new Error("AI Processing failed")
-
-    const text = result.response.text()
-    let rootData: any = {}
-    try { rootData = JSON.parse(text) } catch (e) { throw new Error("Invalid JSON from AI") }
-
-    let partsList = rootData.parts || (rootData.partNumber ? [rootData] : [])
-
-    let processedParts: ParsedPart[] = []
-
-    if (partsList.length === 0) {
-        processedParts = [{
-            id: uuidv4(),
-            filename,
-            partNumber: filename.replace('.pdf', ''),
-            description: "AI FOUND NO PARTS",
-            quantity: 0,
-            material: "",
-            thickness: 0,
-            width: 0,
-            length: 0,
-            confidence: 0,
-            drawingRef: storagePath,
-            type: 'PLATE'
-        } as ParsedPart]
-    } else {
-        processedParts = partsList.map((data: any) => {
-            let pType = data.profileType?.toUpperCase() || "";
-            let pDims = data.profileDimensions || "";
-
-            // Basic cleaning
-            if (pDims) {
-                pDims = pDims.replace(/\*/g, 'x').toLowerCase()
-                const typePrefix = pType.toLowerCase()
-                if (pDims.startsWith(typePrefix)) pDims = pDims.substring(typePrefix.length).trim()
-            }
-
-            // Normalize logic
-            if (pType === 'UNP') pType = 'UPN';
-            if (['TUBE', 'PIPE'].some(t => pType.includes(t))) pType = 'CHS-EN10219';
-
-            // Detect RHS/SHS
-            if (pType.includes('RHS') || pType.includes('SHS') || pType === 'HOLLOW SECTION') {
-                const dims = pDims.split('x')
-                if (dims.length === 2 && dims[0] === dims[1]) pType = 'SHS-EN10219'
-                else if (dims.length > 0) pType = 'RHS-EN10219'
-            }
-
-            if (pType === 'RHS') pType = 'RHS-EN10219';
-            if (pType === 'SHS') pType = 'SHS-EN10219';
-
-            return {
-                id: uuidv4(),
-                filename,
-                partNumber: String(data.partNumber || "UNKNOWN"),
-                description: data.title || filename,
-                quantity: Number(data.quantity) || 1,
-                material: data.material || "S355",
-                thickness: Number(data.thickness) || 0,
-                width: Number(data.width) || 0,
-                length: Number(data.length) || 0,
-                profileType: pType,
-                profileDimensions: pDims,
-                type: (data.type === 'PROFILE' || !!data.profileType) ? 'PROFILE' : 'PLATE',
-                confidence: Number(data.confidence) || 80,
-                drawingRef: storagePath
-            }
-        })
-    }
-
-    return { parts: processedParts, raw: rootData }
 }
