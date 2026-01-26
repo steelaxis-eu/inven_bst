@@ -1,0 +1,23 @@
+name: Deploy Trigger.dev
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/trigger/**'
+      - 'src/lib/**'
+      - 'trigger.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci --legacy-peer-deps
+      - run: npx trigger.dev@latest deploy
