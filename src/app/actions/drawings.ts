@@ -135,7 +135,8 @@ export async function getBatchStatus(batchId: string): Promise<{
         .filter((j: any) => j.status === 'COMPLETED' && j.result)
         .flatMap((j: any) => {
             const res = j.result as any
-            return Array.isArray(res) ? res : [res]
+            const parts = Array.isArray(res) ? res : [res]
+            return parts.map((p: any) => ({ ...p, raw: j.rawResponse }))
         })
 
     return { total, completed, pending, failed, results }

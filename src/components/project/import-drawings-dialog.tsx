@@ -42,7 +42,8 @@ import {
     BoxRegular,
     AddRegular,
     ArrowClockwiseRegular,
-    WarningRegular
+    WarningRegular,
+    CodeRegular
 } from "@fluentui/react-icons"
 import { toast } from 'sonner'
 import { getProjectPartsCount, createPart } from '@/app/actions/parts'
@@ -75,6 +76,7 @@ interface ReviewPart {
     status?: 'PENDING' | 'CREATED' | 'ERROR'
     errorMsg?: string
     warnings?: string[]
+    raw?: any
 }
 
 interface ImportDrawingsDialogProps {
@@ -601,9 +603,31 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                                         </div>
                                                     )}
                                                 </TableCell>
-                                                <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
+                                                <TableCell style={{ verticalAlign: 'top', paddingTop: '12px', display: 'flex', gap: '8px' }}>
                                                     {part.status === 'CREATED' && <CheckmarkCircleRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
                                                     {part.status === 'ERROR' && <ErrorCircleRegular style={{ color: tokens.colorPaletteRedForeground1 }} title={part.errorMsg} />}
+                                                    {part.raw && (
+                                                        <Dialog>
+                                                            <DialogTrigger disableButtonEnhancement>
+                                                                <Button icon={<CodeRegular />} size="small" appearance="subtle" title="View Raw AI Response" />
+                                                            </DialogTrigger>
+                                                            <DialogSurface style={{ minWidth: '600px', maxWidth: '80vw' }}>
+                                                                <DialogBody>
+                                                                    <DialogTitle>Raw AI Response - {part.filename}</DialogTitle>
+                                                                    <DialogContent style={{ maxHeight: '600px', overflow: 'auto' }}>
+                                                                        <pre style={{ backgroundColor: tokens.colorNeutralBackground2, padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                                                                            {JSON.stringify(part.raw, null, 2)}
+                                                                        </pre>
+                                                                    </DialogContent>
+                                                                    <DialogActions>
+                                                                        <DialogTrigger disableButtonEnhancement>
+                                                                            <Button appearance="secondary">Close</Button>
+                                                                        </DialogTrigger>
+                                                                    </DialogActions>
+                                                                </DialogBody>
+                                                            </DialogSurface>
+                                                        </Dialog>
+                                                    )}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
