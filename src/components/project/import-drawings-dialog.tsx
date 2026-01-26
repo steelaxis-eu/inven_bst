@@ -397,7 +397,7 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
     const profileTypes = Array.from(new Set([
         ...standardProfiles.map(p => p.type),
         ...shapes.map(s => s.id),
-        "RHS-EN10219", "SHS-EN10219", "CHS-EN10219", "IPE", "HEA", "HEB", "UPN", "UPE"
+        "RHS-EN10219", "SHS-EN10219", "CHS-EN10219", "IPE", "HEA", "HEB", "UPN", "UPE", "THREADED BAR"
     ])).sort()
 
     return (

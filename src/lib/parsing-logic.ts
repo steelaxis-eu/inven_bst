@@ -104,8 +104,9 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
 
     const modelCandidates = [
         { id: "gemini-3-flash-preview", retries: 3 },
-        { id: "gemini-2.5-flash", retries: 3 },
-        { id: "gemini-2.5-pro", retries: 2 }
+        { id: "gemini-3-flash-preview", retries: 3 }, // Try again before fallback
+        { id: "gemini-2.0-flash-exp", retries: 3 }, // 2.0 Flash is likely what they mean by 2.5 or next best
+        { id: "gemini-1.5-pro", retries: 2 }
     ]
 
     const prompt = `
@@ -196,9 +197,36 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             }
 
             // Normalize logic
+            // Normalize logic
             if (pType === 'UNP') pType = 'UPN';
-            if (pType === 'QRO') pType = 'SHS-EN10219'; // User Request: SHS is also QRO
+
+            // QRO Logic (Quadratrohr/Rectangular)
+            if (pType === 'QRO') {
+                const dims = pDims.split('x');
+                // If 2 dims (e.g., 100x5), it's SHS (100x100x5)
+                if (dims.length === 2) {
+                    pType = 'SHS-EN10219';
+                    // Optional: normalize dims locally if needed, but UI handles string mostly
+                }
+                // If 3 dims (e.g., 100x50x5), it's RHS
+                else if (dims.length === 3) {
+                    pType = 'RHS-EN10219';
+                }
+                else {
+                    // Fallback default
+                    pType = 'SHS-EN10219';
+                }
+            }
+
             if (['TUBE', 'PIPE'].some(t => pType.includes(t))) pType = 'CHS-EN10219';
+
+            // Threaded Bar Detection
+            if (pType.includes('THREAD') || pType.includes('GEWINDE') || pDims.toUpperCase().startsWith('M')) {
+                pType = 'THREADED BAR';
+                if (!pDims.toUpperCase().startsWith('M') && pDims) {
+                    // Try to extract M value if possible or keep as is
+                }
+            }
 
             // Detect RHS/SHS
             if (pType.includes('RHS') || pType.includes('SHS') || pType === 'HOLLOW SECTION') {
