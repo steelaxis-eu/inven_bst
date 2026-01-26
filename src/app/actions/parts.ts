@@ -43,6 +43,8 @@ export interface CreatePartInput {
     isOutsourcedCut?: boolean
     cutVendor?: string
     drawingRef?: string
+    isSplit?: boolean
+    cutAngles?: string
     notes?: string
 }
 

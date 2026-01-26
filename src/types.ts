@@ -164,6 +164,8 @@ export interface Part {
     isOutsourcedCut: boolean
     cutVendor: string | null
     drawingRef: string | null
+    isSplit: boolean
+    cutAngles: string | null
     notes: string | null
     createdAt: Date
     updatedAt: Date

@@ -159,6 +159,8 @@ export function CreatePartDialog({
     const [description, setDescription] = useState('')
     const [gradeId, setGradeId] = useState('')
     const [quantity, setQuantity] = useState('1')
+    const [isSplit, setIsSplit] = useState(false)
+    const [cutAngles, setCutAngles] = useState('')
 
     // Profile selection state
     const [selectedType, setSelectedType] = useState('')
@@ -325,7 +327,9 @@ export function CreatePartDialog({
                     quantity: parseInt(quantity),
                     requiresWelding,
                     isOutsourcedCut,
-                    cutVendor: isOutsourcedCut ? cutVendor : undefined
+                    cutVendor: isOutsourcedCut ? cutVendor : undefined,
+                    isSplit,
+                    cutAngles: cutAngles || undefined
                 })
 
                 if (!res.success) {
@@ -373,6 +377,8 @@ export function CreatePartDialog({
         setDescription('')
         setGradeId('')
         setQuantity('1')
+        setIsSplit(false)
+        setCutAngles('')
         setSelectedType('')
         setSelectedDim('')
         setCustomDim('')
@@ -534,6 +540,23 @@ export function CreatePartDialog({
                                                 checked={requiresWelding}
                                                 onChange={(e, d) => setRequiresWelding(d.checked)}
                                                 label={requiresWelding ? "Yes" : "No"}
+                                            />
+                                        </Field>
+                                    </div>
+
+                                    <div className={styles.gridTwo} style={{ marginTop: '12px' }}>
+                                        <Field label="Split Profile (e.g. 1/2 HEA)">
+                                            <Switch
+                                                checked={isSplit}
+                                                onChange={(e, d) => setIsSplit(d.checked)}
+                                                label={isSplit ? "Yes" : "No"}
+                                            />
+                                        </Field>
+                                        <Field label="Cut Angles">
+                                            <Input
+                                                value={cutAngles}
+                                                onChange={(e, d) => setCutAngles(d.value)}
+                                                placeholder="e.g. 45-90"
                                             />
                                         </Field>
                                     </div>

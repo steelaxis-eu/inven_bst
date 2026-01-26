@@ -181,6 +181,7 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                 <Badge appearance={part.isOutsourcedCut ? "outline" : "filled"}>
                                     {part.isOutsourcedCut ? "Outsourced" : "In-House"}
                                 </Badge>
+                                {part.isSplit && <Badge appearance="tint" color="brand">1/2 Split</Badge>}
                             </div>
                             <div className={styles.description}>
                                 {part.description || "No description provided"}
@@ -230,6 +231,12 @@ export function PartDetailsDialog({ open, onOpenChange, part, projectId, onUpdat
                                             {(part.unitWeight || part.profile?.weightPerMeter || 0).toFixed(3)} kg/m
                                         </div>
                                     </div>
+                                    {part.cutAngles && (
+                                        <div>
+                                            <div className={styles.label}>Cut Angles</div>
+                                            <div className={styles.value}>{part.cutAngles}</div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
