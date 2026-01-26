@@ -68,7 +68,12 @@ interface WorkOrderItem {
     piece?: {
         id: string
         partId: string
-        part: { partNumber: string }
+        part: {
+            partNumber: string
+            isSplit?: boolean
+            cutAngles?: string | null
+            profile?: { type: string; dimensions: string } | null
+        }
         pieceNumber: number
     } | null
     assembly?: {
@@ -448,11 +453,21 @@ function WorkOrderTable({
                                                                             </TableCell>
                                                                             <TableCell style={{ width: '40px', fontFamily: 'monospace', fontSize: '12px' }}>{idx + 1}</TableCell>
                                                                             <TableCell>
-                                                                                {item.piece
-                                                                                    ? <span style={{ fontWeight: 600 }}>{item.piece.part.partNumber} #{item.piece.pieceNumber}</span>
-                                                                                    : item.assembly ? item.assembly.name
-                                                                                        : item.platePart ? item.platePart.partNumber
-                                                                                            : '-'}
+                                                                                {item.piece ? (
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                                        <span style={{ fontWeight: 600 }}>
+                                                                                            {item.piece.part.partNumber} #{item.piece.pieceNumber}
+                                                                                            {item.piece.part.isSplit && <Badge size="extra-small" appearance="tint" color="brand" style={{ marginLeft: '6px' }}>1/2</Badge>}
+                                                                                        </span>
+                                                                                        {item.piece.part.cutAngles && (
+                                                                                            <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>
+                                                                                                {item.piece.part.cutAngles}
+                                                                                            </Text>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ) : item.assembly ? item.assembly.name
+                                                                                    : item.platePart ? item.platePart.partNumber
+                                                                                        : '-'}
                                                                             </TableCell>
                                                                             <TableCell>
                                                                                 <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{item.notes || '-'}</Text>

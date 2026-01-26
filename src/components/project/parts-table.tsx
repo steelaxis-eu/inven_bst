@@ -35,6 +35,8 @@ interface Part {
     quantity: number
     unitWeight: number
     requiresWelding: boolean
+    isSplit: boolean
+    cutAngles: string | null
     pieces: { id: string; pieceNumber: number; status: string }[]
 }
 
@@ -214,6 +216,7 @@ export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTable
                             <TableHeaderCell>Description</TableHeaderCell>
                             <TableHeaderCell>Profile</TableHeaderCell>
                             <TableHeaderCell>Grade</TableHeaderCell>
+                            <TableHeaderCell>Angles</TableHeaderCell>
                             <TableHeaderCell style={{ textAlign: 'right' }}>Length</TableHeaderCell>
                             <TableHeaderCell style={{ textAlign: 'right' }}>Qty</TableHeaderCell>
                             <TableHeaderCell style={{ textAlign: 'right' }}>Weight</TableHeaderCell>
@@ -241,9 +244,13 @@ export function PartsTable({ parts, projectId, onPieceStatusChange }: PartsTable
                                         <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>{part.partNumber}</TableCell>
                                         <TableCell><Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{part.description || '-'}</Text></TableCell>
                                         <TableCell>
-                                            {part.profile ? `${part.profile.type} ${part.profile.dimensions}` : '-'}
+                                            {part.isSplit && <Badge size="extra-small" appearance="tint" color="brand">1/2</Badge>}
+                                            <span style={{ marginLeft: part.isSplit ? '6px' : '0' }}>
+                                                {part.profile ? `${part.profile.type} ${part.profile.dimensions}` : '-'}
+                                            </span>
                                         </TableCell>
                                         <TableCell>{part.grade?.name || '-'}</TableCell>
+                                        <TableCell style={{ fontSize: '12px' }}>{part.cutAngles || '-'}</TableCell>
                                         <TableCell style={{ textAlign: 'right', fontFamily: 'monospace' }}>
                                             {part.length ? `${part.length.toLocaleString()} mm` : '-'}
                                         </TableCell>
