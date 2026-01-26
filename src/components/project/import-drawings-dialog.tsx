@@ -12,6 +12,10 @@ import {
     Button,
     Input,
     Label,
+    Accordion,
+    AccordionItem,
+    AccordionHeader,
+    AccordionPanel,
     Spinner,
     makeStyles,
     tokens,
@@ -613,11 +617,30 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                                             </DialogTrigger>
                                                             <DialogSurface style={{ minWidth: '600px', maxWidth: '80vw' }}>
                                                                 <DialogBody>
-                                                                    <DialogTitle>Raw AI Response - {part.filename}</DialogTitle>
+                                                                    <DialogTitle>Raw AI Data - {part.partNumber}</DialogTitle>
                                                                     <DialogContent style={{ maxHeight: '600px', overflow: 'auto' }}>
-                                                                        <pre style={{ backgroundColor: tokens.colorNeutralBackground2, padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-                                                                            {JSON.stringify(part.raw, null, 2)}
+                                                                        <Text weight="semibold">Matched Item:</Text>
+                                                                        <pre style={{ backgroundColor: tokens.colorNeutralBackground2, padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', marginBottom: '16px' }}>
+                                                                            {/* Attempt to find the specific part object in the raw array */}
+                                                                            {(() => {
+                                                                                const rawObj = part.raw
+                                                                                const list = rawObj?.parts || (Array.isArray(rawObj) ? rawObj : [rawObj])
+                                                                                // Try match by partNumber
+                                                                                const match = list.find((p: any) => String(p.partNumber) === part.partNumber) || list[0]
+                                                                                return JSON.stringify(match, null, 2)
+                                                                            })()}
                                                                         </pre>
+
+                                                                        <Accordion collapsible>
+                                                                            <AccordionItem value="full">
+                                                                                <AccordionHeader>Full Raw Response (Context)</AccordionHeader>
+                                                                                <AccordionPanel>
+                                                                                    <pre style={{ backgroundColor: tokens.colorNeutralBackground2, padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', fontSize: '12px' }}>
+                                                                                        {JSON.stringify(part.raw, null, 2)}
+                                                                                    </pre>
+                                                                                </AccordionPanel>
+                                                                            </AccordionItem>
+                                                                        </Accordion>
                                                                     </DialogContent>
                                                                     <DialogActions>
                                                                         <DialogTrigger disableButtonEnhancement>
