@@ -3,10 +3,12 @@ import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 
 export default defineConfig({
     project: "proj_bgflxruuqqqbujtgkhry",
-    runtime: "node",
+    runtime: "node-22",
     logLevel: "log",
+
     // Set a reasonable timeout (e.g., 1 hour to process a huge batch)
     maxDuration: 3600,
+
     build: {
         extensions: [
             prismaExtension({
@@ -15,6 +17,7 @@ export default defineConfig({
             }),
         ],
     },
+
     retries: {
         enabledInDev: true,
         default: {
@@ -26,4 +29,3 @@ export default defineConfig({
         },
     },
 });
-
