@@ -8,8 +8,13 @@ if (!connectionString) {
     throw new Error('DATABASE_URL or POSTGRES_PRISMA_URL is not defined')
 }
 
+// Strip sslmode from the connection string to allow explicit Pool config to take precedence
+// This prevents 'sslmode=require' in the URL from forcing 'verify-full' behavior
+const url = new URL(connectionString)
+url.searchParams.delete('sslmode')
+
 const pool = new Pool({
-    connectionString,
+    connectionString: url.toString(),
     ssl: { rejectUnauthorized: false } // Required for many cloud providers (Supabase/Neon)
 })
 const adapter = new PrismaPg(pool)
