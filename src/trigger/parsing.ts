@@ -2,74 +2,80 @@ import { task } from "@trigger.dev/sdk/v3";
 import prisma from "@/lib/prisma";
 import { processDrawingWithGemini } from "@/lib/parsing-logic";
 
+export const processDrawingSingle = task({
+    id: "process-drawing-single",
+    maxDuration: 600, // 10 mins per file max
+    run: async (payload: { id: string }, { ctx }) => {
+        const { id } = payload;
+
+        // 1. Lock & Fetch
+        const job = await prisma.parsedDrawing.findUnique({ where: { id } });
+        if (!job) return; // Should not happen
+
+        try {
+            await prisma.parsedDrawing.update({
+                where: { id },
+                data: { status: 'PROCESSING' }
+            });
+
+            console.log(`[Trigger] Processing job ${id} (${job.filename})...`);
+
+            // 2. Process
+            const { parts: processedParts, raw } = await processDrawingWithGemini(job.fileUrl, job.projectId, job.filename);
+
+            // 3. Complete
+            await prisma.parsedDrawing.update({
+                where: { id },
+                data: {
+                    status: 'COMPLETED',
+                    result: processedParts as any,
+                    rawResponse: raw
+                }
+            });
+            console.log(`[Trigger] Job ${id} completed.`);
+
+        } catch (e: any) {
+            console.error(`[Trigger] Job ${id} failed:`, e);
+            await prisma.parsedDrawing.update({
+                where: { id },
+                data: {
+                    status: 'FAILED',
+                    error: e.message || "Unknown error"
+                }
+            });
+            throw e; // Rethrow to mark task as failed in Trigger.dev dashboard
+        }
+    }
+});
+
 export const processDrawingBatch = task({
     id: "process-drawing-batch",
-    // Set a reasonable timeout (e.g., 1 hour to process a huge batch)
     maxDuration: 3600,
     run: async (payload: { batchId: string }, { ctx }) => {
         const { batchId } = payload;
         console.log(`[Trigger] Starting batch processing for ${batchId}`);
 
-        // Loop until no pending jobs remain
-        while (true) {
-            // 1. Find next pending job
-            const job = await prisma.parsedDrawing.findFirst({
-                where: {
-                    status: 'PENDING',
-                    jobId: batchId
-                },
-                orderBy: { createdAt: 'asc' }
-            });
+        // 1. Find all pending jobs
+        const jobs = await prisma.parsedDrawing.findMany({
+            where: {
+                status: 'PENDING',
+                jobId: batchId
+            },
+            select: { id: true }
+        });
 
-            if (!job) {
-                console.log(`[Trigger] No more pending jobs for batch ${batchId}. Done.`);
-                break;
-            }
-
-            // 2. Optimistic Locking: Set to PROCESSING
-            try {
-                await prisma.parsedDrawing.update({
-                    where: { id: job.id, status: 'PENDING' },
-                    data: { status: 'PROCESSING' }
-                });
-            } catch (e) {
-                // Race condition: someone else took it (unlikely in single worker per batch, but good practice)
-                console.log(`[Trigger] Job ${job.id} already locked. Skipping.`);
-                continue;
-            }
-
-            // 3. Process
-            try {
-                console.log(`[Trigger] Processing job ${job.id} (${job.filename})...`);
-
-                const { parts: processedParts, raw } = await processDrawingWithGemini(job.fileUrl, job.projectId, job.filename);
-
-                await prisma.parsedDrawing.update({
-                    where: { id: job.id },
-                    data: {
-                        status: 'COMPLETED',
-                        result: processedParts as any,
-                        rawResponse: raw
-                    }
-                });
-                console.log(`[Trigger] Job ${job.id} completed.`);
-
-            } catch (e: any) {
-                console.error(`[Trigger] Job ${job.id} failed:`, e);
-                await prisma.parsedDrawing.update({
-                    where: { id: job.id },
-                    data: {
-                        status: 'FAILED',
-                        error: e.message || "Unknown error"
-                    }
-                });
-                // We continue to the next job even if one fails
-            }
-
-            // Small delay to prevent hammering database too hard if loop is tight
-            await new Promise(resolve => setTimeout(resolve, 500));
+        if (jobs.length === 0) {
+            console.log(`[Trigger] No pending jobs for batch ${batchId}.`);
+            return { success: true, count: 0 };
         }
 
-        return { success: true, batchId };
+        console.log(`[Trigger] Fanning out ${jobs.length} jobs...`);
+
+        // 2. Trigger in parallel
+        await processDrawingSingle.batchTrigger(
+            jobs.map(job => ({ payload: { id: job.id } }))
+        );
+
+        return { success: true, count: jobs.length };
     },
 });
