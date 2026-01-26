@@ -1,4 +1,5 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
+import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 
 export default defineConfig({
     project: "proj_bgflxruuqqqbujtgkhry",
@@ -6,6 +7,13 @@ export default defineConfig({
     logLevel: "log",
     // Set a reasonable timeout (e.g., 1 hour to process a huge batch)
     maxDuration: 3600,
+    build: {
+        extensions: [
+            prismaExtension({
+                schema: "prisma/schema.prisma",
+            }),
+        ],
+    },
     retries: {
         enabledInDev: true,
         default: {
@@ -17,4 +25,4 @@ export default defineConfig({
         },
     },
 });
- 
+
