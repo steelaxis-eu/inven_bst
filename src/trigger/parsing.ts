@@ -1,5 +1,5 @@
 import { task } from "@trigger.dev/sdk/v3";
-import prisma from "@/lib/prisma";
+import prisma from "./db";
 import { processDrawingWithGemini } from "@/lib/parsing-logic";
 
 export const processDrawingSingle = task({
