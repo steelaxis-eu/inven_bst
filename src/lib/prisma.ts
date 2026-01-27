@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_PRISMA_URL
 
 if (!connectionString) {
     throw new Error('DATABASE_URL or POSTGRES_PRISMA_URL is not defined')
@@ -14,7 +14,9 @@ url.searchParams.delete('sslmode')
 
 const pool = new Pool({
     connectionString: url.toString(),
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+    max: 10
 })
 const adapter = new PrismaPg(pool)
 
