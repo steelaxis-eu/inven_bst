@@ -13,7 +13,11 @@ if (!connectionString) {
 // We explicitly set log levels for better debugging in Trigger dashboard
 
 const prisma = new PrismaClient({
-    datasourceUrl: connectionString,
+    datasources: {
+        db: {
+            url: connectionString,
+        },
+    },
     log: ['warn', 'error'],
 })
 
