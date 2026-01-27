@@ -122,6 +122,9 @@ export async function getBatchStatus(batchId: string): Promise<{
     failed: number,
     results: ParsedPart[]
 }> {
+    if (!batchId) {
+        return { total: 0, completed: 0, pending: 0, failed: 0, results: [] }
+    }
     const jobs = await prisma.parsedDrawing.findMany({
         where: { jobId: batchId }
     })
@@ -144,6 +147,7 @@ export async function getBatchStatus(batchId: string): Promise<{
 
 export async function cancelImportBatch(batchId: string): Promise<{ success: boolean, deleted?: number }> {
     try {
+        if (!batchId) return { success: false }
         const result = await prisma.parsedDrawing.deleteMany({
             where: { jobId: batchId }
         })

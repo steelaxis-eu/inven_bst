@@ -54,52 +54,70 @@ The **Projects** section is where you manage your fabrication jobs.
 Inside a project, you can define the parts required.
 - **Add Part**: Manually add a part by specifying its profile, dimensions, length, and quantity.
 - **Plate Parts**: Manage parts cut from plates, including thickness and dimensions.
+- **Part Details**: Click on any part to open a comprehensive details view.
+    -   **General**: Specs, quantity, and weight.
+    -   **Production**: Track the status of every individual piece (e.g., "Cut", "Ready") and its material source.
+    -   **Assemblies**: See which assemblies this part belongs to.
+    -   **Drawing**: Preview or download the attached PDF/DXF.
 
 ### Importing Drawings (AI)
-SteelAxis features a powerful AI-assisted import tool to speed up data entry.
-1. Click **Import Drawings** within a project.
-2. **Upload ZIP**: Drag, and drop a ZIP file containing your PDF drawings.
-3. **Choose Mode**:
-    - **Parts Mode**: Extracts individual part details (dims, grade, qty) from drawing files.
-    - **Assembly Mode**: Parses BOM tables from assembly drawings to create assembly structures.
-4. **Review**: The system will present a table of extracted data. Review and correct any details.
-5. **Create**: Click "Create Parts" or "Create Assemblies" to add them to your project automatically.
+SteelAxis features a **Robust AI-assisted import tool** designed to handle large datasets without interruption.
+
+1.  **Upload ZIP**: Drag and drop a ZIP file containing your PDF drawings.
+2.  **Processing**: The system processes files in the background. You will see a progress bar for uploading and unzipping.
+    -   **Robust Mode**: Processing continues even if you close the window. You can return later to resume.
+    -   **Batch Import**: Large projects are handled in batches to prevent timeouts.
+3.  **Review**: Once processed, a table displays all extracted data.
+    -   **Profile vs. Plate**: The AI automatically capitalizes on identifying if a part is a Profile (Beam/Tube) or a Plate based on geometry.
+    -   **Grade Assignment**: Automatically matches material grades (e.g., S355) from drawings to your system's grades.
+    -   **Smart Dimensions**: Standard profiles (HEA, IPE) are validated against your library.
+4.  **Create**: Select the parts you wish to import and click "Create Parts". The system will generate them in your project.
 
 ### Assemblies
 Group parts into **Assemblies** for better organization.
-- Define parent-child relationships (e.g., a "Main Frame" containing "Beams" and "Plates").
-- Track the status of entire assemblies rather than just individual pieces.
+-   **Structure**: Define parent-child relationships (e.g., a "Main Frame" containing "Beams" and "Plates").
+-   **Readiness**: Track which parts of an assembly are ready for welding.
 
 ## Usage & Tracking
 Track where your material goes.
-- **Register Usage**: When you cut material, record it here.
-    - Select the **Inventory Item** used.
-    - Specify the **Project** and **Part** it was used for.
-    - The system automatically creates **Remnants** (offcuts) if the used length is less than the stock length.
-- **Usage History**: View a log of all material consumption for audit purposes.
+-   **Register Usage**: When you cut material, record it here.
+    -   Select the **Inventory Item** used.
+    -   Specify the **Project** and **Part** it was used for.
+    -   The system automatically creates **Remnants** (offcuts) if the used length is less than the stock length.
+-   **Usage History**: View a log of all material consumption for audit purposes.
 
 ## Production (Work Orders)
 Organize tasks for the shop floor using **Work Orders**. The system intelligently suggests workflows based on material availability.
 
 ### Creating Work Orders
-- **Smart Creation**: Select parts from the project list and click "Create Work Order".
-- **Optimization Preview**: For "Cutting" orders, see an instant 1D nesting preview to know how many bars are needed vs. available in stock.
-- **Split Logic**: If you select 100 parts but only have material for 50, the system offers to split the order:
-    - **Ready**: Creates a Work Order for the 50 parts you can cut now.
-    - **Needs Material**: Creates a Material Prep Work Order for the remaining 50.
+#### For Individual Parts (Cutting WOs)
+1.  **Select Parts**: Choose parts from the project list.
+2.  **Optimization Preview**: The system runs a 1D nesting algorithm to check stock.
+    -   **From Stock**: Identifies existing bars or remnants to use.
+    -   **To Order**: Lists new material required if stock is insufficient.
+3.  **Create**: Generates specific "Material Cutting" work orders linked to inventory.
+
+#### For Assemblies (Welding WOs)
+1.  **Check Readiness**: improving production flow, the system first checks if all child parts for selected assemblies are cut and ready.
+    -   **Ready**: If all parts are available, a **Welding WO** is created immediately.
+    -   **Not Ready**: If parts are missing, the system suggests a **Material Plan**.
+2.  **Material Planning**:
+    -   Automatically creates **Material Prep WOs** (for purchasing/cutting) for the missing items.
+    -   Reserves the necessary stock length (e.g., 6m or 12m bars) for the missing profiles.
 
 ### Work Order Types
-- **Cutting**: Links to inventory. Completing this generates "Cut" pieces.
-- **Machining**: Optional step for drilling/milling.
-- **Fabrication/Welding**: Assemble parts into components.
-    - **Validation**: Welding WOs cannot be completed until a Visual Testing (VT) Quality Check is passed.
-- **Outsourced / HDG**: For parts sent to external vendors (Galvanizing, Laser Cutting).
-    - **Drawing Bundling**: Automatically compiles all relevant PDF/DXF drawings into a ZIP file for the vendor.
+-   **Material Cutting**: Process raw stock into cut pieces.
+-   **Welding / Assembly**: Join cut pieces into final assemblies.
+-   **Fabrication**: General fabrication tasks.
+-   **Surface Treatment**: Painting, sandblasting, or coating.
+-   **Machining**: Drilling, milling, or advanced processing.
+-   **Inspection / QC**: Formal quality check steps.
+-   **Logistics**: Internal transport or site delivery.
+-   **Outsourced**: Tracks work sent to external vendors (e.g., Galvanizing).
 
 ### Status Tracking
-- **Blocked**: WOs waiting for previous steps (e.g., Welding waits for Cutting).
-- **In Progress**: Work has started.
-- **Completed**: Finished work. Updates individual piece statuses automatically.
+-   **Status Flow**: Work Orders move from `Pending` -> `In Progress` -> `Completed`.
+-   **Automatic Updates**: Completing a "Cutting WO" automatically updates the status of the related Parts to "Ready" for the next stage (Welding).
 
 ## Quality Control
 Ensure your products meet standards using the dedicated **Quality Tab**.

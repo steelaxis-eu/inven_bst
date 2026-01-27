@@ -180,6 +180,7 @@ model Project {
   documents         ProjectDocument[]
   plateParts        PlatePart[]
   optimizationJobs  OptimizationJob[]
+  parsedDrawings    ParsedDrawing[]
 }
 
 
@@ -797,6 +798,8 @@ model ParsedDrawing {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
+  project     Project  @relation(fields: [projectId], references: [id])
+
   @@index([jobId])
   @@index([status])
   @@index([projectId])
