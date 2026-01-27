@@ -12,13 +12,11 @@ if (!connectionString) {
 // For standard client, we generally pass the URL directly.
 // We explicitly set log levels for better debugging in Trigger dashboard
 
+// Set the enviroment variable so prisma.config.ts picks it up
+process.env.DATABASE_URL = connectionString
+
 const prisma = new PrismaClient({
-    datasources: {
-        db: {
-            url: connectionString,
-        },
-    },
     log: ['warn', 'error'],
-} as any)
+})
 
 export default prisma
