@@ -81,6 +81,8 @@ interface ReviewPart {
     errorMsg?: string
     warnings?: string[]
     raw?: any
+    isSplit?: boolean
+    cutAngles?: string
 }
 
 interface ImportDrawingsDialogProps {
@@ -221,6 +223,8 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                 selectedProfileType: p.profileType ? p.profileType.toUpperCase() : undefined,
                                 selectedProfileDim: p.profileDimensions,
                                 selectedGradeId: matchedGrade?.id,
+                                isSplit: p.isSplit,
+                                cutAngles: p.cutAngles,
                                 status: 'PENDING'
                             } as ReviewPart
                         })
@@ -347,6 +351,8 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                         profileType: part.selectedProfileType,
                         profileDimensions: part.selectedProfileDim,
                         length: part.length || 0,
+                        isSplit: part.isSplit,
+                        cutAngles: part.cutAngles,
                         drawingRef: part.drawingRef,
                         notes: `Imported from ${part.filename}`
                     })
@@ -510,6 +516,7 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                             <TableHeaderCell style={{ width: '80px' }}>Qty</TableHeaderCell>
                                             <TableHeaderCell style={{ width: '200px' }}>Grade</TableHeaderCell>
                                             <TableHeaderCell style={{ width: 'auto', minWidth: '500px' }}>Dimensions</TableHeaderCell>
+                                            <TableHeaderCell style={{ width: '140px' }}>Split / Angles</TableHeaderCell>
                                             <TableHeaderCell style={{ width: '48px' }}></TableHeaderCell>
                                         </TableRow>
                                     </TableHeader>
@@ -604,6 +611,25 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                                                 ))}
                                                             </Combobox>
                                                             <Input placeholder="L" value={part.length?.toString()} onChange={(e, d) => updatePart(part.id, { length: parseFloat(d.value) })} style={{ width: '100px' }} />
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell style={{ verticalAlign: 'top', paddingTop: '12px' }}>
+                                                    {part.type === 'PROFILE' && (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                            <Checkbox
+                                                                checked={part.isSplit || false}
+                                                                onChange={(e, d) => updatePart(part.id, { isSplit: d.checked as boolean })}
+                                                                label="Split (1/2)"
+                                                            />
+                                                            {part.isSplit && (
+                                                                <Input
+                                                                    placeholder="Angles (e.g. 45-90)"
+                                                                    value={part.cutAngles || ''}
+                                                                    onChange={(e, d) => updatePart(part.id, { cutAngles: d.value })}
+                                                                    style={{ width: '100%' }}
+                                                                />
+                                                            )}
                                                         </div>
                                                     )}
                                                 </TableCell>
