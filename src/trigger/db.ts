@@ -1,22 +1,34 @@
 import { PrismaClient } from '@prisma/client'
+import { Pool } from 'pg'
+import { PrismaPg } from '@prisma/adapter-pg'
 
-// Use standard Prisma Client for Trigger.dev (Node.js runtime)
-// This avoids issues with the Vercel/Edge adapter config
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_PRISMA_URL
+// Trigger.dev environment isolated Prisma setup
+// 1. Must use adapter because schema has "driverAdapters" enabled
+// 2. Must use robust pool settings to avoid "Connection terminated"
+
+const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL
 
 if (!connectionString) {
-    throw new Error('No valid database connection string found (DATABASE_URL, POSTGRES_URL_NON_POOLING, or POSTGRES_PRISMA_URL)')
+    throw new Error('Missing database connection string (POSTGRES_URL_NON_POOLING or DATABASE_URL)')
 }
 
-// Strip sslmode if present to avoid conflicts, though standard client handles it well usually.
-// For standard client, we generally pass the URL directly.
-// We explicitly set log levels for better debugging in Trigger dashboard
+// Minimal, robust pool for Serverless/Container processing
+const pool = new Pool({
+    connectionString,
+    // Reduce connection count for isolated jobs
+    max: 2,
+    // Increase timeouts to handle network latency or cold starts
+    connectionTimeoutMillis: 30000,
+    idleTimeoutMillis: 30000,
+    // SSL required for Supabase/Neon usually
+    ssl: { rejectUnauthorized: false }
+})
 
-// Set the enviroment variable so prisma.config.ts picks it up
-process.env.DATABASE_URL = connectionString
+const adapter = new PrismaPg(pool)
 
 const prisma = new PrismaClient({
-    log: ['warn', 'error'],
+    adapter,
+    log: ['warn', 'error']
 })
 
 export default prisma
