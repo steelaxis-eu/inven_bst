@@ -208,6 +208,7 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             // Normalize logic
             // Normalize logic
             if (pType === 'UNP') pType = 'UPN';
+            if (pType === 'RO') pType = 'CHS-EN10219';
 
             // Round Bar Normalization
             // Handle "Round bar", "RD", "R", etc. -> "R"
@@ -254,7 +255,8 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             if (['TUBE', 'PIPE'].some(t => pType.includes(t))) pType = 'CHS-EN10219';
 
             // Threaded Bar Detection
-            if (pType.includes('THREAD') || pType.includes('GEWINDE') || pDims.toUpperCase().startsWith('M')) {
+            const descriptionCheck = (data.description || data.title || "").toUpperCase();
+            if (pType.includes('THREAD') || pType.includes('GEWINDE') || descriptionCheck.includes('GEWINDESTANGE') || descriptionCheck.includes('THREADED') || pDims.toUpperCase().startsWith('M')) {
                 pType = 'THREADED BAR';
                 if (!pDims.toUpperCase().startsWith('M') && pDims) {
                     // Try to extract M value if possible or keep as is

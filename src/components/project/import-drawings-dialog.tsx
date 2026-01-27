@@ -622,14 +622,12 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                                                 onChange={(e, d) => updatePart(part.id, { isSplit: d.checked as boolean })}
                                                                 label="Split (1/2)"
                                                             />
-                                                            {part.isSplit && (
-                                                                <Input
-                                                                    placeholder="Angles (e.g. 45-90)"
-                                                                    value={part.cutAngles || ''}
-                                                                    onChange={(e, d) => updatePart(part.id, { cutAngles: d.value })}
-                                                                    style={{ width: '100%' }}
-                                                                />
-                                                            )}
+                                                            <Input
+                                                                placeholder="Angles (e.g. 45-90)"
+                                                                value={part.cutAngles || ''}
+                                                                onChange={(e, d) => updatePart(part.id, { cutAngles: d.value })}
+                                                                style={{ width: '100%' }}
+                                                            />
                                                         </div>
                                                     )}
                                                 </TableCell>
