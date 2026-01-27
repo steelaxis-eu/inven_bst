@@ -44,6 +44,8 @@ export const processDrawingSingle = task({
                 }
             });
             throw e; // Rethrow to mark task as failed in Trigger.dev dashboard
+        } finally {
+            await prisma.$disconnect();
         }
     }
 });
@@ -72,10 +74,14 @@ export const processDrawingBatch = task({
         console.log(`[Trigger] Fanning out ${jobs.length} jobs...`);
 
         // 2. Trigger in parallel
-        await processDrawingSingle.batchTrigger(
-            jobs.map(job => ({ payload: { id: job.id } }))
-        );
+        try {
+            await processDrawingSingle.batchTrigger(
+                jobs.map(job => ({ payload: { id: job.id } }))
+            );
 
-        return { success: true, count: jobs.length };
+            return { success: true, count: jobs.length };
+        } finally {
+            await prisma.$disconnect();
+        }
     },
 });

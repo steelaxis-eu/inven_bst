@@ -26,9 +26,20 @@ const pool = new Pool({
 
 const adapter = new PrismaPg(pool)
 
-const prisma = new PrismaClient({
-    adapter,
-    log: ['warn', 'error']
-})
+
+const prismaClientSingleton = () => {
+    return new PrismaClient({
+        adapter,
+        log: ['warn', 'error']
+    })
+}
+
+declare global {
+    var prisma_trigger: undefined | ReturnType<typeof prismaClientSingleton>
+}
+
+const prisma = globalThis.prisma_trigger ?? prismaClientSingleton()
 
 export default prisma
+
+if (process.env.NODE_ENV !== 'production') globalThis.prisma_trigger = prisma
