@@ -132,7 +132,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
     `
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-3.0-flash-preview",
+        model: "gemini-3-flash-preview",
         generationConfig: { responseMimeType: "application/json", responseSchema: schema }
     })
 
@@ -223,7 +223,7 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
     } as any
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-3.0-flash-preview",
+        model: "gemini-3-flash-preview",
         generationConfig: { responseMimeType: "application/json", responseSchema: schema }
     })
 

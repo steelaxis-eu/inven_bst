@@ -259,7 +259,7 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
     } as any
 
     const modelCandidates = [
-        { id: "gemini-3.0-flash-preview", retries: 2 }, // User preference: High speed & reasoning
+        { id: "gemini-3-flash-preview", retries: 2 }, // User preference: High speed & reasoning
         { id: "gemini-1.5-pro", retries: 1 }          // Reliable fallback for complex docs
     ]
 
