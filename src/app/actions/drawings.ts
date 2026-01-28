@@ -124,7 +124,7 @@ export async function getBatchStatus(batchId: string): Promise<{
     totalPartsFound: number
 }> {
     if (!batchId) {
-        return { total: 0, completed: 0, pending: 0, failed: 0, results: [] }
+        return { total: 0, completed: 0, pending: 0, failed: 0, results: [], totalPartsFound: 0 }
     }
     const jobs = await prisma.parsedDrawing.findMany({
         where: { jobId: batchId }
