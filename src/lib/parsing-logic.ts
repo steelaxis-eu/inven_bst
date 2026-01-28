@@ -1,6 +1,10 @@
 import { createServiceClient } from '@/lib/supabase-service'
 import { v4 as uuidv4 } from 'uuid'
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai'
+import { GoogleAIFileManager } from "@google/generative-ai/server"
+import fs from 'fs/promises'
+import path from 'path'
+import os from 'os'
 
 // ============================================================================
 // Interfaces
@@ -91,6 +95,7 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
     if (!apiKey) throw new Error("GEMINI_API_KEY missing")
 
     const genAI = new GoogleGenerativeAI(apiKey)
+    const fileManager = new GoogleAIFileManager(apiKey)
 
     const schema = {
         type: SchemaType.OBJECT,
@@ -156,9 +161,25 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
                 timeout: 600000 // 10 minutes timeout for large PDFs
             });
 
+            // 1. Save buffer to temp file
+            const tempFilePath = path.join(os.tmpdir(), `upload-${uuidv4()}.pdf`);
+            await fs.writeFile(tempFilePath, buffer);
+
+            // 2. Upload to Gemini
+            const uploadResult = await fileManager.uploadFile(tempFilePath, {
+                mimeType: "application/pdf",
+                displayName: filename,
+            });
+
+            // 3. Delete local temp file
+            await fs.unlink(tempFilePath);
+
             // Retry network errors
             const result = await retryWithBackoff(() =>
-                model.generateContent([{ inlineData: { data: base64Pdf, mimeType: "application/pdf" } }, prompt]),
+                model.generateContent([
+                    { fileData: { mimeType: uploadResult.file.mimeType, fileUri: uploadResult.file.uri } },
+                    prompt
+                ]),
                 candidate.retries
             );
 
