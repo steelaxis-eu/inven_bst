@@ -27,8 +27,8 @@ export async function createPartsBatch(input: { projectId: string, parts: BatchP
         const { projectId, parts } = input
         if (!parts.length) return { success: true, count: 0 }
 
-        // Pre-load calculator integration if needed
-        const { calculateProfileWeight } = await import('@/app/actions/calculator')
+        // Pre-load calculator integration (internal version)
+        const { calculateProfileWeightInternal } = await import('@/lib/profile-calculation')
 
         // Use interactive transaction with higher timeout for batch processing
         const result = await prisma.$transaction(async (tx) => {
@@ -48,7 +48,7 @@ export async function createPartsBatch(input: { projectId: string, parts: BatchP
                         const profile = await tx.steelProfile.findUnique({ where: { id: rest.profileId } })
                         if (profile) weightPerMeter = profile.weightPerMeter
                     } else if (rest.profileType && rest.profileDimensions) {
-                        const calculated = await calculateProfileWeight(rest.profileType, {
+                        const calculated = await calculateProfileWeightInternal(tx as any, rest.profileType, {
                             dimensions: rest.profileDimensions,
                             gradeId: rest.gradeId
                         })
