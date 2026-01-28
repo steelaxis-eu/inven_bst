@@ -69,7 +69,7 @@ function processDxf(filename: string, storagePath: string): { parts: ParsedPart[
 async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: string): Promise<{ parts: ParsedPart[], raw: any }> {
     // 1. Convert Excel to Text/CSV representation for AI
     const workbook = new ExcelJS.Workbook()
-    await workbook.xlsx.load(buffer)
+    await workbook.xlsx.load(buffer as any)
 
     const worksheet = workbook.worksheets[0] // Assume first sheet
     if (!worksheet) throw new Error("Excel file is empty")
