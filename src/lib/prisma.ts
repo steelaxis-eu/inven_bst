@@ -12,16 +12,15 @@ if (!connectionString) {
 const url = new URL(connectionString)
 url.searchParams.delete('sslmode')
 
-const pool = new Pool({
-    connectionString: url.toString(),
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 20000, // Increased wait time for a slot
-    max: 1, // STRICT LIMIT: 1 connection per instance to avoid MaxClientsInSessionMode
-    idleTimeoutMillis: 20000
-})
-const adapter = new PrismaPg(pool)
-
 const prismaClientSingleton = () => {
+    const pool = new Pool({
+        connectionString: url.toString(),
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 20000,
+        max: 1,
+        idleTimeoutMillis: 20000
+    })
+    const adapter = new PrismaPg(pool)
     return new PrismaClient({ adapter })
 }
 
