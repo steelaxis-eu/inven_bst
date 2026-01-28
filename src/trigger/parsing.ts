@@ -5,6 +5,9 @@ import { processDrawingWithGemini } from "@/lib/parsing-logic";
 export const processDrawingSingle = task({
     id: "process-drawing-single",
     maxDuration: 900, // 15 mins to match Gemini timeout + buffer
+    queue: {
+        concurrencyLimit: 10, // Limit to 10 concurrent processing tasks to save DB connections
+    },
     run: async (payload: { id: string }, { ctx }) => {
         const { id } = payload;
 
@@ -44,9 +47,8 @@ export const processDrawingSingle = task({
                 }
             });
             throw e; // Rethrow to mark task as failed in Trigger.dev dashboard
-        } finally {
-            await prisma.$disconnect();
         }
+        // Do NOT disconnect the singleton client. Let idleTimeout handle it.
     }
 });
 

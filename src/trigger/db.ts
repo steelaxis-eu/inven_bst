@@ -15,8 +15,8 @@ if (!connectionString) {
 // Minimal, robust pool for Serverless/Container processing
 const pool = new Pool({
     connectionString,
-    // Reduce connection count for isolated jobs
-    max: 2,
+    // Reduce connection count for isolated jobs. 1 is enough for sequential processing.
+    max: 1,
     // Increase timeouts to handle network latency or cold starts
     connectionTimeoutMillis: 30000,
     idleTimeoutMillis: 30000,
