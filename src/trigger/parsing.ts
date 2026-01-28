@@ -4,7 +4,7 @@ import { processDrawingWithGemini } from "@/lib/parsing-logic";
 
 export const processDrawingSingle = task({
     id: "process-drawing-single",
-    maxDuration: 600, // 10 mins per file max
+    maxDuration: 900, // 15 mins to match Gemini timeout + buffer
     run: async (payload: { id: string }, { ctx }) => {
         const { id } = payload;
 
