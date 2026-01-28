@@ -50,8 +50,14 @@ import {
 import { toast } from 'sonner'
 import JSZip from 'jszip'
 import { v4 as uuidv4 } from 'uuid'
-import { uploadSmartFile, createSmartImportBatch, getSmartBatchStatus } from '@/app/actions/smart-import'
+import {
+    uploadSmartFile,
+    createSmartImportBatch,
+    getSmartBatchStatus,
+    addToSmartBatch
+} from '@/app/actions/smart-import'
 import { createPartsBatch, BatchPartInput } from '@/app/actions/parts'
+import { ParsedPart } from '@/lib/smart-parsing-logic'
 
 // Interfaces
 interface ReviewPart {
@@ -195,6 +201,8 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
 
     // Review State
     const [parts, setParts] = useState<ReviewPart[]>([])
+    const [showSlowWarning, setShowSlowWarning] = useState(false)
+    const [startTime, setStartTime] = useState(0)
 
     // Polling Effect
     useEffect(() => {
@@ -214,7 +222,7 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
                     if (status.results.length > 0) {
                         setParts(prevParts => {
                             const newParts = [...prevParts]
-                            status.results.forEach(resPart => {
+                            status.results.forEach((resPart: ParsedPart) => {
                                 const exists = newParts.find(p => p.id === resPart.id)
                                 if (!exists) {
                                     // Map ParsedPart to ReviewPart
@@ -343,42 +351,45 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
     const startProcessing = async () => {
         setStep('processing')
         setUploadProgress({ current: 0, total: scannedFiles.length, status: 'UPLOADING' })
+        setStartTime(Date.now())
+        setShowSlowWarning(false)
 
-        const uploadMetadata: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' }[] = []
+        // Generate a new Batch ID immediately
+        const newBatchId = uuidv4()
+        setBatchId(newBatchId)
 
         try {
-            // Upload in chunks
+            // Processing Loop
             const CHUNK_SIZE = 5
             for (let i = 0; i < scannedFiles.length; i += CHUNK_SIZE) {
                 const chunk = scannedFiles.slice(i, i + CHUNK_SIZE)
+
+                // 1. Upload Chunk
+                const chunkMetadata: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' }[] = []
+
                 await Promise.all(chunk.map(async (entry) => {
                     const formData = new FormData()
-                    formData.append('file', entry.file, entry.name) // name ensures filename is passed correctly even for blobs
+                    formData.append('file', entry.file, entry.name)
 
                     const res = await uploadSmartFile(formData, projectId)
                     if (res.success && res.storagePath) {
-                        uploadMetadata.push({ filename: entry.name, storagePath: res.storagePath, type: entry.type as 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' })
+                        chunkMetadata.push({ filename: entry.name, storagePath: res.storagePath, type: entry.type as 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' })
                     }
                 }))
-                setUploadProgress(prev => ({ ...prev, current: Math.min(prev.current + chunk.length, scannedFiles.length) }))
+
+                // 2. Add to Batch & Trigger Processing IMMEDIATELY
+                if (chunkMetadata.length > 0) {
+                    await addToSmartBatch(newBatchId, chunkMetadata, projectId)
+                }
+
+                setUploadProgress(prev => ({
+                    ...prev,
+                    current: Math.min(prev.current + chunk.length, scannedFiles.length)
+                }))
             }
 
-            if (uploadMetadata.length === 0) {
-                toast.error("Upload failed")
-                setStep('manifest')
-                return
-            }
-
-            setUploadProgress(prev => ({ ...prev, status: 'QUEUED' }))
-
-            const batchRes = await createSmartImportBatch(uploadMetadata, projectId)
-            if (batchRes.success && batchRes.batchId) {
-                setBatchId(batchRes.batchId)
-                // Polling Effect takes over
-            } else {
-                toast.error("Failed to create batch")
-                setStep('manifest')
-            }
+            setUploadProgress(prev => ({ ...prev, status: 'COMPLETED' }))
+            // Note: We don't call createSmartImportBatch anymore because addToSmartBatch handles it incrementally
 
         } catch (e: any) {
             console.error(e)
@@ -479,10 +490,53 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
                         )}
 
                         {step === 'processing' && (
-                            <div className={styles.uploadArea} style={{ cursor: 'default' }}>
-                                <Spinner size="large" />
-                                <Text size={500} weight="semibold" style={{ marginTop: 16 }}>Processing with AI...</Text>
-                                <Text>This is a stub.</Text>
+                            <div className={styles.uploadArea} style={{ cursor: 'default', justifyContent: 'center', gap: '32px' }}>
+                                {/* Upload Section */}
+                                <div style={{ width: '100%', maxWidth: '400px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            {uploadProgress.status === 'UPLOADING' ? <Spinner size="tiny" /> : <ArrowUploadRegular />}
+                                            <Text weight="semibold">Syncing to Cloud</Text>
+                                        </div>
+                                        <Text>{uploadProgress.current} / {uploadProgress.total}</Text>
+                                    </div>
+                                    <ProgressBar
+                                        value={uploadProgress.total > 0 ? uploadProgress.current / uploadProgress.total : 0}
+                                        color={uploadProgress.status === 'COMPLETED' ? 'success' : 'brand'}
+                                    />
+                                </div>
+
+                                {/* Processing Section */}
+                                <div style={{ width: '100%', maxWidth: '400px', opacity: uploadProgress.current > 0 ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            {(processingStats.pending > 0 || processingStats.total === 0) && uploadProgress.status === 'COMPLETED' ? <Spinner size="tiny" /> : <BeakerRegular />}
+                                            <Text weight="semibold">AI Analysis</Text>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 12 }}>
+                                            {processingStats.failed > 0 && (
+                                                <Badge color="danger" icon={<WarningRegular />}>{processingStats.failed} Failed</Badge>
+                                            )}
+                                            <Text>{processingStats.completed} / {scannedFiles.length}</Text>
+                                        </div>
+                                    </div>
+                                    <ProgressBar
+                                        value={(scannedFiles.length > 0) ? (processingStats.completed / scannedFiles.length) : 0}
+                                        thickness="large"
+                                        color={scannedFiles.length > 0 && scannedFiles.length === processingStats.completed ? "success" : "brand"}
+                                    />
+                                    {processingStats.totalPartsFound > 0 && (
+                                        <Text size={200} style={{ display: 'block', marginTop: 4, textAlign: 'right', color: tokens.colorPaletteGreenForeground1 }}>
+                                            Found {processingStats.totalPartsFound} parts so far
+                                        </Text>
+                                    )}
+                                </div>
+
+                                {showSlowWarning && (
+                                    <Badge color="warning" icon={<WarningRegular />}>
+                                        AI is taking longer than expected. You can wait or close this dialog - it will finish in the background.
+                                    </Badge>
+                                )}
                             </div>
                         )}
 

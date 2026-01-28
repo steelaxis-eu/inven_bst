@@ -132,12 +132,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
     `
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash-exp", // User requested 3-flash, but falling back to reliable flash-exp if not sure. Actually, user said 3-flash-preview. I'll try to find it.
-        // Wait, valid models are usually gemini-1.5-flash, gemini-2.0-flash-exp. 
-        // "gemini-3-flash-preview" is likely not yet public/valid in this SDK context or I should check exactly.
-        // Safest is gemini-2.0-flash-exp or 1.5-pro. I'll use 2.0-flash-exp as it is very fast and smart.
-        // Update: User said "gemini3flashpreview". I will try to use "gemini-1.5-flash" or "gemini-2.0-flash-exp". 
-        // Let's use "gemini-2.0-flash-exp" as it's the latest "smart" model.
+        model: "gemini-3.0-flash-preview",
         generationConfig: { responseMimeType: "application/json", responseSchema: schema }
     })
 
@@ -228,7 +223,7 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
     } as any
 
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-3.0-flash-preview",
         generationConfig: { responseMimeType: "application/json", responseSchema: schema }
     })
 

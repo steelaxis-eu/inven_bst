@@ -98,6 +98,37 @@ export async function createSmartImportBatch(
     }
 }
 
+export async function addToSmartBatch(
+    batchId: string,
+    files: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' }[],
+    projectId: string
+): Promise<{ success: boolean, error?: string }> {
+    try {
+        const records = files.map(f => ({
+            id: uuidv4(),
+            jobId: batchId,
+            status: 'PENDING',
+            filename: f.filename,
+            fileUrl: f.storagePath,
+            projectId: projectId
+        }))
+
+        // Create these specific records
+        await prisma.parsedDrawing.createMany({ data: records })
+
+        // Trigger SINGLE processing for each (skip the batch fan-out to run them immediately)
+        await Promise.all(records.map(r =>
+            tasks.trigger("process-smart-import-single", { id: r.id })
+        ))
+
+        return { success: true }
+    } catch (e: any) {
+        console.error("addToSmartBatch Error:", e)
+        return { success: false, error: e.message }
+    }
+}
+
+
 export async function getSmartBatchStatus(batchId: string): Promise<{
     total: number,
     completed: number,
