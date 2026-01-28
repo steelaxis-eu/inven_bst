@@ -13,6 +13,145 @@ import { evaluateFormula } from '@/lib/formula'
 // PART CRUD
 // ============================================================================
 
+import { CreatePlatePartInput } from './plateparts'
+
+export type BatchPartInput =
+    | ({ type: 'PROFILE' } & CreatePartInput)
+    | ({ type: 'PLATE' } & CreatePlatePartInput)
+
+export async function createPartsBatch(input: { projectId: string, parts: BatchPartInput[] }) {
+    try {
+        const user = await getCurrentUser()
+        if (!user?.id) return { success: false, error: 'Unauthorized' }
+
+        const { projectId, parts } = input
+        if (!parts.length) return { success: true, count: 0 }
+
+        // Pre-load calculator integration if needed
+        const { calculateProfileWeight } = await import('@/app/actions/calculator')
+
+        // Use interactive transaction with higher timeout for batch processing
+        const result = await prisma.$transaction(async (tx) => {
+            let count = 0
+
+            for (const item of parts) {
+                if (item.type === 'PROFILE') {
+                    // --- PROFILE PART LOGIC ---
+                    const { type, ...partData } = item as (CreatePartInput & { type: 'PROFILE' })
+                    const { partNumber, quantity, projectId: _pId, ...rest } = partData
+
+                    // Calculate Weight
+                    let unitWeight = 0
+                    let weightPerMeter = 0
+
+                    if (rest.profileId) {
+                        const profile = await tx.steelProfile.findUnique({ where: { id: rest.profileId } })
+                        if (profile) weightPerMeter = profile.weightPerMeter
+                    } else if (rest.profileType && rest.profileDimensions) {
+                        const calculated = await calculateProfileWeight(rest.profileType, {
+                            dimensions: rest.profileDimensions,
+                            gradeId: rest.gradeId
+                        })
+                        if (calculated) weightPerMeter = calculated
+                    }
+
+                    if (weightPerMeter > 0 && rest.length) {
+                        unitWeight = (rest.length / 1000) * weightPerMeter
+                    }
+
+                    // Create Part
+                    const part = await tx.part.create({
+                        data: {
+                            projectId,
+                            partNumber,
+                            quantity,
+                            unitWeight,
+                            ...rest
+                        }
+                    })
+
+                    // Create Pieces
+                    const pieces = Array.from({ length: quantity }, (_, i) => ({
+                        partId: part.id,
+                        pieceNumber: i + 1,
+                        status: PartPieceStatus.PENDING
+                    }))
+                    await tx.partPiece.createMany({ data: pieces })
+                    count++
+
+                } else {
+                    // --- PLATE PART LOGIC ---
+                    const { type, ...partData } = item as (CreatePlatePartInput & { type: 'PLATE' })
+                    const { partNumber, quantity, unitWeight, thickness, width, length, gradeId, drawingRef, projectId: _pId, ...rest } = partData
+
+                    // Calculate Weight
+                    let calculatedWeight = unitWeight || 0
+                    if (!unitWeight && thickness && width && length) {
+                        let density = 7850
+                        if (gradeId) {
+                            const grade = await tx.materialGrade.findUnique({ where: { id: gradeId } })
+                            if (grade?.density) density = grade.density
+                        }
+                        calculatedWeight = (thickness / 1000) * (width / 1000) * (length / 1000) * density
+                    }
+
+                    // Create Plate Part
+                    const part = await tx.platePart.create({
+                        data: {
+                            projectId,
+                            partNumber,
+                            quantity,
+                            thickness,
+                            width,
+                            length,
+                            gradeId,
+                            unitWeight: calculatedWeight,
+                            ...rest
+                        }
+                    })
+
+                    // Link Document
+                    if (drawingRef) {
+                        const filename = drawingRef.split('/').pop() || 'drawing.pdf'
+                        await tx.projectDocument.create({
+                            data: {
+                                projectId,
+                                platePartId: part.id,
+                                type: 'DRAWING',
+                                filename,
+                                storagePath: drawingRef,
+                                uploadedBy: 'System',
+                                description: 'Imported Plate Drawing'
+                            }
+                        })
+                    }
+
+                    // Create Pieces
+                    const pieces = Array.from({ length: quantity }, (_, i) => ({
+                        platePartId: part.id,
+                        pieceNumber: i + 1,
+                        status: 'PENDING' // hardcoded enum for now or import PlatePieceStatus
+                    }))
+                    // safe cast to any to avoid strict enum type issues inside this complex object
+                    await (tx as any).platePiece.createMany({ data: pieces })
+                    count++
+                }
+            }
+            return count
+        }, {
+            maxWait: 5000, // 5s max wait for connection
+            timeout: 30000 // 30s max execution time
+        })
+
+        revalidatePath(`/projects/${projectId}`)
+        return { success: true, count: result }
+
+    } catch (e: any) {
+        console.error('createPartsBatch error:', e)
+        return { success: false, error: e.message || 'Batch creation failed' }
+    }
+}
+
 export async function getProjectPartsCount(projectId: string) {
     try {
         const count = await prisma.part.count({

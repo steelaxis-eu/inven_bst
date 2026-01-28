@@ -50,7 +50,7 @@ import {
     CodeRegular
 } from "@fluentui/react-icons"
 import { toast } from 'sonner'
-import { getProjectPartsCount, createPart } from '@/app/actions/parts'
+import { getProjectPartsCount, createPart, createPartsBatch, BatchPartInput } from '@/app/actions/parts'
 import { createPlatePart } from '@/app/actions/plateparts'
 import { createAssembly } from '@/app/actions/assemblies'
 import { createGrade } from '@/app/actions/grades'
@@ -336,13 +336,18 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
         const partsToCreate = parts.filter(p => p.include && p.status !== 'CREATED')
         if (partsToCreate.length === 0) return
         setCreating(true)
-        let successCount = 0
 
-        for (const part of partsToCreate) {
-            try {
+        try {
+            const batchPayload: BatchPartInput[] = []
+
+            for (const part of partsToCreate) {
                 if (part.type === 'PROFILE') {
-                    if (!part.selectedProfileType || !part.selectedProfileDim) throw new Error("Missing profile info")
-                    await createPart({
+                    if (!part.selectedProfileType || !part.selectedProfileDim) {
+                        toast.error(`Missing info for ${part.partNumber}`)
+                        continue
+                    }
+                    batchPayload.push({
+                        type: 'PROFILE',
                         projectId,
                         partNumber: part.partNumber,
                         description: part.description || undefined,
@@ -357,7 +362,8 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                         notes: `Imported from ${part.filename}`
                     })
                 } else {
-                    await createPlatePart({
+                    batchPayload.push({
+                        type: 'PLATE',
                         projectId,
                         partNumber: part.partNumber,
                         description: part.description || undefined,
@@ -367,19 +373,38 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                         width: part.width || 0,
                         length: part.length || 0,
                         notes: `Imported from ${part.filename}`,
-                        isOutsourced: false
+                        isOutsourced: false,
+                        drawingRef: part.drawingRef
                     })
                 }
-                updatePart(part.id, { status: 'CREATED' })
-                successCount++
-            } catch (e: any) {
-                updatePart(part.id, { status: 'ERROR', errorMsg: e.message || "Failed" })
             }
-        }
-        setCreating(false)
-        if (successCount > 0) {
-            toast.success(`Created ${successCount} parts`)
-            setTimeout(() => window.location.reload(), 1500)
+
+            if (batchPayload.length === 0) {
+                setCreating(false)
+                return
+            }
+
+            const res = await createPartsBatch({ projectId, parts: batchPayload })
+
+            if (res.success) {
+                toast.success(`Created ${res.count} parts successfully`)
+
+                // Mark locally as created
+                setParts(prev => prev.map(p => {
+                    const found = partsToCreate.find(pc => pc.id === p.id)
+                    return found ? { ...p, status: 'CREATED' } : p
+                }))
+
+                setTimeout(() => window.location.reload(), 1500)
+            } else {
+                toast.error(`Batch creation failed: ${res.error}`)
+            }
+
+        } catch (e: any) {
+            toast.error("Failed to create parts batch")
+            console.error(e)
+        } finally {
+            setCreating(false)
         }
     }
 
