@@ -33,8 +33,141 @@ export interface ParsedPart {
 }
 
 // ============================================================================
+// ============================================================================
 // Utilities
 // ============================================================================
+
+export function normalizePartData(type: string, dims: string, warnings: string[] = []): { profileType: string, profileDimensions: string } {
+    let pType = type?.toUpperCase() || "";
+    let pDims = dims || "";
+
+    // Basic cleaning
+    if (pDims) {
+        pDims = pDims.replace(/\*/g, 'x').toLowerCase()
+        const typePrefix = pType.toLowerCase()
+        if (pDims.startsWith(typePrefix)) pDims = pDims.substring(typePrefix.length).trim()
+    }
+
+    // Normalize CHS / Pipe / Tube / RO
+    if (['CHS', 'RO', 'ROUND TUBE', 'PIPE', 'TUBE'].some(t => pType === t || pType.includes(t))) {
+        // Check if it's explicitly NOT a circular hollow section if needed, but for now enforcing CHS-EN10219
+        // Logic: "CHS", "CHS EN 10219", "CHS EN-10219", "RO", "PIPE", "TUBE" -> "CHS-EN10219"
+        if (!pType.includes('RHS') && !pType.includes('SHS')) {
+            pType = 'CHS-EN10219';
+        }
+    }
+
+    // Normalize logic
+    if (pType === 'UNP') pType = 'UPN';
+
+    // Round Bar Normalization
+    // Handle "Round bar", "RD", "R", etc. -> "R"
+    // Be careful not to mix with CHS/RO if logic above didn't catch it, but usually RO is tube in this context? 
+    // Actually, typically RO = Round Bar in some systems, but user requested RO -> CHS EN10219 specifically.
+    // Let's refine based on User Request "any RO, CHS... must default to CHS EN10219"
+    // Note: If previously RO was mapped to Round Bar, this is a change.
+    // Checked previous code: `if (pType === 'RO') pType = 'CHS-EN10219';` existed. So preserving/enhancing that.
+
+    if (pType.toUpperCase() === 'ROUND BAR' || pType.toUpperCase() === 'RD') {
+        pType = 'R';
+    }
+    // If type is R, clean dimensions to digits only (e.g. RD12 -> 12)
+    if (pType === 'R') {
+        pDims = pDims.replace(/[^0-9.,]/g, '').replace(',', '.');
+    }
+
+    // Clean beam dimensions (strip prefix like U200 -> 200, IPE200 -> 200)
+    if (['UPN', 'UPE', 'IPE', 'HEA', 'HEB', 'HEM'].includes(pType)) {
+        // Remove all non-digit/decimal/separator characters from start
+        // e.g. "U 200" -> "200", "IPE200" -> "200"
+        pDims = pDims.replace(/^[a-zA-Z\s]+/, '')
+    }
+
+    // Flag U-Profiles for manual verification (AI often guesses UPN vs UPE)
+    if (['UPN', 'UPE'].includes(pType)) {
+        if (!warnings.includes('Verify UPN vs UPE')) {
+            warnings.push('Verify UPN vs UPE');
+        }
+    }
+
+    // QRO Logic (Quadratrohr/Rectangular)
+    if (pType === 'QRO') {
+        const dims = pDims.split('x');
+        // If 2 dims (e.g., 100x5), it's SHS (100x100x5)
+        if (dims.length === 2) {
+            pType = 'SHS-EN10219';
+            // Optional: normalize dims locally if needed, but UI handles string mostly
+        }
+        // If 3 dims (e.g., 100x50x5), it's RHS
+        else if (dims.length === 3) {
+            pType = 'RHS-EN10219';
+        }
+        else {
+            // Fallback default
+            pType = 'SHS-EN10219';
+        }
+    }
+
+    // Threaded Bar Detection
+    if (pType.includes('THREAD') || pType.includes('GEWINDE') || pDims.toUpperCase().startsWith('M')) {
+        pType = 'THREADED BAR';
+    }
+
+    // Detect RHS/SHS
+    if (pType.includes('RHS') || pType.includes('SHS') || pType === 'HOLLOW SECTION') {
+        const dims = pDims.split('x');
+        const d1 = parseFloat(dims[0]);
+        const d2 = parseFloat(dims[1]);
+        const isThickFormat = dims.length === 2 && d2 < d1 * 0.4; // e.g. 50x5 (10%) = Side x Thick. 100x50 (50%) = W x H.
+
+        if (pType.includes('SHS')) {
+            // Start with SHS. Only switch to RHS if dims are CLEARLY rectangular W x H (not Side x Thick)
+            // and not equal.
+
+            // Case: 50x5 -> SHS (Side x Thick)
+            // Case: 100x50 -> RHS (W x H)
+            // Case: 100x100 -> SHS
+            // Case: 100x50x5 -> RHS
+
+            if (dims.length === 2 && d1 !== d2 && !isThickFormat) {
+                pType = 'RHS-EN10219';
+            } else if (dims.length === 3 && d1 !== d2) {
+                pType = 'RHS-EN10219';
+            } else {
+                pType = 'SHS-EN10219';
+            }
+        } else if (pType.includes('RHS')) {
+            pType = 'RHS-EN10219';
+        } else {
+            // Indeterminate "HOLLOW SECTION"
+            if (dims.length === 2) {
+                if (d1 === d2 || isThickFormat) pType = 'SHS-EN10219';
+                else pType = 'RHS-EN10219';
+            } else if (dims.length > 2) {
+                if (d1 === d2) pType = 'SHS-EN10219';
+                else pType = 'RHS-EN10219';
+            } else {
+                // Default
+                pType = 'RHS-EN10219';
+            }
+        }
+    }
+
+    if (pType === 'RHS') pType = 'RHS-EN10219';
+    if (pType === 'SHS') pType = 'SHS-EN10219';
+
+    // User Request: U-profile Ambiguity Flag
+    // If we have "U200" or just "U" specific type, valid types are UPN or UPE.
+    // If the AI just says "U" or "Channel" or returns "U200" without UPN/UPE distinction.
+    const isAmbiguousU = pType === 'U' || pType === 'CHANNEL' || (pDims.toUpperCase().startsWith('U') && !pType.includes('UPN') && !pType.includes('UPE'));
+
+    if (isAmbiguousU || (pType.includes('U') && !pType.includes('UPN') && !pType.includes('UPE'))) {
+        warnings.push("Ambiguous U-Profile: Verify UPN vs UPE");
+    }
+
+    return { profileType: pType, profileDimensions: pDims };
+}
+
 
 export async function retryWithBackoff<T>(
     operation: () => Promise<T>,
@@ -233,122 +366,14 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             let pDims = data.profileDimensions || "";
             const warnings: string[] = [];
 
-            // Basic cleaning
-            if (pDims) {
-                pDims = pDims.replace(/\*/g, 'x').toLowerCase()
-                const typePrefix = pType.toLowerCase()
-                if (pDims.startsWith(typePrefix)) pDims = pDims.substring(typePrefix.length).trim()
-            }
 
-            // Normalize logic
-            // Normalize logic
-            if (pType === 'UNP') pType = 'UPN';
-            if (pType === 'RO') pType = 'CHS-EN10219';
+            // Use shared normalization logic
+            const { profileType: normalizedType, profileDimensions: normalizedDims } = normalizePartData(pType, pDims, warnings);
+            pType = normalizedType;
+            pDims = normalizedDims;
 
-            // Round Bar Normalization
-            // Handle "Round bar", "RD", "R", etc. -> "R"
-            if (pType.toUpperCase() === 'ROUND BAR' || pType.toUpperCase() === 'RD' || pType.toUpperCase().includes('ROUND')) {
-                pType = 'R';
-            }
-            // If type is R, clean dimensions to digits only (e.g. RD12 -> 12)
-            if (pType === 'R') {
-                pDims = pDims.replace(/[^0-9.,]/g, '').replace(',', '.');
-            }
 
-            // Clean beam dimensions (strip prefix like U200 -> 200, IPE200 -> 200)
-            if (['UPN', 'UPE', 'IPE', 'HEA', 'HEB', 'HEM'].includes(pType)) {
-                // Remove all non-digit/decimal/separator characters from start
-                // e.g. "U 200" -> "200", "IPE200" -> "200"
-                pDims = pDims.replace(/^[a-zA-Z\s]+/, '')
-            }
 
-            // Flag U-Profiles for manual verification (AI often guesses UPN vs UPE)
-            if (['UPN', 'UPE'].includes(pType)) {
-                if (!warnings.includes('Verify UPN vs UPE')) {
-                    warnings.push('Verify UPN vs UPE');
-                }
-            }
-
-            // QRO Logic (Quadratrohr/Rectangular)
-            if (pType === 'QRO') {
-                const dims = pDims.split('x');
-                // If 2 dims (e.g., 100x5), it's SHS (100x100x5)
-                if (dims.length === 2) {
-                    pType = 'SHS-EN10219';
-                    // Optional: normalize dims locally if needed, but UI handles string mostly
-                }
-                // If 3 dims (e.g., 100x50x5), it's RHS
-                else if (dims.length === 3) {
-                    pType = 'RHS-EN10219';
-                }
-                else {
-                    // Fallback default
-                    pType = 'SHS-EN10219';
-                }
-            }
-
-            if (['TUBE', 'PIPE'].some(t => pType.includes(t))) pType = 'CHS-EN10219';
-
-            // Threaded Bar Detection
-            const descriptionCheck = (data.description || data.title || "").toUpperCase();
-            if (pType.includes('THREAD') || pType.includes('GEWINDE') || descriptionCheck.includes('GEWINDESTANGE') || descriptionCheck.includes('THREADED') || pDims.toUpperCase().startsWith('M')) {
-                pType = 'THREADED BAR';
-                if (!pDims.toUpperCase().startsWith('M') && pDims) {
-                    // Try to extract M value if possible or keep as is
-                }
-            }
-
-            // Detect RHS/SHS
-            if (pType.includes('RHS') || pType.includes('SHS') || pType === 'HOLLOW SECTION') {
-                const dims = pDims.split('x');
-                const d1 = parseFloat(dims[0]);
-                const d2 = parseFloat(dims[1]);
-                const isThickFormat = dims.length === 2 && d2 < d1 * 0.4; // e.g. 50x5 (10%) = Side x Thick. 100x50 (50%) = W x H.
-
-                if (pType.includes('SHS')) {
-                    // Start with SHS. Only switch to RHS if dims are CLEARLY rectangular W x H (not Side x Thick)
-                    // and not equal.
-
-                    // Case: 50x5 -> SHS (Side x Thick)
-                    // Case: 100x50 -> RHS (W x H)
-                    // Case: 100x100 -> SHS
-                    // Case: 100x50x5 -> RHS
-
-                    if (dims.length === 2 && d1 !== d2 && !isThickFormat) {
-                        pType = 'RHS-EN10219';
-                    } else if (dims.length === 3 && d1 !== d2) {
-                        pType = 'RHS-EN10219';
-                    } else {
-                        pType = 'SHS-EN10219';
-                    }
-                } else if (pType.includes('RHS')) {
-                    pType = 'RHS-EN10219';
-                } else {
-                    // Indeterminate "HOLLOW SECTION"
-                    if (dims.length === 2) {
-                        if (d1 === d2 || isThickFormat) pType = 'SHS-EN10219';
-                        else pType = 'RHS-EN10219';
-                    } else if (dims.length > 2) {
-                        if (d1 === d2) pType = 'SHS-EN10219';
-                        else pType = 'RHS-EN10219';
-                    } else {
-                        // Default
-                        pType = 'RHS-EN10219';
-                    }
-                }
-            }
-
-            if (pType === 'RHS') pType = 'RHS-EN10219';
-            if (pType === 'SHS') pType = 'SHS-EN10219';
-
-            // User Request: U-profile Ambiguity Flag
-            // If we have "U200" or just "U" specific type, valid types are UPN or UPE.
-            // If the AI just says "U" or "Channel" or returns "U200" without UPN/UPE distinction.
-            const isAmbiguousU = pType === 'U' || pType === 'CHANNEL' || (pDims.toUpperCase().startsWith('U') && !pType.includes('UPN') && !pType.includes('UPE'));
-
-            if (isAmbiguousU || (pType.includes('U') && !pType.includes('UPN') && !pType.includes('UPE'))) {
-                warnings.push("Ambiguous U-Profile: Verify UPN vs UPE");
-            }
 
             // Detect Split Profile manually if AI missed it
             let isSplit = !!data.isSplit;
