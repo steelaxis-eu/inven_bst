@@ -44,7 +44,8 @@ import {
     DocumentTableRegular,
     DocumentRegular,
     FolderRegular,
-    DeleteRegular
+    DeleteRegular,
+    CheckmarkCircleRegular
 } from "@fluentui/react-icons"
 
 import { toast } from 'sonner'
@@ -198,8 +199,17 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
 
     // Processing State
     const [batchId, setBatchId] = useState<string | null>(null)
-    const [processingStats, setProcessingStats] = useState({ total: 0, completed: 0, failed: 0, pending: 0, totalPartsFound: 0 })
+    const [processingStats, setProcessingStats] = useState<{
+        total: number,
+        completed: number,
+        failed: number,
+        pending: number,
+        totalPartsFound: number,
+        fileSummaries: { id: string, filename: string, status: string, error?: string, partCount: number, summary?: string, rawData?: any }[]
+    }>({ total: 0, completed: 0, failed: 0, pending: 0, totalPartsFound: 0, fileSummaries: [] })
     const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, status: 'IDLE' })
+
+    const [inspectFile, setInspectFile] = useState<{ filename: string, summary?: string, rawData?: any } | null>(null)
 
     // Review State
     const [parts, setParts] = useState<ReviewPart[]>([])
@@ -218,7 +228,8 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
                         completed: status.completed,
                         failed: status.failed,
                         pending: status.pending,
-                        totalPartsFound: status.totalPartsFound
+                        totalPartsFound: status.totalPartsFound,
+                        fileSummaries: (status as any).fileSummaries || []
                     }))
 
                     if (status.results.length > 0) {
@@ -483,186 +494,264 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
     }
 
     return (
-        <Dialog open={isDialogOpen} onOpenChange={(e, data) => setIsDialogOpen(data.open)}>
-            <DialogTrigger disableButtonEnhancement>
-                <Button appearance="subtle" icon={<BeakerRegular />} style={{ color: tokens.colorPalettePurpleForeground2 }}>Smart Import (Exp)</Button>
-            </DialogTrigger>
+        <>
+            <Dialog open={isDialogOpen} onOpenChange={(e, data) => setIsDialogOpen(data.open)}>
+                <DialogTrigger disableButtonEnhancement>
+                    <Button appearance="subtle" icon={<BeakerRegular />} style={{ color: tokens.colorPalettePurpleForeground2 }}>Smart Import (Exp)</Button>
+                </DialogTrigger>
 
-            <DialogSurface className={styles.dialogContent}>
-                <DialogBody style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <DialogTitle>Smart Project Import (Experimental)</DialogTitle>
+                <DialogSurface className={styles.dialogContent}>
+                    <DialogBody style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                        <DialogTitle>Smart Project Import (Experimental)</DialogTitle>
 
-                    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                        {step === 'upload' && (
-                            <div
-                                className={`${styles.uploadArea} ${isDragging ? styles.activeUpload : ''}`}
-                                onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
-                                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    setIsDragging(false);
-                                    handleFiles(e.dataTransfer.files)
-                                }}
-                                onClick={() => fileInputRef.current?.click()}
-                            >
-                                <FolderRegular style={{ fontSize: '48px', color: tokens.colorNeutralForeground3 }} />
-                                <div style={{ textAlign: 'center' }}>
-                                    <Text weight="semibold" size={400}>{isDragging ? "Drop Files/Folders here" : "Smart Import Dropzone"}</Text>
-                                    <br />
-                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-                                        Drag & drop ZIPs, PDFs, Excels, DXFs or Folders.<br />
-                                        We'll sort them out automatically.
-                                    </Text>
-                                </div>
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    multiple
-                                    style={{ display: 'none' }}
-                                    accept=".zip,.pdf,.xlsx,.xls,.dxf"
-                                    onChange={(e) => handleFiles(e.target.files)}
-                                />
-                                {isScanning && (
-                                    <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <Spinner size="tiny" />
-                                        <Text>{scanProgress || "Scanning..."}</Text>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {step === 'manifest' && (
-                            <div className={styles.manifestContainer}>
-                                <Text size={500} weight="semibold">Found {scannedFiles.length} files</Text>
-                                <div style={{ marginTop: 16, border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
-                                    <Table size="small">
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHeaderCell>Type</TableHeaderCell>
-                                                <TableHeaderCell>Path / Name</TableHeaderCell>
-                                                <TableHeaderCell>Action</TableHeaderCell>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {scannedFiles.map(file => (
-                                                <TableRow key={file.id}>
-                                                    <TableCell>
-                                                        {file.type === 'PDF' && <Badge icon={<DocumentPdfRegular />} color="danger">PDF</Badge>}
-                                                        {file.type === 'EXCEL' && <Badge icon={<DocumentTableRegular />} color="success">Excel</Badge>}
-                                                        {file.type === 'DXF' && <Badge icon={<BoxRegular />} color="brand">DXF</Badge>}
-                                                        {file.type === 'OTHER' && <Badge icon={<DocumentRegular />} appearance="ghost">Other</Badge>}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Text size={200} style={{ fontFamily: 'monospace' }}>{file.path}</Text>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Button icon={<DeleteRegular />} appearance="subtle" size="small" onClick={() => removeScannedFile(file.id)} />
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 'processing' && (
-                            <div className={styles.uploadArea} style={{ cursor: 'default', justifyContent: 'center', gap: '32px' }}>
-                                {/* Staged Processing Status */}
-                                {processingStage === 'CONFIRM_DRAWINGS' ? (
-                                    <div style={{ textAlign: 'center', padding: 24, background: tokens.colorNeutralBackground2, borderRadius: 8 }}>
-                                        <Text size={500} weight="semibold" block style={{ marginBottom: 12 }}>Drawings Found</Text>
-                                        <Text block style={{ marginBottom: 24 }}>
-                                            We found {scannedFiles.filter(f => f.category === 'DRAWING').length} potential drawings (PDFs) that might need parsing.
-                                            <br />
-                                            Do you want to process them with AI? (This may take longer)
+                        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                            {step === 'upload' && (
+                                <div
+                                    className={`${styles.uploadArea} ${isDragging ? styles.activeUpload : ''}`}
+                                    onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                                    onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setIsDragging(false);
+                                        handleFiles(e.dataTransfer.files)
+                                    }}
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <FolderRegular style={{ fontSize: '48px', color: tokens.colorNeutralForeground3 }} />
+                                    <div style={{ textAlign: 'center' }}>
+                                        <Text weight="semibold" size={400}>{isDragging ? "Drop Files/Folders here" : "Smart Import Dropzone"}</Text>
+                                        <br />
+                                        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                                            Drag & drop ZIPs, PDFs, Excels, DXFs or Folders.<br />
+                                            We'll sort them out automatically.
                                         </Text>
-                                        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                                            <Button appearance="secondary" onClick={skipDrawings}>Skip Drawings</Button>
-                                            <Button appearance="primary" onClick={confirmProcessDrawings}>Process Drawings</Button>
+                                    </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        style={{ display: 'none' }}
+                                        accept=".zip,.pdf,.xlsx,.xls,.dxf"
+                                        onChange={(e) => handleFiles(e.target.files)}
+                                    />
+                                    {isScanning && (
+                                        <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Spinner size="tiny" />
+                                            <Text>{scanProgress || "Scanning..."}</Text>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {step === 'manifest' && (
+                                <div className={styles.manifestContainer}>
+                                    <Text size={500} weight="semibold">Found {scannedFiles.length} files</Text>
+                                    <div style={{ marginTop: 16, border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
+                                        <Table size="small">
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHeaderCell>Type</TableHeaderCell>
+                                                    <TableHeaderCell>Path / Name</TableHeaderCell>
+                                                    <TableHeaderCell>Action</TableHeaderCell>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {scannedFiles.map(file => (
+                                                    <TableRow key={file.id}>
+                                                        <TableCell>
+                                                            {file.type === 'PDF' && <Badge icon={<DocumentPdfRegular />} color="danger">PDF</Badge>}
+                                                            {file.type === 'EXCEL' && <Badge icon={<DocumentTableRegular />} color="success">Excel</Badge>}
+                                                            {file.type === 'DXF' && <Badge icon={<BoxRegular />} color="brand">DXF</Badge>}
+                                                            {file.type === 'OTHER' && <Badge icon={<DocumentRegular />} appearance="ghost">Other</Badge>}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Text size={200} style={{ fontFamily: 'monospace' }}>{file.path}</Text>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Button icon={<DeleteRegular />} appearance="subtle" size="small" onClick={() => removeScannedFile(file.id)} />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 'processing' && (
+                                <div className={styles.uploadArea} style={{ cursor: 'default', justifyContent: 'center', gap: '32px' }}>
+                                    {/* Staged Processing Status */}
+                                    {processingStage === 'CONFIRM_DRAWINGS' ? (
+                                        <div style={{ textAlign: 'center', padding: 24, background: tokens.colorNeutralBackground2, borderRadius: 8 }}>
+                                            <Text size={500} weight="semibold" block style={{ marginBottom: 12 }}>Drawings Found</Text>
+                                            <Text block style={{ marginBottom: 24 }}>
+                                                We found {scannedFiles.filter(f => f.category === 'DRAWING').length} potential drawings (PDFs) that might need parsing.
+                                                <br />
+                                                Do you want to process them with AI? (This may take longer)
+                                            </Text>
+                                            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                                                <Button appearance="secondary" onClick={skipDrawings}>Skip Drawings</Button>
+                                                <Button appearance="primary" onClick={confirmProcessDrawings}>Process Drawings</Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Upload Section */}
+                                            <div style={{ width: '100%', maxWidth: '400px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        {uploadProgress.status === 'UPLOADING' ? <Spinner size="tiny" /> : <ArrowUploadRegular />}
+                                                        <Text weight="semibold">Syncing to Cloud ({processingStage})</Text>
+                                                    </div>
+                                                    <Text>{uploadProgress.current} / {uploadProgress.total}</Text>
+                                                </div>
+                                                <ProgressBar
+                                                    value={uploadProgress.total > 0 ? uploadProgress.current / uploadProgress.total : 0}
+                                                    color={uploadProgress.status === 'COMPLETED' ? 'success' : 'brand'}
+                                                />
+                                            </div>
+
+                                            {/* Processing Section */}
+                                            <div style={{ width: '100%', maxWidth: '400px', opacity: uploadProgress.current > 0 ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        {(processingStats.pending > 0 || processingStats.total === 0) && uploadProgress.status === 'COMPLETED' ? <Spinner size="tiny" /> : <BeakerRegular />}
+                                                        <Text weight="semibold">AI Analysis</Text>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 12 }}>
+                                                        {processingStats.failed > 0 && (
+                                                            <Badge color="danger" icon={<WarningRegular />}>{processingStats.failed} Failed</Badge>
+                                                        )}
+                                                        <Text>{processingStats.completed} / {scannedFiles.filter(f => f.category !== 'ASSET').length}</Text>
+                                                    </div>
+                                                </div>
+                                                <ProgressBar
+                                                    value={(scannedFiles.length > 0) ? (processingStats.completed / Math.max(1, processingStats.total)) : 0}
+                                                    // Note: processingStats.total comes from backend, which only knows about submitted batch items
+                                                    thickness="large"
+                                                    color={processingStats.total > 0 && processingStats.total === processingStats.completed ? "success" : "brand"}
+                                                />
+                                                {processingStats.totalPartsFound > 0 && (
+                                                    <Text size={200} style={{ display: 'block', marginTop: 4, textAlign: 'right', color: tokens.colorPaletteGreenForeground1 }}>
+                                                        Found {processingStats.totalPartsFound} parts so far
+                                                    </Text>
+                                                )}
+                                            </div>
+
+                                            {showSlowWarning && (
+                                                <Badge color="warning" icon={<WarningRegular />}>
+                                                    AI is taking longer than expected. You can wait or close this dialog - it will finish in the background.
+                                                </Badge>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            {step === 'review' && (
+                                <div className={styles.uploadArea} style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ padding: '16px', borderBottom: `1px solid ${tokens.colorNeutralStroke2}` }}>
+                                        <Text weight="semibold" size={400}>Import Summary</Text>
+                                        <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+                                            <Badge color="subtle">{processingStats.total} Files</Badge>
+                                            <Badge color="success">{processingStats.completed} Processed</Badge>
+                                            <Badge color="brand">{processingStats.totalPartsFound} Parts Found</Badge>
+                                            {processingStats.failed > 0 && <Badge color="danger">{processingStats.failed} Failed</Badge>}
                                         </div>
                                     </div>
-                                ) : (
-                                    <>
-                                        {/* Upload Section */}
-                                        <div style={{ width: '100%', maxWidth: '400px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    {uploadProgress.status === 'UPLOADING' ? <Spinner size="tiny" /> : <ArrowUploadRegular />}
-                                                    <Text weight="semibold">Syncing to Cloud ({processingStage})</Text>
-                                                </div>
-                                                <Text>{uploadProgress.current} / {uploadProgress.total}</Text>
-                                            </div>
-                                            <ProgressBar
-                                                value={uploadProgress.total > 0 ? uploadProgress.current / uploadProgress.total : 0}
-                                                color={uploadProgress.status === 'COMPLETED' ? 'success' : 'brand'}
-                                            />
-                                        </div>
+                                    <div style={{ flex: 1, overflow: 'auto' }}>
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHeaderCell>File</TableHeaderCell>
+                                                    <TableHeaderCell>Status</TableHeaderCell>
+                                                    <TableHeaderCell>Parts</TableHeaderCell>
+                                                    <TableHeaderCell>Insights</TableHeaderCell>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {processingStats.fileSummaries.map(f => (
+                                                    <TableRow key={f.id}>
+                                                        <TableCell><Text style={{ fontFamily: 'monospace' }}>{f.filename}</Text></TableCell>
+                                                        <TableCell>
+                                                            {f.status === 'COMPLETED' && <Badge appearance="tint" color="success" icon={<CheckmarkCircleRegular />}>Done</Badge>}
+                                                            {f.status === 'FAILED' && <Badge appearance="tint" color="danger" icon={<WarningRegular />}>Failed</Badge>}
+                                                            {f.status === 'PENDING' && <Spinner size="tiny" />}
+                                                        </TableCell>
+                                                        <TableCell>{f.partCount > 0 ? f.partCount : '-'}</TableCell>
+                                                        <TableCell>
+                                                            {f.status === 'COMPLETED' && (f.summary || f.rawData) && (
+                                                                <Button size="small" appearance="subtle" icon={<CodeRegular />} onClick={() => setInspectFile({ filename: f.filename, summary: f.summary, rawData: f.rawData })}>
+                                                                    Inspect
+                                                                </Button>
+                                                            )}
+                                                            {f.error && <Text style={{ color: tokens.colorPaletteRedForeground1 }}>{f.error}</Text>}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            )}
 
-                                        {/* Processing Section */}
-                                        <div style={{ width: '100%', maxWidth: '400px', opacity: uploadProgress.current > 0 ? 1 : 0.5, transition: 'opacity 0.3s' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    {(processingStats.pending > 0 || processingStats.total === 0) && uploadProgress.status === 'COMPLETED' ? <Spinner size="tiny" /> : <BeakerRegular />}
-                                                    <Text weight="semibold">AI Analysis</Text>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: 12 }}>
-                                                    {processingStats.failed > 0 && (
-                                                        <Badge color="danger" icon={<WarningRegular />}>{processingStats.failed} Failed</Badge>
-                                                    )}
-                                                    <Text>{processingStats.completed} / {scannedFiles.filter(f => f.category !== 'ASSET').length}</Text>
-                                                </div>
-                                            </div>
-                                            <ProgressBar
-                                                value={(scannedFiles.length > 0) ? (processingStats.completed / Math.max(1, processingStats.total)) : 0}
-                                                // Note: processingStats.total comes from backend, which only knows about submitted batch items
-                                                thickness="large"
-                                                color={processingStats.total > 0 && processingStats.total === processingStats.completed ? "success" : "brand"}
-                                            />
-                                            {processingStats.totalPartsFound > 0 && (
-                                                <Text size={200} style={{ display: 'block', marginTop: 4, textAlign: 'right', color: tokens.colorPaletteGreenForeground1 }}>
-                                                    Found {processingStats.totalPartsFound} parts so far
-                                                </Text>
-                                            )}
-                                        </div>
+                        </div>
 
-                                        {showSlowWarning && (
-                                            <Badge color="warning" icon={<WarningRegular />}>
-                                                AI is taking longer than expected. You can wait or close this dialog - it will finish in the background.
-                                            </Badge>
-                                        )}
-                                    </>
-                                )}
+                        <DialogActions>
+                            {step === 'upload' && (
+                                <Button appearance="secondary" onClick={() => setIsDialogOpen(false)}>Close</Button>
+                            )}
+                            {step === 'manifest' && (
+                                <>
+                                    <Button appearance="subtle" onClick={reset}>Clear All</Button>
+                                    <Button appearance="primary" onClick={startProcessingLists} disabled={scannedFiles.length === 0}>
+                                        Process {scannedFiles.length} Files
+                                    </Button>
+                                </>
+                            )}
+                            {(step === 'processing' || step === 'review') && (
+                                <Button appearance="subtle" onClick={reset}>Restart</Button>
+                            )}
+                        </DialogActions>
+                    </DialogBody>
+                </DialogSurface>
+            </Dialog>
+
+            {/* Inspection Dialog */}
+            <Dialog open={!!inspectFile} onOpenChange={(e, data) => { if (!data.open) setInspectFile(null) }}>
+                <DialogSurface style={{ maxWidth: '800px', width: '90%' }}>
+                    <DialogBody>
+                        <DialogTitle>AI Insight: {inspectFile?.filename}</DialogTitle>
+                        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            {inspectFile?.summary && (
+                                <div style={{ padding: 16, background: tokens.colorNeutralBackground2, borderRadius: 8, borderLeft: `4px solid ${tokens.colorBrandBackground}` }}>
+                                    <Text weight="semibold" block style={{ marginBottom: 4 }}>Content Structure</Text>
+                                    <Text style={{ whiteSpace: 'pre-wrap' }}>{inspectFile.summary}</Text>
+                                </div>
+                            )}
+                            <div>
+                                <Text weight="semibold" block style={{ marginBottom: 4 }}>Raw Data</Text>
+                                <div style={{
+                                    padding: 12,
+                                    background: tokens.colorNeutralBackgroundAlpha,
+                                    borderRadius: 4,
+                                    maxHeight: '400px',
+                                    overflow: 'auto',
+                                    fontFamily: 'monospace',
+                                    fontSize: '12px',
+                                    border: `1px solid ${tokens.colorNeutralStroke2}`
+                                }}>
+                                    <pre>{JSON.stringify(inspectFile?.rawData, null, 2)}</pre>
+                                </div>
                             </div>
-                        )}
-
-                        {step === 'review' && (
-                            <div className={styles.uploadArea}>
-                                <Text>Review Screen Stub</Text>
-                            </div>
-                        )}
-
-                    </div>
-
-                    <DialogActions>
-                        {step === 'upload' && (
-                            <Button appearance="secondary" onClick={() => setIsDialogOpen(false)}>Close</Button>
-                        )}
-                        {step === 'manifest' && (
-                            <>
-                                <Button appearance="subtle" onClick={reset}>Clear All</Button>
-                                <Button appearance="primary" onClick={startProcessingLists} disabled={scannedFiles.length === 0}>
-                                    Process {scannedFiles.length} Files
-                                </Button>
-                            </>
-                        )}
-                        {(step === 'processing' || step === 'review') && (
-                            <Button appearance="subtle" onClick={reset}>Restart</Button>
-                        )}
-                    </DialogActions>
-                </DialogBody>
-            </DialogSurface>
-        </Dialog>
+                        </div>
+                        <DialogActions>
+                            <Button appearance="secondary" onClick={() => setInspectFile(null)}>Close</Button>
+                        </DialogActions>
+                    </DialogBody>
+                </DialogSurface>
+            </Dialog>
+        </>
     )
 }

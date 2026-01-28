@@ -94,6 +94,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
     const schema = {
         type: SchemaType.OBJECT,
         properties: {
+            summary: { type: SchemaType.STRING, description: "A detailed summary of the document structure and content." },
             parts: {
                 type: SchemaType.ARRAY,
                 items: {
@@ -129,6 +130,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
     - Plates: Thickness x Width x Length.
     - If dimensions are in separate columns, combine them.
     - IGNORE Header rows.
+    - Provide a 'summary' string describing the table structure (e.g. "Table with columns for part number, material...").
     `
 
     const model = genAI.getGenerativeModel({
@@ -138,6 +140,9 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
 
     const result = await retryWithBackoff(() => model.generateContent(prompt))
     const resultText = result.response.text()
+    console.log("----------------------------------------------------------------")
+    console.log("🤖 AI RAW RESPONSE:", resultText)
+    console.log("----------------------------------------------------------------")
 
     let rootData: any = {}
     try {
@@ -197,6 +202,7 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
         type: SchemaType.OBJECT,
         properties: {
             fileType: { type: SchemaType.STRING, enum: ["DRAWING", "BOM", "OTHER"], description: "Classify the PDF document type" },
+            summary: { type: SchemaType.STRING, description: "A detailed summary of the document structure and content." },
             parts: {
                 type: SchemaType.ARRAY,
                 items: {
@@ -247,6 +253,7 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
     - If it's a BOM, extract ALL rows.
     - Look for Quantity, Material, Dimensions.
     - "RO" or "Round" -> Profile Type "CHS-EN10219" (unless clearly Round Bar "R").
+    - Provide a 'summary' string describing the content (e.g. "Detailed table spanning 18 pages...").
     `
 
     const result = await retryWithBackoff(() => model.generateContent([

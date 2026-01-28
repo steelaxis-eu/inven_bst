@@ -139,10 +139,11 @@ export async function getSmartBatchStatus(batchId: string): Promise<{
     pending: number,
     failed: number,
     results: ParsedPart[],
-    totalPartsFound: number
+    totalPartsFound: number,
+    fileSummaries: { id: string, filename: string, status: string, error?: string, partCount: number, summary?: string, rawData?: any }[]
 }> {
     if (!batchId) {
-        return { total: 0, completed: 0, pending: 0, failed: 0, results: [], totalPartsFound: 0 }
+        return { total: 0, completed: 0, pending: 0, failed: 0, results: [], totalPartsFound: 0, fileSummaries: [] }
     }
     const jobs = await prisma.parsedDrawing.findMany({
         where: { jobId: batchId }
@@ -168,7 +169,34 @@ export async function getSmartBatchStatus(batchId: string): Promise<{
             }))
         })
 
+    const fileSummaries = jobs.map((j: any) => {
+        let partCount = 0
+        let summary = undefined
+        let raw = undefined
+
+        if (j.status === 'COMPLETED' && j.result) {
+            const res = j.result as any
+            const parts = (Array.isArray(res) ? res : (res.parts || [res])) // Handle both old array and new object format
+            partCount = Array.isArray(parts) ? parts.length : 0
+
+            // Extract tokens if available (from new format)
+            if (res.raw) {
+                summary = res.raw.summary
+                raw = res.raw
+            }
+        }
+        return {
+            id: j.id,
+            filename: j.filename,
+            status: j.status,
+            error: j.error,
+            partCount,
+            summary,
+            rawData: raw
+        }
+    })
+
     const totalPartsFound = results.length
 
-    return { total, completed, pending, failed, results, totalPartsFound }
+    return { total, completed, pending, failed, results, totalPartsFound, fileSummaries }
 }
