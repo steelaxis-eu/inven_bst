@@ -15,8 +15,8 @@ url.searchParams.delete('sslmode')
 const pool = new Pool({
     connectionString: url.toString(),
     ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10000,
-    max: process.env.NODE_ENV === 'development' ? 5 : 10,
+    connectionTimeoutMillis: 20000, // Increased wait time for a slot
+    max: 1, // STRICT LIMIT: 1 connection per instance to avoid MaxClientsInSessionMode
     idleTimeoutMillis: 20000
 })
 const adapter = new PrismaPg(pool)
