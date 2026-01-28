@@ -43,9 +43,22 @@ export async function retryWithBackoff<T>(
             return await operation();
         } catch (error: any) {
             lastError = error;
-            if (error?.status === 503 || error?.status === 429 || error?.message?.includes('503') || error?.message?.includes('overloaded')) {
+            // Enhanced retry condition for network/fetch errors
+            const isNetworkError =
+                error?.message?.includes('fetch failed') ||
+                error?.code === 'ECONNRESET' ||
+                error?.code === 'EPIPE' ||
+                error?.code === 'ETIMEDOUT';
+
+            const isRateLimit =
+                error?.status === 503 ||
+                error?.status === 429 ||
+                error?.message?.includes('503') ||
+                error?.message?.includes('overloaded');
+
+            if (isNetworkError || isRateLimit) {
                 const delay = initialDelay * Math.pow(2, i);
-                console.log(`Gemini API busy (Attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`);
+                console.log(`Gemini API issue (${error.message}). Attempt ${i + 1}/${maxRetries}. Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 continue;
             }
@@ -108,10 +121,9 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
     } as any
 
     const modelCandidates = [
-        { id: "gemini-3-flash-preview", retries: 3 },
-        { id: "gemini-3-flash-preview", retries: 3 }, // Try again before fallback
-        { id: "gemini-2.0-flash-exp", retries: 3 }, // 2.0 Flash is likely what they mean by 2.5 or next best
-        { id: "gemini-1.5-pro", retries: 2 }
+        { id: "gemini-3-flash-preview", retries: 2 }, // User preference: High speed & reasoning
+        { id: "gemini-2.0-flash-exp", retries: 2 },   // Strong fallback
+        { id: "gemini-1.5-pro", retries: 1 }          // Reliable fallback for complex docs
     ]
 
     const prompt = `
@@ -140,6 +152,8 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             const model = genAI.getGenerativeModel({
                 model: candidate.id,
                 generationConfig: { responseMimeType: "application/json", responseSchema: schema }
+            }, {
+                timeout: 600000 // 10 minutes timeout for large PDFs
             });
 
             // Retry network errors
