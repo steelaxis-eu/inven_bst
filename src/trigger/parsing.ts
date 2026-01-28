@@ -4,7 +4,13 @@ import { processDrawingWithGemini } from "@/lib/parsing-logic";
 
 export const processDrawingSingle = task({
     id: "process-drawing-single",
-    maxDuration: 900, // 15 mins to match Gemini timeout + buffer
+    retry: {
+        maxAttempts: 5,
+        factor: 2,
+        minTimeoutInMs: 1000,
+        maxTimeoutInMs: 30000,
+        randomize: true,
+    },
     queue: {
         concurrencyLimit: 5, // Limit to 5 concurrent processing tasks to save DB connections
     },

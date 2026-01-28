@@ -169,7 +169,9 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
     // Processing State
     const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0, status: 'IDLE' }) // IDLE, UNZIPPING, UPLOADING, QUEUED
     const [batchId, setBatchId] = useState<string | null>(null)
-    const [processingStats, setProcessingStats] = useState({ total: 0, completed: 0, failed: 0, pending: 0 })
+    const [processingStats, setProcessingStats] = useState({ total: 0, completed: 0, failed: 0, pending: 0, totalPartsFound: 0 })
+    const [startTime, setStartTime] = useState<number>(0)
+    const [showSlowWarning, setShowSlowWarning] = useState(false)
 
     // Review State
     const [parts, setParts] = useState<ReviewPart[]>([])
@@ -189,6 +191,7 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
         if (savedBatch && step === 'upload' && isDialogOpen) {
             setBatchId(savedBatch)
             setStep('processing')
+            setStartTime(Date.now()) // Approximation on resume
             toast.info("Resumed previous import session")
         }
     }, [projectId, step, isDialogOpen])
@@ -204,12 +207,20 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                         total: status.total,
                         completed: status.completed,
                         failed: status.failed,
-                        pending: status.pending
+                        pending: status.pending,
+                        totalPartsFound: status.totalPartsFound
                     })
+
+                    // Check for slow processing
+                    if (Date.now() - startTime > 180000 && startTime > 0) {
+                        setShowSlowWarning(true)
+                    }
 
                     if (status.pending === 0 && status.total > 0) {
                         // Finished!
                         localStorage.removeItem(`import_batch_${projectId}`)
+                        setStartTime(0)
+                        setShowSlowWarning(false)
 
                         const mappedParts = status.results.map(p => {
                             const matchedGrade = availableGrades.find(g =>
@@ -241,7 +252,7 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
             interval = setInterval(checkStatus, 3000) // Poll every 3s
         }
         return () => clearInterval(interval)
-    }, [step, batchId, projectId, availableGrades])
+    }, [step, batchId, projectId, availableGrades, startTime])
 
     const handleFileUpload = async () => {
         if (!file) return
@@ -303,6 +314,8 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
             if (batchRes.success && batchRes.batchId) {
                 setBatchId(batchRes.batchId)
                 localStorage.setItem(`import_batch_${projectId}`, batchRes.batchId)
+                setStartTime(Date.now())
+                setShowSlowWarning(false)
                 // Polling effect creates takes over
             } else {
                 throw new Error(batchRes.error || "Failed to create batch")
@@ -324,8 +337,10 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
         setBatchId(null)
         setFile(null)
         setParts([])
-        setProcessingStats({ total: 0, completed: 0, failed: 0, pending: 0 })
+        setProcessingStats({ total: 0, completed: 0, failed: 0, pending: 0, totalPartsFound: 0 })
         setStep('upload')
+        setStartTime(0)
+        setShowSlowWarning(false)
     }
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
@@ -509,23 +524,39 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                 )}
 
                                 <div style={{ marginTop: 24, textAlign: 'center' }}>
-                                    <div style={{ display: 'flex', gap: 24 }}>
+                                    <div style={{ display: 'flex', gap: 24, justifyContent: 'center' }}>
                                         <div style={{ textAlign: 'center' }}>
                                             <Text size={600} weight="bold">{processingStats.completed}</Text><br />
-                                            <Text size={200}>Completed</Text>
+                                            <Text size={200}>Files Done</Text>
+                                        </div>
+                                        <div style={{ textAlign: 'center' }}>
+                                            <Text size={600} weight="bold" style={{ color: tokens.colorPaletteBlueForeground2 }}>{processingStats.totalPartsFound}</Text><br />
+                                            <Text size={200}>Parts Found</Text>
                                         </div>
                                         <div style={{ textAlign: 'center' }}>
                                             <Text size={600} weight="bold" style={{ color: tokens.colorPaletteRedForeground1 }}>{processingStats.failed}</Text><br />
                                             <Text size={200}>Failed</Text>
                                         </div>
-                                        <div style={{ textAlign: 'center' }}>
-                                            <Text size={600} weight="bold" style={{ color: tokens.colorPaletteBlueForeground2 }}>{processingStats.pending}</Text><br />
-                                            <Text size={200}>Remaining</Text>
-                                        </div>
                                     </div>
                                 </div>
+
+                                {showSlowWarning && (
+                                    <div style={{
+                                        marginTop: 24,
+                                        padding: '12px',
+                                        backgroundColor: tokens.colorPaletteYellowBackground1,
+                                        borderRadius: tokens.borderRadiusMedium,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}>
+                                        <WarningRegular style={{ color: tokens.colorPaletteDarkOrangeForeground1 }} />
+                                        <Text>AI is taking a bit longer than usual due to high volume. Everything is okay, please stand by!</Text>
+                                    </div>
+                                )}
+
                                 <Text size={200} style={{ marginTop: 24, color: tokens.colorNeutralForeground3 }}>
-                                    You can close this window. Processing will continue in the background. Is 'Robust Mode' enabled.
+                                    You can close this window. Processing will continue in the background.
                                 </Text>
                             </div>
                         )}

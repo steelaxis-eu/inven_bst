@@ -120,7 +120,8 @@ export async function getBatchStatus(batchId: string): Promise<{
     completed: number,
     pending: number,
     failed: number,
-    results: ParsedPart[]
+    results: ParsedPart[],
+    totalPartsFound: number
 }> {
     if (!batchId) {
         return { total: 0, completed: 0, pending: 0, failed: 0, results: [] }
@@ -142,7 +143,9 @@ export async function getBatchStatus(batchId: string): Promise<{
             return parts.map((p: any) => ({ ...p, raw: j.rawResponse }))
         })
 
-    return { total, completed, pending, failed, results }
+    const totalPartsFound = results.length
+
+    return { total, completed, pending, failed, results, totalPartsFound }
 }
 
 export async function cancelImportBatch(batchId: string): Promise<{ success: boolean, deleted?: number }> {
