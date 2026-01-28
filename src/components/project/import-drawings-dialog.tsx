@@ -183,6 +183,9 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
     const [isAddingGrade, setIsAddingGrade] = useState(false)
     const [newGradeName, setNewGradeName] = useState("")
 
+    // Track processed IDs to prevent duplicates/overwrites
+    const processedIdsRef = useRef<Set<string>>(new Set())
+
     useEffect(() => { setAvailableGrades(grades) }, [grades])
 
     // Load resumable batch
@@ -199,30 +202,31 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
     // POLLING EFFECT
     useEffect(() => {
         let interval: NodeJS.Timeout
-        if (step === 'processing' && batchId) {
+        if (batchId) { // Poll as long as batchId exists and not fully complete locally
             const checkStatus = async () => {
                 try {
                     const status = await getBatchStatus(batchId)
-                    setProcessingStats({
+                    setProcessingStats(prev => ({
                         total: status.total,
                         completed: status.completed,
                         failed: status.failed,
                         pending: status.pending,
                         totalPartsFound: status.totalPartsFound
-                    })
+                    }))
 
                     // Check for slow processing
                     if (Date.now() - startTime > 180000 && startTime > 0) {
                         setShowSlowWarning(true)
                     }
 
-                    if (status.pending === 0 && status.total > 0) {
-                        // Finished!
-                        localStorage.removeItem(`import_batch_${projectId}`)
-                        setStartTime(0)
-                        setShowSlowWarning(false)
+                    // Incremental Merge
+                    const newResults = status.results.filter(r => !processedIdsRef.current.has(r.id))
+                    if (newResults.length > 0) {
+                        // Mark as processed
+                        newResults.forEach(r => processedIdsRef.current.add(r.id))
 
-                        const mappedParts = status.results.map(p => {
+                        // Map to ReviewPart
+                        const mappedParts = newResults.map(p => {
                             const matchedGrade = availableGrades.find(g =>
                                 g.name.toLowerCase() === p.material?.toLowerCase() ||
                                 g.name.replace(/\s+/g, '').toLowerCase() === p.material?.replace(/\s+/g, '').toLowerCase()
@@ -239,8 +243,23 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                 status: 'PENDING'
                             } as ReviewPart
                         })
-                        setParts(mappedParts)
-                        setStep('review')
+
+                        // Append to state
+                        setParts(prev => [...prev, ...mappedParts])
+                    }
+
+                    // Completion Check
+                    if (status.pending === 0 && status.total > 0) {
+                        // Finished!
+                        localStorage.removeItem(`import_batch_${projectId}`)
+                        setStartTime(0)
+                        setShowSlowWarning(false)
+
+                        // Auto-advance if stuck on processing screen
+                        setStep(prev => prev === 'processing' ? 'review' : prev)
+
+                        // Clear interval to stop polling
+                        clearInterval(interval)
                         toast.success("All drawings processed!")
                     }
                 } catch (e) {
@@ -252,7 +271,7 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
             interval = setInterval(checkStatus, 3000) // Poll every 3s
         }
         return () => clearInterval(interval)
-    }, [step, batchId, projectId, availableGrades, startTime])
+    }, [batchId, projectId, availableGrades, startTime])
 
     const handleFileUpload = async () => {
         if (!file) return
@@ -341,6 +360,7 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
         setStep('upload')
         setStartTime(0)
         setShowSlowWarning(false)
+        processedIdsRef.current.clear()
     }
 
     const updatePart = (id: string, updates: Partial<ReviewPart>) => {
@@ -538,6 +558,13 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
                                             <Text size={200}>Failed</Text>
                                         </div>
                                     </div>
+                                    {processingStats.totalPartsFound > 0 && (
+                                        <div style={{ marginTop: '24px' }}>
+                                            <Button appearance="primary" onClick={() => setStep('review')}>
+                                                Review Available ({processingStats.totalPartsFound})
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {showSlowWarning && (
@@ -563,6 +590,23 @@ export function ImportDrawingsDialog({ projectId, projectName, profiles, standar
 
                         {step === 'review' && (
                             <div className={styles.tableContainer}>
+                                {processingStats.pending > 0 && (
+                                    <div style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: tokens.colorBrandBackground2,
+                                        borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 3
+                                    }}>
+                                        <Spinner size="tiny" />
+                                        <Text weight="semibold">Live Processing...</Text>
+                                        <Text size={200}>{processingStats.pending} files remaining</Text>
+                                    </div>
+                                )}
                                 <Table size="medium" style={{ tableLayout: 'fixed', minWidth: '1000px' }}>
                                     <TableHeader className={styles.stickyHeader}>
                                         <TableRow>
