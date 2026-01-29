@@ -1040,18 +1040,41 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
                                 </div>
                             )}
                             <div>
-                                <Text weight="semibold" block style={{ marginBottom: 4 }}>Raw Data</Text>
+                                <Text weight="semibold" block style={{ marginBottom: 4 }}>Extracted Data</Text>
                                 <div style={{
                                     padding: 12,
                                     background: tokens.colorNeutralBackgroundAlpha,
                                     borderRadius: 4,
                                     maxHeight: '400px',
                                     overflow: 'auto',
-                                    fontFamily: 'monospace',
-                                    fontSize: '12px',
                                     border: `1px solid ${tokens.colorNeutralStroke2}`
                                 }}>
-                                    <pre>{JSON.stringify(inspectFile?.rawData, null, 2)}</pre>
+                                    {inspectFile?.rawData?.parts ? (
+                                        <Table size="small">
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHeaderCell>Qty</TableHeaderCell>
+                                                    <TableHeaderCell>Part #</TableHeaderCell>
+                                                    <TableHeaderCell>Profile / Dims</TableHeaderCell>
+                                                    <TableHeaderCell>Material</TableHeaderCell>
+                                                    <TableHeaderCell>Length</TableHeaderCell>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {inspectFile.rawData.parts.map((p: any, idx: number) => (
+                                                    <TableRow key={idx}>
+                                                        <TableCell>{p.quantity}</TableCell>
+                                                        <TableCell>{p.partNumber}</TableCell>
+                                                        <TableCell>{p.profileType || "PLATE"} {p.profileDimensions || `${p.thickness}x${p.width}`}</TableCell>
+                                                        <TableCell>{p.material}</TableCell>
+                                                        <TableCell>{p.length}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    ) : (
+                                        <pre style={{ margin: 0, fontSize: '12px' }}>{JSON.stringify(inspectFile?.rawData, null, 2)}</pre>
+                                    )}
                                 </div>
                             </div>
                         </div>
