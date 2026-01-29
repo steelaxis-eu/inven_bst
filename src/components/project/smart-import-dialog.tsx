@@ -55,10 +55,12 @@ import {
     uploadSmartFile,
     createSmartImportBatch,
     getSmartBatchStatus,
-    addToSmartBatch
+    addToSmartBatch,
+    scanSmartFiles
 } from '@/app/actions/smart-import'
 import { createPartsBatch, BatchPartInput } from '@/app/actions/parts'
 import { ParsedPart } from '@/lib/smart-parsing-logic'
+import { ScanResult } from '@/lib/agentic-scanner'
 
 // Interfaces
 interface ReviewPart {
@@ -175,17 +177,20 @@ type FileType = 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' | 'TRASH'
 interface ScannedFile {
     id: string
     path: string
+    storagePath?: string // Set after upload
     name: string
     file: File | Blob
     type: FileType
     category: 'LIST' | 'DRAWING' | 'ASSET'
     size: number
+    scanResult?: ScanResult
+    selectedAction?: 'IMPORT_PARTS' | 'IMPORT_ASSEMBLY' | 'EXTRACT_CUTS' | 'IGNORE' | 'ASSOCIATE'
 }
 
 export function SmartImportDialog({ projectId, projectName, profiles, standardProfiles, grades, shapes }: SmartImportDialogProps) {
     const styles = useStyles()
     const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const [step, setStep] = useState<'upload' | 'manifest' | 'processing' | 'review'>('upload')
+    const [step, setStep] = useState<'upload' | 'scanning' | 'triage' | 'manifest' | 'processing' | 'review'>('upload')
     const [processingStage, setProcessingStage] = useState<'LISTS' | 'CONFIRM_DRAWINGS' | 'DRAWINGS' | 'COMPLETED'>('LISTS')
 
     // File Sorting State
@@ -389,23 +394,36 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
         for (let i = 0; i < filesToProcess.length; i += CHUNK_SIZE) {
             const chunk = filesToProcess.slice(i, i + CHUNK_SIZE)
 
-            // 1. Upload Chunk
-            const chunkMetadata: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' }[] = []
+            // 1. Upload Chunk (only those missing storagePath)
+            const chunkMetadata: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER', instruction?: string }[] = []
 
             await Promise.all(chunk.map(async (entry) => {
+                if (entry.storagePath) {
+                    chunkMetadata.push({
+                        filename: entry.name,
+                        storagePath: entry.storagePath,
+                        type: entry.type as any,
+                        instruction: entry.selectedAction
+                    })
+                    return
+                }
+
                 const formData = new FormData()
                 formData.append('file', entry.file, entry.name)
 
                 const res = await uploadSmartFile(formData, projectId)
                 if (res.success && res.storagePath) {
-                    chunkMetadata.push({ filename: entry.name, storagePath: res.storagePath, type: entry.type as any })
+                    entry.storagePath = res.storagePath
+                    chunkMetadata.push({
+                        filename: entry.name,
+                        storagePath: res.storagePath,
+                        type: entry.type as any,
+                        instruction: entry.selectedAction
+                    })
                 }
             }))
 
             // 2. Add to Batch
-            // - PDF/EXCEL -> Status PENDING -> Triggers AI
-            // - DXF/OTHER -> Status COMPLETED -> Skips AI (just association)
-
             if (chunkMetadata.length > 0) {
                 await addToSmartBatch(batchId, chunkMetadata, projectId)
             }
@@ -418,7 +436,56 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
         }
     }
 
-    const startProcessingLists = async () => {
+    const scanAndTriage = async () => {
+        setStep('scanning')
+        setScanProgress("Uploading files and glancing at content...")
+        setStartTime(Date.now())
+
+        try {
+            // 1. Upload all files (or at least those that need scanning)
+            const filesToScan = scannedFiles.filter(f => !f.storagePath)
+            if (filesToScan.length > 0) {
+                await Promise.all(filesToScan.map(async (entry) => {
+                    const formData = new FormData()
+                    formData.append('file', entry.file, entry.name)
+                    const res = await uploadSmartFile(formData, projectId)
+                    if (res.success && res.storagePath) {
+                        entry.storagePath = res.storagePath
+                    }
+                }))
+            }
+
+            // 2. Call Scanner for non-assets
+            // (Scanner internal logic already handles skipping/fast-tracking certain types)
+            const scanResponse = await scanSmartFiles(scannedFiles.map(f => ({
+                filename: f.name,
+                storagePath: f.storagePath!
+            })))
+
+            if (scanResponse.error) throw new Error(scanResponse.error)
+
+            // 3. Merge Results
+            setScannedFiles(prev => prev.map(f => {
+                const result = scanResponse.results.find(r => r.filename === f.name)
+                if (result) {
+                    return {
+                        ...f,
+                        scanResult: result,
+                        selectedAction: result.suggestedAction as any
+                    }
+                }
+                return f
+            }))
+
+            setStep('triage')
+        } catch (e: any) {
+            console.error(e)
+            toast.error("Scanning failed: " + e.message)
+            setStep('manifest')
+        }
+    }
+
+    const executeTriageActions = async () => {
         setStep('processing')
         setProcessingStage('LISTS')
         setStartTime(Date.now())
@@ -427,45 +494,29 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
         const newBatchId = uuidv4()
         setBatchId(newBatchId)
 
-        const listFiles = scannedFiles.filter(f => f.category === 'LIST')
-        const drawingFiles = scannedFiles.filter(f => f.category === 'DRAWING')
-        const assetFiles = scannedFiles.filter(f => f.category === 'ASSET') // DXF/DWG
+        // Filter files by their selected action
+        const filesToProcess = scannedFiles.filter(f => f.selectedAction && f.selectedAction !== 'IGNORE')
 
-        // We count total upload based on all valid files eventually? 
-        // Or just show progress for current stage?
-        // Let's stick to global progress concept for now but simpler.
-        setUploadProgress({ current: 0, total: scannedFiles.length, status: 'UPLOADING' })
+        setUploadProgress({ current: 0, total: filesToProcess.length, status: 'PROCESSING' })
 
         try {
-            // 1. Process LISTS (Excel + PDF Lists) - AI
-            if (listFiles.length > 0) {
-                await processFiles(listFiles, newBatchId)
+            if (filesToProcess.length > 0) {
+                await processFiles(filesToProcess, newBatchId)
             }
 
-            // 2. Upload ASSETS (Background - No AI)
-            if (assetFiles.length > 0) {
-                // Just upload. processFiles handles upload. 
-                // But wait, processFiles also calls addToSmartBatch which triggers AI for PDF/Excel.
-                // DXF/DWG are not PDF/Excel, so addToSmartBatch filters them out inside processFiles (if we update it to filter).
-                // My logic above: aiFiles = chunkMetadata.filter(f => f.type === 'PDF' || f.type === 'EXCEL')
-                // So DXF/DWG are uploaded but NOT added to batch. Correct.
-                await processFiles(assetFiles, newBatchId)
-            }
-
-            // 3. Decision Point
-            if (drawingFiles.length > 0) {
-                // Pause for confirmation
-                setProcessingStage('CONFIRM_DRAWINGS')
-            } else {
-                setProcessingStage('COMPLETED')
-                setUploadProgress(prev => ({ ...prev, status: 'COMPLETED' })) // Finish
-            }
+            setProcessingStage('COMPLETED')
+            setUploadProgress(prev => ({ ...prev, status: 'COMPLETED' }))
 
         } catch (e: any) {
             console.error(e)
-            toast.error("Error processing lists")
-            setStep('manifest')
+            toast.error("Execution failed")
+            setStep('triage')
         }
+    }
+
+    const startProcessingLists = async () => {
+        // This is the old entrance, we can either remove it or redirect to scanAndTriage
+        await scanAndTriage()
     }
 
     const confirmProcessDrawings = async () => {
@@ -544,9 +595,78 @@ export function SmartImportDialog({ projectId, projectName, profiles, standardPr
                                 </div>
                             )}
 
+                            {step === 'scanning' && (
+                                <div className={styles.uploadArea} style={{ cursor: 'default', justifyContent: 'center', gap: '32px' }}>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <Spinner size="large" label={scanProgress || "Scanning files..."} labelPosition="below" />
+                                        <div style={{ marginTop: 24 }}>
+                                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                                                Using lightweight AI to understand your documents structure...
+                                            </Text>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 'triage' && (
+                                <div className={styles.manifestContainer} style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                        <div>
+                                            <Text size={500} weight="semibold">AI Triage Results</Text>
+                                            <br />
+                                            <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>Review what the AI found and confirm how to proceed with each file.</Text>
+                                        </div>
+                                        <Button appearance="primary" onClick={executeTriageActions}>Execute Selected Actions</Button>
+                                    </div>
+                                    <div className={styles.tableContainer}>
+                                        <Table size="small">
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHeaderCell style={{ width: '200px' }}>File</TableHeaderCell>
+                                                    <TableHeaderCell>AI Description</TableHeaderCell>
+                                                    <TableHeaderCell style={{ width: '200px' }}>Proposed Action</TableHeaderCell>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {scannedFiles.map(file => (
+                                                    <TableRow key={file.id}>
+                                                        <TableCell>{file.name}</TableCell>
+                                                        <TableCell>
+                                                            <div style={{ padding: '4px 8px', background: tokens.colorNeutralBackground2, borderRadius: 4, borderLeft: `3px solid ${tokens.colorBrandBackground}` }}>
+                                                                <Text size={200} italic>{file.scanResult?.description || "Awaiting scan..."}</Text>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Dropdown
+                                                                size="small"
+                                                                style={{ width: '100%' }}
+                                                                value={file.selectedAction}
+                                                                selectedOptions={[file.selectedAction || 'IGNORE']}
+                                                                onOptionSelect={(e, data) => {
+                                                                    setScannedFiles(prev => prev.map(f => f.id === file.id ? { ...f, selectedAction: data.optionValue as any } : f))
+                                                                }}
+                                                            >
+                                                                <Option value="IMPORT_PARTS">Import Parts</Option>
+                                                                <Option value="IMPORT_ASSEMBLY">Import Assembly</Option>
+                                                                <Option value="EXTRACT_CUTS">Extract Cuts</Option>
+                                                                <Option value="ASSOCIATE">Associate Drawing</Option>
+                                                                <Option value="IGNORE">Ignore</Option>
+                                                            </Dropdown>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            )}
+
                             {step === 'manifest' && (
                                 <div className={styles.manifestContainer}>
-                                    <Text size={500} weight="semibold">Found {scannedFiles.length} files</Text>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Text size={500} weight="semibold">Found {scannedFiles.length} files</Text>
+                                        <Button appearance="primary" icon={<ArrowClockwiseRegular />} onClick={scanAndTriage}>Analyze with AI</Button>
+                                    </div>
                                     <div style={{ marginTop: 16, border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
                                         <Table size="small">
                                             <TableHeader>

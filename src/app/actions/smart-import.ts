@@ -6,6 +6,49 @@ import { headers } from 'next/headers'
 import { v4 as uuidv4 } from 'uuid'
 import { tasks } from "@trigger.dev/sdk/v3"
 import { ParsedPart } from '@/lib/smart-parsing-logic'
+import { scanFileWithAI, ScanResult } from '@/lib/agentic-scanner'
+import { createServiceClient } from '@/lib/supabase-service'
+
+export async function scanSmartFiles(
+    files: { filename: string, storagePath: string }[]
+): Promise<{ results: ScanResult[], error?: string }> {
+    try {
+        const supabase = createServiceClient()
+        const results: ScanResult[] = []
+
+        // Run scans in parallel (limited concurrency could be better but let's try parallel for speed)
+        // Actually, let's limit 5 at a time to avoid rate limits or memory bursts
+        const CONCURRENCY = 5
+        for (let i = 0; i < files.length; i += CONCURRENCY) {
+            const chunk = files.slice(i, i + CONCURRENCY)
+            const chunkResults = await Promise.all(chunk.map(async (file) => {
+                const { data, error } = await supabase.storage
+                    .from('Projects')
+                    .download(file.storagePath)
+
+                if (error || !data) {
+                    return {
+                        filename: file.filename,
+                        description: "Failed to download file.",
+                        classification: 'OTHER',
+                        suggestedAction: 'IGNORE',
+                        confidence: 0
+                    } as ScanResult
+                }
+
+                const arrayBuffer = await data.arrayBuffer()
+                const buffer = Buffer.from(arrayBuffer)
+                return scanFileWithAI(buffer, file.filename)
+            }))
+            results.push(...chunkResults)
+        }
+
+        return { results }
+    } catch (e: any) {
+        console.error("Scan Error:", e)
+        return { results: [], error: e.message }
+    }
+}
 
 // ============================================================================
 // Generic Upload
@@ -54,7 +97,7 @@ export async function uploadSmartFile(formData: FormData, projectId: string): Pr
 // ============================================================================
 
 export async function createSmartImportBatch(
-    files: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' }[],
+    files: { filename: string, storagePath: string, type: string, instruction?: string }[],
     projectId: string
 ): Promise<{ success: boolean, batchId?: string, error?: string }> {
     try {
@@ -62,17 +105,16 @@ export async function createSmartImportBatch(
 
         const records = files.map(f => ({
             id: uuidv4(),
-            jobId: batchId, // We use the same table but a specific batch ID that we will trigger with
+            jobId: batchId,
             projectId,
             filename: f.filename,
             fileUrl: f.storagePath,
             status: 'PENDING',
-            // We might want to store the "detected type" somewhere, but `ParsedDrawing` schema is rigid?
-            // If schema has no "type" field, we can stuff it in `rawResponse` initially or just rely on extension processing
-            // For now, we'll just rely on filename extension re-check in the worker, or valid "metadata" capability if schema allows
-            // Checked schema in mind: it has `result`, `rawResponse`. 
-            // We can store `{ type: f.type }` in `rawResponse` temporarily as initial state? No, status is pending.
-            // We'll just rely on file extension in the worker.
+            // Store the agentic instruction and detected type in rawResponse for the worker to find
+            rawResponse: {
+                instruction: f.instruction || 'IMPORT_PARTS',
+                detectedType: f.type
+            } as any
         }))
 
         // Create batches
@@ -100,19 +142,20 @@ export async function createSmartImportBatch(
 
 export async function addToSmartBatch(
     batchId: string,
-    files: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' }[],
+    files: { filename: string, storagePath: string, type: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER', instruction?: string }[],
     projectId: string
 ): Promise<{ success: boolean, error?: string }> {
     try {
         const records = files.map(f => {
-            const isAsset = f.type === 'DXF' || f.type === 'OTHER' // Add other asset types if needed
+            const isAsset = f.type === 'DXF' || f.type === 'OTHER' || f.instruction === 'ASSOCIATE'
             return {
                 id: uuidv4(),
                 jobId: batchId,
                 status: isAsset ? 'COMPLETED' : 'PENDING',
                 filename: f.filename,
                 fileUrl: f.storagePath,
-                projectId: projectId
+                projectId: projectId,
+                rawResponse: { instruction: f.instruction || 'IMPORT_PARTS', detectedType: f.type } as any
             }
         })
 

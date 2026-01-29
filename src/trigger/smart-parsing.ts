@@ -29,15 +29,19 @@ export const processSmartImportSingle = task({
 
             console.log(`[SmartTrigger] Processing job ${id} (${job.filename})...`);
 
-            // 2. Determine Type
-            const lower = job.filename.toLowerCase();
-            let fileType: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER' = 'OTHER';
-            if (lower.endsWith('.pdf')) fileType = 'PDF';
-            else if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) fileType = 'EXCEL';
-            else if (lower.endsWith('.dxf')) fileType = 'DXF';
+            // 2. Extract Instruction & Type
+            const rawInput = (job.rawResponse as any) || {}
+            const instruction = rawInput.instruction || 'IMPORT_PARTS'
+            const detectedType = rawInput.detectedType || (job.filename.toLowerCase().endsWith('.pdf') ? 'PDF' : 'EXCEL')
 
             // 3. Process
-            const { parts: processedParts, raw } = await processSmartFileWithAI(job.fileUrl, job.projectId, job.filename, fileType);
+            const { parts: processedParts, raw } = await processSmartFileWithAI(
+                job.fileUrl,
+                job.projectId,
+                job.filename,
+                detectedType as any,
+                instruction
+            );
 
             // 4. Complete
             await prisma.parsedDrawing.update({

@@ -19,7 +19,8 @@ export async function processSmartFileWithAI(
     storagePath: string,
     projectId: string,
     filename: string,
-    fileType: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER'
+    fileType: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER',
+    instruction: string = 'IMPORT_PARTS'
 ): Promise<{ parts: ParsedPart[], raw: any }> {
 
     // 1. Download File
@@ -36,9 +37,9 @@ export async function processSmartFileWithAI(
     if (fileType === 'DXF') {
         return processDxf(filename, storagePath)
     } else if (fileType === 'EXCEL') {
-        return processExcelWithAI(buffer, filename, storagePath)
+        return processExcelWithAI(buffer, filename, storagePath, instruction)
     } else if (fileType === 'PDF') {
-        return processPdfWithAI(buffer, filename, storagePath)
+        return processPdfWithAI(buffer, filename, storagePath, instruction)
     } else {
         return { parts: [], raw: { message: "Unsupported file type", type: fileType } }
     }
@@ -66,7 +67,7 @@ function processDxf(filename: string, storagePath: string): { parts: ParsedPart[
 // Excel Handler
 // ============================================================================
 
-async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: string): Promise<{ parts: ParsedPart[], raw: any }> {
+async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: string, instruction: string): Promise<{ parts: ParsedPart[], raw: any }> {
     // 1. Convert Excel to Text/CSV representation for AI
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer as any)
@@ -110,6 +111,10 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
                         profileType: { type: SchemaType.STRING },
                         profileDimensions: { type: SchemaType.STRING },
                         type: { type: SchemaType.STRING, enum: ["PROFILE", "PLATE"] },
+                        // Assembly Fields
+                        assemblyMark: { type: SchemaType.STRING },
+                        parentMark: { type: SchemaType.STRING },
+                        level: { type: SchemaType.NUMBER }
                     },
                     required: ["partNumber", "quantity"]
                 }
@@ -117,12 +122,12 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
         }
     } as any
 
-    const prompt = `
+    let prompt = `
     Analyze this Excel/CSV extracted content (BOM) and extract ALL distinct parts.
     Current File: ${filename}
     
     DATA:
-    ${csvContent.substring(0, 30000)} // Truncate if too huge, but usually fine
+    ${csvContent.substring(0, 30000)}
     
     RULES:
     - Identify columns for Part Number, Qty, Material, Dimensions.
@@ -130,8 +135,14 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
     - Plates: Thickness x Width x Length.
     - If dimensions are in separate columns, combine them.
     - IGNORE Header rows.
-    - Provide a 'summary' string describing the table structure (e.g. "Table with columns for part number, material...").
+    - Provide a 'summary' string describing the table structure.
     `
+
+    if (instruction === 'IMPORT_ASSEMBLY') {
+        prompt += `\nSPECIAL: This is an ASSEMBLY LIST. Look for parent/child relationships if present (e.g. Assembly Mark vs Part Mark).`
+    } else if (instruction === 'EXTRACT_CUTS') {
+        prompt += `\nSPECIAL: This is a SAW LIST. Ensure you capture cut angles if provided.`
+    }
 
     const model = genAI.getGenerativeModel({
         model: "gemini-3-flash-preview",
@@ -180,7 +191,11 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
             confidence: 90,
             drawingRef,
             warnings,
-            source: 'EXCEL'
+            source: 'EXCEL',
+            // Assembly Fields
+            assemblyMark: data.assemblyMark,
+            parentMark: data.parentMark,
+            level: Number(data.level) || 0
         } as ParsedPart
     })
 
@@ -191,7 +206,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
 // PDF Handler (Enhanced)
 // ============================================================================
 
-async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: string): Promise<{ parts: ParsedPart[], raw: any }> {
+async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: string, instruction: string): Promise<{ parts: ParsedPart[], raw: any }> {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) throw new Error("GEMINI_API_KEY missing")
 
@@ -220,7 +235,11 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
                         profileType: { type: SchemaType.STRING },
                         profileDimensions: { type: SchemaType.STRING },
                         isSplit: { type: SchemaType.BOOLEAN },
-                        cutAngles: { type: SchemaType.STRING }
+                        cutAngles: { type: SchemaType.STRING },
+                        // Assembly Fields
+                        assemblyMark: { type: SchemaType.STRING },
+                        parentMark: { type: SchemaType.STRING },
+                        level: { type: SchemaType.NUMBER }
                     },
                     required: ["partNumber", "quantity"]
                 }
@@ -243,7 +262,7 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
     })
     await fs.unlink(tempFilePath)
 
-    const prompt = `
+    let prompt = `
     Analyze this PDF. 
     1. Classify if it's a "DRAWING" (Visual representation of a part) or a "BOM" (List of parts/Table).
     2. Extract ALL parts found.
@@ -253,8 +272,14 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
     - If it's a BOM, extract ALL rows.
     - Look for Quantity, Material, Dimensions.
     - "RO" or "Round" -> Profile Type "CHS-EN10219" (unless clearly Round Bar "R").
-    - Provide a 'summary' string describing the content (e.g. "Detailed table spanning 18 pages...").
+    - Provide a 'summary' string describing the content.
     `
+
+    if (instruction === 'IMPORT_ASSEMBLY') {
+        prompt += `\nSPECIAL: This is an ASSEMBLY LIST. Pay attention to header info that might apply to all rows (e.g. Assembly Mark).`
+    } else if (instruction === 'EXTRACT_CUTS') {
+        prompt += `\nSPECIAL: This is a SAW LIST. Look closely for cut angles or mitre cuts (M1, M2).`
+    }
 
     const result = await retryWithBackoff(() => model.generateContent([
         { fileData: { mimeType: uploadResult.file.mimeType, fileUri: uploadResult.file.uri } },
@@ -312,7 +337,11 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
             warnings,
             isSplit,
             cutAngles: data.cutAngles || null,
-            source: 'PDF'
+            source: 'PDF',
+            // Assembly Fields
+            assemblyMark: data.assemblyMark,
+            parentMark: data.parentMark,
+            level: Number(data.level) || 0
         } as ParsedPart
     })
 

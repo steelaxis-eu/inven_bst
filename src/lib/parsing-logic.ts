@@ -30,6 +30,10 @@ export interface ParsedPart {
     raw?: any
     isSplit?: boolean
     cutAngles?: string
+    // Assembly Hierarchy Fields
+    assemblyMark?: string
+    parentMark?: string
+    level?: number
 }
 
 // ============================================================================
