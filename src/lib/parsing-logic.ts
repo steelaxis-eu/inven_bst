@@ -293,8 +293,6 @@ export async function processDrawingWithGemini(storagePath: string, projectId: s
             const model = genAI.getGenerativeModel({
                 model: candidate.id,
                 generationConfig: { responseMimeType: "application/json", responseSchema: schema }
-            }, {
-                timeout: 600000 // 10 minutes timeout for large PDFs
             });
 
             // 1. Save buffer to temp file

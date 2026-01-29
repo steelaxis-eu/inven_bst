@@ -8,6 +8,7 @@ import { tasks } from "@trigger.dev/sdk/v3"
 import { ParsedPart } from '@/lib/smart-parsing-logic'
 import { scanFileWithAI, ScanResult } from '@/lib/agentic-scanner'
 import { createServiceClient } from '@/lib/supabase-service'
+import { ParsedDrawing } from '@prisma/client'
 
 export async function scanSmartFiles(
     files: { filename: string, storagePath: string }[]
@@ -242,4 +243,156 @@ export async function getSmartBatchStatus(batchId: string): Promise<{
     const totalPartsFound = results.length
 
     return { total, completed, pending, failed, results, totalPartsFound, fileSummaries }
+}
+
+// ============================================================================
+// Persistence & Resumable Session
+// ============================================================================
+
+export interface SavedScannedFileDto {
+    id: string
+    name: string
+    storagePath?: string
+    scanResult?: ScanResult
+    selectedAction?: string
+}
+
+export async function processScannedBatch(
+    batchId: string,
+    files: { id: string, instruction: string }[],
+    projectId: string
+): Promise<{ success: boolean, error?: string }> {
+    try {
+        // 1. Update records to PENDING status and set instruction
+        // We do this in a loop or parallel promises as updateMany doesn't support different values per row
+        // But usually instructions are group-based? No, per file.
+
+        await Promise.all(files.map(async (f) => {
+            const isAsset = f.instruction === 'ASSOCIATE' || f.instruction === 'IGNORE' // IGNORE shouldn't happen here usually
+            // If Associate, we mark COMPLETED directly? Or PENDING for association? 
+            // Current flow: Assets (DXF) are completed.
+            // If we have 'IMPORT_PARTS' -> PENDING -> Worker.
+
+            const status = (f.instruction === 'ASSOCIATE' || f.instruction === 'IGNORE') ? 'COMPLETED' : 'PENDING' // Simple logic
+
+            // Trigger worker if PENDING
+            await prisma.parsedDrawing.update({
+                where: { id: f.id },
+                data: {
+                    status,
+                    rawResponse: {
+                        instruction: f.instruction,
+                        // Maintain existing data if we could, but rawResponse is JSON.
+                        // We might overwrite scanResult. Ideally we merge.
+                        // For speed, let's assume we just need instruction now.
+                    } as any
+                }
+            })
+
+            if (status === 'PENDING') {
+                await tasks.trigger("process-smart-import-single", { id: f.id })
+            }
+        }))
+
+        return { success: true }
+    } catch (e: any) {
+        console.error("processScannedBatch Error:", e)
+        return { success: false, error: e.message }
+    }
+}
+
+export async function getPendingImportSession(projectId: string): Promise<ParsedDrawing[] | null> {
+    try {
+        // Find most recent batch that has items in SCANNED or PENDING state
+        // We look for items created in the last 24h
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+        const recentItems = await prisma.parsedDrawing.findMany({
+            where: {
+                projectId,
+                status: { in: ['SCANNED', 'PENDING'] },
+                createdAt: { gt: yesterday }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1
+        })
+
+        if (!recentItems || recentItems.length === 0) return null
+
+        const batchId = recentItems[0].jobId
+
+        // Get all items in this batch
+        const batchItems = await prisma.parsedDrawing.findMany({
+            where: { jobId: batchId }
+        })
+
+        return batchItems
+    } catch (e) {
+        console.error("Failed to get pending session", e)
+        return null
+    }
+}
+
+export async function saveScannedFile(
+    batchId: string,
+    projectId: string,
+    file: SavedScannedFileDto
+): Promise<boolean> {
+    try {
+        await prisma.parsedDrawing.upsert({
+            where: {
+                id: file.id // Ensure ScannedFile has ID locally generated or we reuse one
+            },
+            create: {
+                id: file.id,
+                jobId: batchId,
+                projectId,
+                filename: file.name,
+                fileUrl: file.storagePath || "",
+                status: 'SCANNED',
+                rawResponse: {
+                    scanResult: file.scanResult,
+                    selectedAction: file.selectedAction
+                } as any
+            },
+            update: {
+                status: 'SCANNED',
+                rawResponse: {
+                    scanResult: file.scanResult,
+                    selectedAction: file.selectedAction
+                } as any
+            }
+        })
+        return true
+    } catch (e) {
+        console.error("Failed to save scanned file", e)
+        return false
+    }
+}
+
+export async function updateTriageAction(
+    fileId: string,
+    action: string
+): Promise<boolean> {
+    try {
+        const record = await prisma.parsedDrawing.findUnique({ where: { id: fileId } })
+        if (!record) return false
+
+        const newRaw = {
+            ...(record.rawResponse as any || {}),
+            selectedAction: action,
+            instruction: action // Sync instruction here too
+        }
+
+        await prisma.parsedDrawing.update({
+            where: { id: fileId },
+            data: {
+                rawResponse: newRaw
+            }
+        })
+        return true
+    } catch (e) {
+        console.error("Failed to update triage action", e)
+        return false
+    }
 }

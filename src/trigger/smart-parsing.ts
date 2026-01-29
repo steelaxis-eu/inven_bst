@@ -40,7 +40,14 @@ export const processSmartImportSingle = task({
                 job.projectId,
                 job.filename,
                 detectedType as any,
-                instruction
+                instruction,
+                async (status) => {
+                    await prisma.parsedDrawing.update({
+                        where: { id },
+                        data: { status }
+                    });
+                    console.log(`[SmartTrigger] Job ${id} status: ${status}`);
+                }
             );
 
             // 4. Complete

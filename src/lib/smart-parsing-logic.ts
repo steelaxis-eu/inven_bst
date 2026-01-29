@@ -18,12 +18,14 @@ export type { ParsedPart }
 export async function processSmartFileWithAI(
     storagePath: string,
     projectId: string,
-    filename: string,
+    filename: string, // Restore filename
     fileType: 'PDF' | 'EXCEL' | 'DXF' | 'OTHER',
-    instruction: string = 'IMPORT_PARTS'
+    instruction: string = 'IMPORT_PARTS',
+    onProgress?: (status: string) => Promise<void>
 ): Promise<{ parts: ParsedPart[], raw: any }> {
 
     // 1. Download File
+    if (onProgress) await onProgress('DOWNLOADING_FILE')
     const supabase = createServiceClient()
     const { data: fileData, error: downloadError } = await supabase.storage
         .from('Projects')
@@ -37,9 +39,9 @@ export async function processSmartFileWithAI(
     if (fileType === 'DXF') {
         return processDxf(filename, storagePath)
     } else if (fileType === 'EXCEL') {
-        return processExcelWithAI(buffer, filename, storagePath, instruction)
+        return processExcelWithAI(buffer, filename, storagePath, instruction, onProgress)
     } else if (fileType === 'PDF') {
-        return processPdfWithAI(buffer, filename, storagePath, instruction)
+        return processPdfWithAI(buffer, filename, storagePath, instruction, onProgress)
     } else {
         return { parts: [], raw: { message: "Unsupported file type", type: fileType } }
     }
@@ -67,8 +69,9 @@ function processDxf(filename: string, storagePath: string): { parts: ParsedPart[
 // Excel Handler
 // ============================================================================
 
-async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: string, instruction: string): Promise<{ parts: ParsedPart[], raw: any }> {
+async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: string, instruction: string, onProgress?: (s: string) => Promise<void>): Promise<{ parts: ParsedPart[], raw: any }> {
     // 1. Convert Excel to Text/CSV representation for AI
+    if (onProgress) await onProgress('PARSING_EXCEL')
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer as any)
 
@@ -149,6 +152,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
         generationConfig: { responseMimeType: "application/json", responseSchema: schema }
     })
 
+    if (onProgress) await onProgress('ANALYZING_WITH_AI')
     const result = await retryWithBackoff(() => model.generateContent(prompt))
     const resultText = result.response.text()
     console.log("----------------------------------------------------------------")
@@ -206,7 +210,7 @@ async function processExcelWithAI(buffer: Buffer, filename: string, drawingRef: 
 // PDF Handler (Enhanced)
 // ============================================================================
 
-async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: string, instruction: string): Promise<{ parts: ParsedPart[], raw: any }> {
+async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: string, instruction: string, onProgress?: (s: string) => Promise<void>): Promise<{ parts: ParsedPart[], raw: any }> {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) throw new Error("GEMINI_API_KEY missing")
 
@@ -260,7 +264,11 @@ async function processPdfWithAI(buffer: Buffer, filename: string, drawingRef: st
         mimeType: "application/pdf",
         displayName: filename,
     })
+
+    if (onProgress) await onProgress('UPLOADING_TO_GEMINI')
     await fs.unlink(tempFilePath)
+
+    if (onProgress) await onProgress('AI_ANALYZING')
 
     let prompt = `
     Analyze this PDF. 
