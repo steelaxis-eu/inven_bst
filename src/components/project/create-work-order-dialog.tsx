@@ -89,6 +89,8 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
     const [step, setStep] = useState(1); // 1 = Config, 2 = Optimization/Review
     const [submitting, setSubmitting] = useState(false)
     const [optimizationResult, setOptimizationResult] = useState<any>(null)
+    const [customOverrides, setCustomOverrides] = useState<Record<string, number>>({})
+    const [calculating, setCalculating] = useState(false)
 
     // Form State
     const [type, setType] = useState<string>('CUTTING')
@@ -112,7 +114,7 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
             try {
                 // Combine IDs
                 const pieceIds = [...selectedParts, ...selectedPlates];
-                const res = await getOptimizationPreview(pieceIds)
+                const res = await getOptimizationPreview(pieceIds, customOverrides)
 
                 if (res.success) {
                     setOptimizationResult(res.plans)
@@ -162,6 +164,34 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
             toast.error(e.message || "An error occurred")
         } finally {
             setSubmitting(false)
+        }
+    }
+
+    const handleOverrideChange = async (profileKey: string, val: string) => {
+        // Optimistic update
+        const num = parseInt(val)
+        let newOverrides = { ...customOverrides }
+
+        if (!val) {
+            delete newOverrides[profileKey]
+        } else if (!isNaN(num) && num > 0) {
+            newOverrides[profileKey] = num
+        }
+
+        setCustomOverrides(newOverrides)
+
+        // Trigger recalc
+        setCalculating(true)
+        try {
+            const pieceIds = [...selectedParts, ...selectedPlates];
+            const res = await getOptimizationPreview(pieceIds, newOverrides)
+            if (res.success) {
+                setOptimizationResult(res.plans)
+            }
+        } catch (e) {
+            toast.error("Failed to recalculate")
+        } finally {
+            setCalculating(false)
         }
     }
 
@@ -260,7 +290,36 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
                                 <div style={{ overflowY: 'auto', flex: 1, paddingRight: '8px' }}>
                                     {optimizationResult && optimizationResult.map((plan: any, i: number) => {
                                         if (plan.type === 'profile' && plan.canOptimize) {
-                                            return <NestingVisualizer key={i} plan={plan} />
+                                            return (
+                                                <NestingVisualizer
+                                                    key={i}
+                                                    plan={plan}
+                                                    extraHeaderContent={
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <Combobox
+                                                                style={{ width: '100px' }}
+                                                                size="small"
+                                                                freeform
+                                                                placeholder="Length"
+                                                                disabled={calculating}
+                                                                value={(customOverrides[plan.materialKey] || 12000).toString()}
+                                                                onOptionSelect={(e, d) => {
+                                                                    if (d.optionValue) {
+                                                                        handleOverrideChange(plan.materialKey, d.optionValue)
+                                                                    }
+                                                                }}
+                                                                onChange={(e) => {
+                                                                    handleOverrideChange(plan.materialKey, e.target.value)
+                                                                }}
+                                                            >
+                                                                <Option value="6000">6000 (6m)</Option>
+                                                                <Option value="12000">12000 (12m)</Option>
+                                                            </Combobox>
+                                                            {calculating && <Spinner size="tiny" />}
+                                                        </div>
+                                                    }
+                                                />
+                                            )
                                         } else if (plan.type === 'plate') {
                                             return (
                                                 <div key={i} style={{ padding: '12px', marginBottom: '8px', border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium }}>

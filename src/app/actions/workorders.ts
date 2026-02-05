@@ -831,7 +831,10 @@ export async function completeMaterialPrepWorkOrder(
  * Check if inventory has sufficient stock using Optimization Logic
  * Returns the optimized plan for Profiles and Stock Availability for Plates
  */
-export async function getOptimizationPreview(input: string[] | { id: string, type: 'part' | 'plate' }[]) {
+export async function getOptimizationPreview(
+    input: string[] | { id: string, type: 'part' | 'plate' }[],
+    customStockOverrides: Record<string, number> = {}
+) {
     try {
         // Normalize input
         const items = Array.isArray(input) && typeof input[0] === 'string'
@@ -970,7 +973,8 @@ export async function getOptimizationPreview(input: string[] | { id: string, typ
                 }))
 
                 // We run optimization even if no stock - it will tell us what to buy
-                const result = optimizeCuttingPlan(partsRequest, stockInfo, 12000)
+                const stockLengthToUse = customStockOverrides[key] || 12000
+                const result = optimizeCuttingPlan(partsRequest, stockInfo, stockLengthToUse)
 
                 planResults.push({
                     type: 'profile',

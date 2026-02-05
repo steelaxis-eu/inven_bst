@@ -108,9 +108,10 @@ interface NestingVisualizerProps {
         grade: string
         result: OptimizationResult
     }
+    extraHeaderContent?: React.ReactNode
 }
 
-export function NestingVisualizer({ plan }: NestingVisualizerProps) {
+export function NestingVisualizer({ plan, extraHeaderContent }: NestingVisualizerProps) {
     const styles = useStyles();
     const { profile, grade, result } = plan;
 
@@ -126,6 +127,7 @@ export function NestingVisualizer({ plan }: NestingVisualizerProps) {
                     >
                         {Math.round(result.efficiency * 100)}%
                     </Badge>
+                    {extraHeaderContent}
                 </div>
             </div>
 
