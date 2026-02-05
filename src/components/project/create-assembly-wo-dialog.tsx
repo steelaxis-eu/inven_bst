@@ -157,10 +157,11 @@ export function CreateAssemblyWODialog({
         p.pieces.filter(pc => pc.status !== 'READY').map(pc => pc.id)
     )
 
-    const calculatePlan = async (length: number) => {
+    const calculatePlan = async (length: number, overrides?: Record<string, number>) => {
         setCalculating(true)
         try {
-            const res = await startNestingJob(projectId, notReadyPieceIds, length, customOverrides)
+            const overridesToUse = overrides || customOverrides
+            const res = await startNestingJob(projectId, notReadyPieceIds, length, overridesToUse)
             if (res.success && res.jobId) {
                 const pollInterval = setInterval(async () => {
                     const statusRes = await getJobStatus(res.jobId!)
@@ -194,7 +195,7 @@ export function CreateAssemblyWODialog({
         if (step === 'PLANNING' && notReadyPieceIds.length > 0) {
             calculatePlan(stockLength)
         }
-    }, [step, stockLength, customOverrides])
+    }, [step, stockLength])
 
     const handleOverrideChange = (profileKey: string, val: string) => {
         // If it's a specific "Custom" flag or just direct number input
@@ -385,11 +386,21 @@ export function CreateAssemblyWODialog({
                                                         value={(customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`] || stockLength).toString()}
                                                         onOptionSelect={(e, d) => {
                                                             if (d.optionValue) {
-                                                                handleOverrideChange(`${res.profileType}|${res.dimensions}|${res.grade}`, d.optionValue)
+                                                                const key = `${res.profileType}|${res.dimensions}|${res.grade}`
+                                                                handleOverrideChange(key, d.optionValue)
+                                                                // Trigger recalc immediately with new value
+                                                                const num = parseInt(d.optionValue)
+                                                                if (!isNaN(num) && num > 0) {
+                                                                    calculatePlan(stockLength, { ...customOverrides, [key]: num })
+                                                                }
                                                             }
                                                         }}
                                                         onChange={(e) => {
                                                             handleOverrideChange(`${res.profileType}|${res.dimensions}|${res.grade}`, e.target.value)
+                                                        }}
+                                                        onBlur={() => {
+                                                            // Trigger recalc on blur (uses updated state)
+                                                            calculatePlan(stockLength)
                                                         }}
                                                     >
                                                         <Option value="6000">6000 (6m)</Option>

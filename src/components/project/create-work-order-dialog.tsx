@@ -167,8 +167,7 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
         }
     }
 
-    const handleOverrideChange = async (profileKey: string, val: string) => {
-        // Optimistic update
+    const handleOverrideChange = (profileKey: string, val: string) => {
         const num = parseInt(val)
         let newOverrides = { ...customOverrides }
 
@@ -179,12 +178,14 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
         }
 
         setCustomOverrides(newOverrides)
+        return newOverrides
+    }
 
-        // Trigger recalc
+    const runOptimization = async (overrides?: Record<string, number>) => {
         setCalculating(true)
         try {
             const pieceIds = [...selectedParts, ...selectedPlates];
-            const res = await getOptimizationPreview(pieceIds, newOverrides)
+            const res = await getOptimizationPreview(pieceIds, overrides || customOverrides)
             if (res.success) {
                 setOptimizationResult(res.plans)
             }
@@ -305,11 +306,15 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
                                                                 value={(customOverrides[plan.materialKey] || 12000).toString()}
                                                                 onOptionSelect={(e, d) => {
                                                                     if (d.optionValue) {
-                                                                        handleOverrideChange(plan.materialKey, d.optionValue)
+                                                                        const newOverrides = handleOverrideChange(plan.materialKey, d.optionValue)
+                                                                        runOptimization(newOverrides)
                                                                     }
                                                                 }}
                                                                 onChange={(e) => {
                                                                     handleOverrideChange(plan.materialKey, e.target.value)
+                                                                }}
+                                                                onBlur={() => {
+                                                                    runOptimization()
                                                                 }}
                                                             >
                                                                 <Option value="6000">6000 (6m)</Option>
