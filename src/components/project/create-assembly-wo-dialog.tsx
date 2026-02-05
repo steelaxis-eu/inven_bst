@@ -11,6 +11,7 @@ import {
     Button,
     Input,
     Label,
+    Combobox,
     Dropdown,
     Option,
     Table,
@@ -123,6 +124,7 @@ export function CreateAssemblyWODialog({
     const [step, setStep] = useState<'READINESS' | 'PLANNING'>('READINESS')
     const [planningResults, setPlanningResults] = useState<any[]>([])
     const [stockLength, setStockLength] = useState(12000)
+    const [customOverrides, setCustomOverrides] = useState<Record<string, number>>({}) // Key: profileType|dimensions|grade
 
     // Form inputs
     const [createPartPrepWO, setCreatePartPrepWO] = useState(true)
@@ -158,7 +160,7 @@ export function CreateAssemblyWODialog({
     const calculatePlan = async (length: number) => {
         setCalculating(true)
         try {
-            const res = await startNestingJob(projectId, notReadyPieceIds, length)
+            const res = await startNestingJob(projectId, notReadyPieceIds, length, customOverrides)
             if (res.success && res.jobId) {
                 const pollInterval = setInterval(async () => {
                     const statusRes = await getJobStatus(res.jobId!)
@@ -192,7 +194,26 @@ export function CreateAssemblyWODialog({
         if (step === 'PLANNING' && notReadyPieceIds.length > 0) {
             calculatePlan(stockLength)
         }
-    }, [step, stockLength])
+    }, [step, stockLength, customOverrides])
+
+    const handleOverrideChange = (profileKey: string, val: string) => {
+        // If it's a specific "Custom" flag or just direct number input
+        // Let's assume input is direct number string
+        if (!val) {
+            const newMap = { ...customOverrides }
+            delete newMap[profileKey]
+            setCustomOverrides(newMap)
+            return
+        }
+
+        const num = parseInt(val)
+        if (!isNaN(num) && num > 0) {
+            setCustomOverrides(prev => ({
+                ...prev,
+                [profileKey]: num
+            }))
+        }
+    }
 
     const handleNext = async () => {
         if (allReady) {
@@ -349,10 +370,32 @@ export function CreateAssemblyWODialog({
                                 <div>
                                     {planningResults.map((res: any, idx: number) => (
                                         <div key={idx} className={styles.resultCard}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                                                 <BoxRegular />
                                                 <Text weight="bold">{res.profileType} {res.dimensions}</Text>
                                                 <Badge appearance="outline">{res.grade}</Badge>
+
+                                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <Label size="small">Length (mm):</Label>
+                                                    <Combobox
+                                                        style={{ width: '120px' }}
+                                                        size="small"
+                                                        freeform
+                                                        placeholder="Select or type"
+                                                        value={(customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`] || stockLength).toString()}
+                                                        onOptionSelect={(e, d) => {
+                                                            if (d.optionValue) {
+                                                                handleOverrideChange(`${res.profileType}|${res.dimensions}|${res.grade}`, d.optionValue)
+                                                            }
+                                                        }}
+                                                        onChange={(e) => {
+                                                            handleOverrideChange(`${res.profileType}|${res.dimensions}|${res.grade}`, e.target.value)
+                                                        }}
+                                                    >
+                                                        <Option value="6000">6000 (6m)</Option>
+                                                        <Option value="12000">12000 (12m)</Option>
+                                                    </Combobox>
+                                                </div>
                                             </div>
 
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>

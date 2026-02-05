@@ -24,7 +24,8 @@ export interface PlanningResult {
 
 export async function calculateCuttingPlan(
     pieceIds: string[],
-    standardStockLength: number = 12000
+    standardStockLength: number = 12000,
+    customStockOverrides: Record<string, number> = {}
 ): Promise<{ success: boolean, data?: PlanningResult[], error?: string }> {
     try {
         // 1. Fetch pieces with profile info
@@ -124,7 +125,11 @@ export async function calculateCuttingPlan(
                 quantity: 1
             }))
 
-            const plan = optimizeCuttingPlan(optParts, stockInfo, standardStockLength)
+            // Custom Override Check
+            const groupKey = `${group.profileType}|${group.dimensions}|${group.gradeName}`
+            const stockLengthToUse = customStockOverrides[groupKey] || standardStockLength
+
+            const plan = optimizeCuttingPlan(optParts, stockInfo, stockLengthToUse)
 
             // Map results
             const stockUsed = plan.stockUsed.map(s => ({

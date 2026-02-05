@@ -174,14 +174,14 @@ async function processRecalculateJob(jobId: string) {
 /**
  * Start a Nesting Optimization Job
  */
-export async function startNestingJob(projectId: string, pieceIds: string[], stockLength: number) {
+export async function startNestingJob(projectId: string, pieceIds: string[], stockLength: number, customOverrides: Record<string, number> = {}) {
     try {
         const job = await prisma.optimizationJob.create({
             data: {
                 projectId,
                 type: 'NESTING',
                 status: 'PENDING',
-                parameters: { pieceIds, stockLength }
+                parameters: { pieceIds, stockLength, customOverrides }
             }
         })
 
@@ -205,12 +205,12 @@ async function processNestingJob(jobId: string) {
         const job = await prisma.optimizationJob.findUnique({ where: { id: jobId } })
         if (!job || !job.parameters) return
 
-        const { pieceIds, stockLength } = job.parameters as { pieceIds: string[], stockLength: number }
+        const { pieceIds, stockLength, customOverrides } = job.parameters as { pieceIds: string[], stockLength: number, customOverrides?: Record<string, number> }
 
         // Import the heavy calculation
         const { calculateCuttingPlan } = await import('./planning')
 
-        const res = await calculateCuttingPlan(pieceIds, stockLength)
+        const res = await calculateCuttingPlan(pieceIds, stockLength, customOverrides || {})
 
         if (res.success && res.data) {
             await prisma.optimizationJob.update({
