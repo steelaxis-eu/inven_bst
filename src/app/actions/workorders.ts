@@ -1187,7 +1187,7 @@ export async function createSmartWorkOrder(input: {
                             }
                         }
                     })
-                })
+                }, { maxWait: 5000, timeout: 20000 })
 
                 return { success: true, message: 'Created Prep WO and Blocked Outsourced WO' }
 
@@ -1361,7 +1361,7 @@ export async function createSmartWorkOrder(input: {
                         }
                     })
                 }
-            })
+            }, { maxWait: 5000, timeout: 20000 })
 
             revalidatePath(`/projects/${projectId}`)
             return {
