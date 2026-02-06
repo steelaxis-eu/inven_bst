@@ -1094,13 +1094,14 @@ export async function createSmartWorkOrder(input: {
     vendor?: string
     // Optimization confirmation
     cachedPlan?: any
+    stockOverrides?: Record<string, number>
 }): Promise<{
     success: boolean
     message?: string
     error?: string
 }> {
     try {
-        const { projectId, pieceIds: inputPieces, type, title, isOutsourced, supplyMaterial, vendor, priority, scheduledDate, notes } = input
+        const { projectId, pieceIds: inputPieces, type, title, isOutsourced, supplyMaterial, vendor, priority, scheduledDate, notes, stockOverrides } = input
 
         // Normalize input
         const items = Array.isArray(inputPieces) && (typeof inputPieces[0] === 'string' || inputPieces.length === 0)
@@ -1140,13 +1141,28 @@ export async function createSmartWorkOrder(input: {
                 // Numbers generated inside transaction to avoid duplicates
 
                 // Run Optimization / Stock Check
-                const optRes = await getOptimizationPreview(items)
+                const optRes = await getOptimizationPreview(items, stockOverrides)
                 let prepNotes = "Sanity Check: Prepare material for Outsourced Job.\n"
 
                 if (optRes.success && optRes.plans) {
                     optRes.plans.forEach((p: any) => {
                         if (p.type === 'profile' && p.canOptimize) {
-                            prepNotes += `\n${p.profile} (${p.grade}): Used ${p.result?.stockUsed?.length || 0} existing items, Need ${p.result?.newStockNeeded?.length || 0} new bars.`
+                            const result = p.result
+                            prepNotes += `\n[${p.profile} - ${p.grade}]`
+
+                            // Group new stock needed
+                            const stockSummary: Record<number, number> = {}
+                            result.newStockNeeded.forEach((ns: any) => {
+                                stockSummary[ns.length] = (stockSummary[ns.length] || 0) + ns.quantity
+                            })
+
+                            Object.entries(stockSummary).forEach(([len, qty]) => {
+                                prepNotes += `\n- Buy ${qty}x ${len}mm`
+                            })
+
+                            if (result.stockUsed.length > 0) {
+                                prepNotes += `\n- (Use ${result.stockUsed.length} existing bars from inventory)`
+                            }
                         } else if (p.type === 'plate') {
                             prepNotes += `\nPlate ${p.thickness}mm (${p.grade}): ${p.summary.count} pieces. Area: ${p.summary.totalAreaM2}m2.`
                         }
@@ -1221,7 +1237,7 @@ export async function createSmartWorkOrder(input: {
         // ====================================================================
         if (type === 'CUTTING') {
             // Run Optimization
-            const optRes = await getOptimizationPreview(items)
+            const optRes = await getOptimizationPreview(items, stockOverrides)
 
             if (!optRes.success || !optRes.plans) {
                 // Fallback
@@ -1271,9 +1287,15 @@ export async function createSmartWorkOrder(input: {
                         materialPrepRequired = true
                         prepSummary += `\n[${plan.profile} - ${plan.grade}]`
 
+                        // Summarize new stock needed
+                        const stockSummary: Record<number, number> = {}
                         result.newStockNeeded.forEach((ns: any) => {
-                            prepSummary += `\n- Buy ${ns.quantity}x ${ns.length}mm`
+                            stockSummary[ns.length] = (stockSummary[ns.length] || 0) + ns.quantity
                             ns.parts.forEach((p: any) => blockedItems.push({ id: p.partId, type: 'part' }))
+                        })
+
+                        Object.entries(stockSummary).forEach(([len, qty]) => {
+                            prepSummary += `\n- Buy ${qty}x ${len}mm`
                         })
                     }
 

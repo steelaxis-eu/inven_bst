@@ -147,7 +147,8 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
                 vendor: vendor || undefined,
                 notes,
                 scheduledDate: dueDate ? new Date(dueDate) : undefined,
-                pieceIds
+                pieceIds,
+                stockOverrides: customOverrides
             })
 
             if (res.success) {
