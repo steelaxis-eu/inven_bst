@@ -180,31 +180,29 @@ function getPatternGroups(result: OptimizationResult | null): PatternGroup[] {
 
     // 2. Process New Stock
     result.newStockNeeded.forEach(stock => {
-        // New stock is usually already grouped by length/qty/pattern in the optimizer output structure?
-        // Actually the optimizer output `newStockNeeded` implies a grouping (length, quantity, parts ref).
-        // BUT `parts` array in `newStockNeeded` typically lists ALL parts for ALL bars of that type? 
-        // Let's verify standard OptimizationResult structure. 
-        // Typically `newStockNeeded` is: "Buy 5 bars of 6m. Here are the parts for Bar 1, Bar 2...?"
-        // NO. Usually `newStockNeeded` array elements represent a *Pattern*. 
-        // "Pattern A used 5 times".
-        // Let's look at Step 332 interface: `newStockNeeded: { quantity: number, parts: {...}[] }[]`.
-        // The `quantity` implies repetition. The `parts` array likely describes ONE instance of the pattern.
+        // Create grouping key based on length + parts signature
+        const partSig = stock.parts
+            .map(p => `${p.length}-${p.partNumber}`)
+            .sort()
+            .join('|');
+        const key = `NEW-${stock.length}-${partSig}`;
 
-        const efficiency = (stock.length - (stock.length - stock.parts.reduce((s, p) => s + p.length, 0))) / stock.length;
-        const waste = stock.length - stock.parts.reduce((s, p) => s + p.length, 0);
+        if (!groups[key]) {
+            const efficiency = (stock.length - (stock.length - stock.parts.reduce((s, p) => s + p.length, 0))) / stock.length;
+            const waste = stock.length - stock.parts.reduce((s, p) => s + p.length, 0);
 
-        // We treat this as a pre-grouped pattern
-        const group: PatternGroup = {
-            id: `NEW-${Math.random().toString(36).substr(2, 9)}`, // Temp ID
-            repetition: stock.quantity,
-            length: stock.length,
-            efficiency: efficiency, // Approx or recalc
-            waste: waste,
-            sourceType: 'NEW',
-            parts: condenseParts(stock.parts),
-            flattenedParts: stock.parts
-        };
-        singles.push(group); // Push as a distinct group item
+            groups[key] = {
+                id: key,
+                repetition: 0,
+                length: stock.length,
+                efficiency: efficiency,
+                waste: waste,
+                sourceType: 'NEW',
+                parts: condenseParts(stock.parts),
+                flattenedParts: stock.parts
+            }
+        }
+        groups[key].repetition += stock.quantity;
     });
 
     return [...Object.values(groups), ...singles].sort((a, b) => b.repetition - a.repetition);
