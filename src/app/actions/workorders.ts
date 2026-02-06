@@ -52,6 +52,51 @@ async function generateWorkOrderNumber(projectId: string, tx?: Prisma.Transactio
 }
 
 /**
+ * Summarize cutting instructions for Work Order notes
+ */
+function formatCuttingInstructions(plans: any[], piecePartNumberMap: Record<string, string>): string {
+    let notes = "Cutting Optimization Plan:\n"
+
+    plans.forEach(p => {
+        if (p.type === 'profile' && p.result) {
+            notes += `\n[${p.profile} - ${p.grade}]`
+
+            // Group identical patterns for New Stock
+            const patterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
+            p.result.newStockNeeded.forEach((ns: any) => {
+                const sortedParts = [...ns.parts].sort((a, b) => a.partId.localeCompare(b.partId))
+                const partsStr = sortedParts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
+                const key = `${ns.length}#${partsStr}`
+                if (!patterns[key]) patterns[key] = { qty: 0, length: ns.length, parts: ns.parts }
+                patterns[key].qty++
+            })
+
+            // Group identical patterns for Stock Used
+            const stockPatterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
+            p.result.stockUsed.forEach((su: any) => {
+                const sortedParts = [...su.parts].sort((a, b) => a.partId.localeCompare(b.partId))
+                const partsStr = sortedParts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
+                const key = `SU#${su.originalLength}#${partsStr}`
+                if (!stockPatterns[key]) stockPatterns[key] = { qty: 0, length: su.originalLength, parts: su.parts }
+                stockPatterns[key].qty++
+            })
+
+            Object.values(stockPatterns).forEach(pat => {
+                const partsStr = pat.parts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
+                notes += `\n- (${pat.qty}x) Use Stock Bar (${pat.length}mm): [${partsStr}]`
+            })
+
+            Object.values(patterns).forEach(pat => {
+                const partsStr = pat.parts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
+                notes += `\n- ${pat.qty}x New Bar ${pat.length}mm: [${partsStr}]`
+            })
+        }
+    })
+
+    return notes
+}
+
+/**
  * Create a new work order
  */
 export async function createWorkOrder(input: CreateWorkOrderInput) {
@@ -1116,9 +1161,17 @@ export async function createSmartWorkOrder(input: {
         if (!user?.id) return { success: false, error: 'Unauthorized' }
 
         // Fetch Piece Details for linking (PartPiece vs PlatePart)
-        // We need to know specific IDs to link properly
         const partIds = items.filter(i => i.type === 'part').map(i => i.id)
         const plateIds = items.filter(i => i.type === 'plate').map(i => i.id)
+
+        let piecePartNumberMap: Record<string, string> = {}
+        if (partIds.length > 0) {
+            const pieces = await prisma.partPiece.findMany({
+                where: { id: { in: partIds } },
+                include: { part: true }
+            })
+            pieces.forEach(p => piecePartNumberMap[p.id] = p.part.partNumber)
+        }
 
         // Helper to get PlatePartId for a PlatePiece
         let platePieceMap: Record<string, string> = {} // pieceId -> platePartId
@@ -1150,19 +1203,25 @@ export async function createSmartWorkOrder(input: {
                             const result = p.result
                             prepNotes += `\n[${p.profile} - ${p.grade}]`
 
-                            // Group new stock needed
-                            const stockSummary: Record<number, number> = {}
+                            // Summary for buying
+                            const buySummary: Record<number, number> = {}
                             result.newStockNeeded.forEach((ns: any) => {
-                                stockSummary[ns.length] = (stockSummary[ns.length] || 0) + ns.quantity
+                                buySummary[ns.length] = (buySummary[ns.length] || 0) + ns.quantity
                             })
 
-                            Object.entries(stockSummary).forEach(([len, qty]) => {
+                            Object.entries(buySummary).forEach(([len, qty]) => {
                                 prepNotes += `\n- Buy ${qty}x ${len}mm`
                             })
 
                             if (result.stockUsed.length > 0) {
                                 prepNotes += `\n- (Use ${result.stockUsed.length} existing bars from inventory)`
                             }
+
+                            // Efficiency info
+                            const totalWaste = result.stockUsed.reduce((acc: number, s: any) => acc + s.waste, 0) +
+                                result.newStockNeeded.reduce((acc: number, s: any) => acc + (s.length - s.parts.reduce((a: number, pr: any) => a + pr.length, 0)), 0)
+                            prepNotes += `\n- Efficiency: ${(result.efficiency * 100).toFixed(1)}%`
+                            if (totalWaste > 0) prepNotes += ` (Waste: ${(totalWaste / 1000).toFixed(2)}m)`
                         } else if (p.type === 'plate') {
                             prepNotes += `\nPlate ${p.thickness}mm (${p.grade}): ${p.summary.count} pieces. Area: ${p.summary.totalAreaM2}m2.`
                         }
@@ -1287,16 +1346,21 @@ export async function createSmartWorkOrder(input: {
                         materialPrepRequired = true
                         prepSummary += `\n[${plan.profile} - ${plan.grade}]`
 
-                        // Summarize new stock needed
-                        const stockSummary: Record<number, number> = {}
+                        const buySummary: Record<number, number> = {}
                         result.newStockNeeded.forEach((ns: any) => {
-                            stockSummary[ns.length] = (stockSummary[ns.length] || 0) + ns.quantity
+                            buySummary[ns.length] = (buySummary[ns.length] || 0) + ns.quantity
                             ns.parts.forEach((p: any) => blockedItems.push({ id: p.partId, type: 'part' }))
                         })
 
-                        Object.entries(stockSummary).forEach(([len, qty]) => {
+                        Object.entries(buySummary).forEach(([len, qty]) => {
                             prepSummary += `\n- Buy ${qty}x ${len}mm`
                         })
+
+                        // Efficiency info
+                        const totalWaste = result.stockUsed.reduce((acc: number, s: any) => acc + s.waste, 0) +
+                            result.newStockNeeded.reduce((acc: number, s: any) => acc + (s.length - s.parts.reduce((a: number, pr: any) => a + pr.length, 0)), 0)
+                        prepSummary += `\n- Efficiency: ${(result.efficiency * 100).toFixed(1)}%`
+                        if (totalWaste > 0) prepSummary += ` (Waste: ${(totalWaste / 1000).toFixed(2)}m)`
                     }
 
                     // 3. Unallocated -> Blocked
@@ -1351,7 +1415,7 @@ export async function createSmartWorkOrder(input: {
                             priority: priority || WorkOrderPriority.MEDIUM,
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                            notes: (notes || '') + "\n[Auto-Optimized]",
+                            notes: (notes || '') + "\n\n" + formatCuttingInstructions(optRes.plans, piecePartNumberMap),
                             items: {
                                 create: immediateItems.map(i => ({
                                     pieceId: i.type === 'part' ? i.id : undefined,
@@ -1374,7 +1438,7 @@ export async function createSmartWorkOrder(input: {
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             blockedByWOId: prepWOId,
-                            notes: (notes || '') + "\n[Waiting for Material Prep]",
+                            notes: (notes || '') + "\n\n" + formatCuttingInstructions(optRes.plans, piecePartNumberMap),
                             items: {
                                 create: blockedItems.map(i => ({
                                     pieceId: i.type === 'part' ? i.id : undefined,
