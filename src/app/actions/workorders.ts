@@ -880,6 +880,12 @@ export async function getOptimizationPreview(
                 materialGroups[key].push(p)
             })
 
+            // Map for Part Numbers
+            const piecePartNumberMap: Record<string, string> = {}
+            pieces.forEach(p => {
+                piecePartNumberMap[p.id] = p.part.partNumber
+            })
+
             for (const [key, groupPieces] of Object.entries(materialGroups)) {
                 const firstPart = groupPieces[0].part
                 const [profileKeyPart, gradeKeyPart] = key.split('#')
@@ -975,6 +981,20 @@ export async function getOptimizationPreview(
                 // We run optimization even if no stock - it will tell us what to buy
                 const stockLengthToUse = customStockOverrides[key] || 12000
                 const result = optimizeCuttingPlan(partsRequest, stockInfo, stockLengthToUse)
+
+                // Inject partNumbers into result
+                result.stockUsed.forEach((s: any) => {
+                    s.parts = s.parts.map((p: any) => ({
+                        ...p,
+                        partNumber: piecePartNumberMap[p.partId] || 'Unknown'
+                    }))
+                })
+                result.newStockNeeded.forEach((n: any) => {
+                    n.parts = n.parts.map((p: any) => ({
+                        ...p,
+                        partNumber: piecePartNumberMap[p.partId] || 'Unknown'
+                    }))
+                })
 
                 planResults.push({
                     type: 'profile',

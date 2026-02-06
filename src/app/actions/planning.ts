@@ -12,11 +12,13 @@ export interface PlanningResult {
         length: number
         partsCount: number
         waste: number
+        parts: { partId: string, length: number, partNumber: string }[]
     }[]
     newStockNeeded: {
         length: number
         quantity: number
         partsCount: number
+        parts: { partId: string, length: number, partNumber: string }[]
     }[]
     partsFromStock: string[] // IDs of parts to cut from stock
     partsFromNew: string[]   // IDs of parts needing new material
@@ -48,6 +50,9 @@ export async function calculateCuttingPlan(
             pieces: { id: string, length: number }[]
         }> = {}
 
+        // Map pieceId -> partNumber for final result mapping
+        const piecePartNumberMap: Record<string, string> = {}
+
         for (const piece of pieces) {
             // Determine keys even if relations are missing
             const gradeName = piece.part.grade?.name || 'Unknown Grade'
@@ -78,6 +83,7 @@ export async function calculateCuttingPlan(
 
             const len = piece.part.length || 0
             groups[key].pieces.push({ id: piece.id, length: len })
+            piecePartNumberMap[piece.id] = piece.part.partNumber
         }
 
         const results: PlanningResult[] = []
@@ -136,13 +142,21 @@ export async function calculateCuttingPlan(
                 lotId: s.stockId,
                 length: s.parts.reduce((sum, p) => sum + p.length, 0) + s.waste,
                 partsCount: s.parts.length,
-                waste: s.waste
+                waste: s.waste,
+                parts: s.parts.map(p => ({
+                    ...p,
+                    partNumber: piecePartNumberMap[p.partId] || 'Unknown'
+                }))
             }))
 
             const newStockNeeded = plan.newStockNeeded.map(n => ({
                 length: n.length,
                 quantity: n.quantity,
-                partsCount: n.parts.length
+                partsCount: n.parts.length,
+                parts: n.parts.map(p => ({
+                    ...p,
+                    partNumber: piecePartNumberMap[p.partId] || 'Unknown'
+                }))
             }))
 
             const partsFromStock = plan.stockUsed.flatMap(s => s.parts.map(p => p.partId))
