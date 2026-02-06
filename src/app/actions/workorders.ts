@@ -1397,6 +1397,13 @@ export async function createSmartWorkOrder(input: {
 
     } catch (e: any) {
         console.error('createSmartWorkOrder error:', e)
+        // Check for Prisma transaction timeout
+        if (e.message && e.message.includes('expired transaction')) {
+            return {
+                success: false,
+                error: 'The operation took too long to complete (timeout). This usually happens with very large optimisations. Please try selecting fewer parts or splitting the work order.'
+            }
+        }
         return { success: false, error: e.message }
     }
 }
