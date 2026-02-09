@@ -150,7 +150,12 @@ export async function getProjectWorkOrders(projectId: string) {
         include: {
             items: {
                 include: {
-                    piece: { include: { part: true } },
+                    piece: {
+                        include: {
+                            part: { include: { profile: true } },
+                            inventory: true
+                        }
+                    },
                     assembly: true,
                     platePart: true
                 }
@@ -172,7 +177,12 @@ export async function getWorkOrder(workOrderId: string) {
         include: {
             items: {
                 include: {
-                    piece: { include: { part: { include: { profile: true } } } },
+                    piece: {
+                        include: {
+                            part: { include: { profile: true } },
+                            inventory: true
+                        }
+                    },
                     assembly: true,
                     platePart: true
                 }

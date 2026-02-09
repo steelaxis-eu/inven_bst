@@ -69,8 +69,14 @@ interface WorkOrderItem {
     piece?: {
         id: string
         partId: string
+        inventoryId: string | null
+        inventory?: {
+            lotId: string
+            supplier?: string
+        } | null
         part: {
             partNumber: string
+            name: string
             isSplit?: boolean
             cutAngles?: string | null
             profile?: { type: string; dimensions: string } | null
@@ -102,6 +108,9 @@ interface WorkOrder {
     completedAt: Date | null
     notes: string | null
     items: WorkOrderItem[]
+    metadata?: {
+        plans?: any[]
+    } | null
 }
 
 interface WorkOrdersListProps {
@@ -207,10 +216,122 @@ const useStyles = makeStyles({
         padding: '16px',
         display: 'flex',
         flexDirection: 'column',
+    },
+    visualizerContainer: {
+        marginTop: '16px',
+        padding: '16px',
+        backgroundColor: tokens.colorNeutralBackground1,
+        borderRadius: tokens.borderRadiusMedium,
+        border: `1px solid ${tokens.colorNeutralStroke2}`,
+    },
+    barContainer: {
+        position: 'relative',
+        width: '100%',
+        height: '40px',
+        backgroundColor: tokens.colorNeutralBackground3,
+        display: 'flex',
+        alignItems: 'center',
+        border: `1px solid ${tokens.colorNeutralStroke1}`,
+        borderRadius: tokens.borderRadiusSmall,
+        overflow: 'hidden',
+        marginTop: '8px',
+        marginBottom: '20px',
+    },
+    segment: {
+        height: '100%',
+        borderRight: `1px solid ${tokens.colorNeutralStroke1}`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: tokens.colorNeutralBackground1,
+        ':hover': {
+            backgroundColor: tokens.colorNeutralBackground1Hover,
+        }
+    },
+    tickMark: {
+        position: 'absolute',
+        top: '100%',
+        height: '8px',
+        borderLeft: `1px solid ${tokens.colorNeutralStroke1}`,
+    },
+    tickLabel: {
+        position: 'absolute',
+        top: '10px',
+        fontSize: '10px',
+        color: tokens.colorNeutralForeground4,
+        transform: 'translateX(-50%)',
     }
 })
 
 // --- Sub-Components ---
+
+function LocalCuttingPlanVisualizer({ plans }: { plans: any[] }) {
+    const styles = useStyles()
+    if (!plans || plans.length === 0) return null
+
+    return (
+        <div className={styles.visualizerContainer}>
+            <Text weight="semibold" style={{ marginBottom: '12px', display: 'block', color: tokens.colorNeutralForeground3, textTransform: 'uppercase', fontSize: '12px' }}>
+                Visual Cutting Plan
+            </Text>
+            {plans.map((p, pIdx) => {
+                if (p.type !== 'profile' || !p.result) return null
+
+                // Group identical patterns
+                const patterns: any[] = []
+                const newPatterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
+                p.result.newStockNeeded.forEach((ns: any) => {
+                    const partsStr = ns.parts.map((p: any) => `${p.partNumber}@${p.length}`).join('|')
+                    const key = `${ns.length}#${partsStr}`
+                    if (!newPatterns[key]) newPatterns[key] = { qty: 0, length: ns.length, parts: ns.parts }
+                    newPatterns[key].qty++
+                })
+                Object.values(newPatterns).forEach(pat => patterns.push({ ...pat, source: 'New Stock' }))
+
+                const stockPatterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
+                p.result.stockUsed.forEach((su: any) => {
+                    const partsStr = su.parts.map((p: any) => `${p.partNumber}@${p.length}`).join('|')
+                    const key = `SU#${su.originalLength}#${partsStr}`
+                    if (!stockPatterns[key]) stockPatterns[key] = { qty: 0, length: su.originalLength, parts: su.parts }
+                    stockPatterns[key].qty++
+                })
+                Object.values(stockPatterns).forEach(pat => patterns.push({ ...pat, source: 'Inventory' }))
+
+                return (
+                    <div key={pIdx} style={{ marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${tokens.colorNeutralStroke2}`, paddingBottom: '4px', marginBottom: '8px' }}>
+                            <Text weight="bold" style={{ color: tokens.colorBrandForeground1 }}>{p.profile} ({p.grade})</Text>
+                            <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>EFFICIENCY: {(p.result.efficiency * 100).toFixed(1)}%</Text>
+                        </div>
+
+                        {patterns.map((pat, patIdx) => (
+                            <div key={patIdx} style={{ marginBottom: '16px' }}>
+                                <Text size={200} weight="semibold">{pat.qty}x {pat.source} Bar ({pat.length}mm)</Text>
+                                <div className={styles.barContainer}>
+                                    {pat.parts.map((seg: any, sIdx: number) => {
+                                        const width = (seg.length / pat.length) * 100
+                                        return (
+                                            <div key={sIdx} className={styles.segment} style={{ width: `${width}%` }}>
+                                                <Text size={100} weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
+                                                    {seg.partNumber}
+                                                </Text>
+                                                <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>{seg.length}</Text>
+                                            </div>
+                                        )
+                                    })}
+                                    <div style={{ flex: 1, backgroundColor: tokens.colorNeutralBackground3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Text size={100} style={{ color: tokens.colorNeutralForeground4, opacity: 0.5 }}>WASTE</Text>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
 
 export function WorkOrderSummary({ workOrders }: { workOrders: WorkOrder[] }) {
     const styles = useStyles()
@@ -464,50 +585,119 @@ function WorkOrderTable({
                                                         <div className={styles.nestedTable}>
                                                             <Table>
                                                                 <TableBody>
-                                                                    {wo.items.map((item, idx) => (
-                                                                        <TableRow key={item.id} style={{ borderBottom: 'none' }}>
-                                                                            <TableCell style={{ width: '40px' }}>
-                                                                                {wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS' && item.status !== 'COMPLETED' && (
-                                                                                    <Checkbox
-                                                                                        checked={selectedBatchItemIds.includes(item.id)}
-                                                                                        onChange={(e, d) => {
-                                                                                            if (d.checked) setSelectedBatchItemIds(prev => [...prev, item.id])
-                                                                                            else setSelectedBatchItemIds(prev => prev.filter(id => id !== item.id))
-                                                                                        }}
-                                                                                    />
-                                                                                )}
-                                                                            </TableCell>
-                                                                            <TableCell style={{ width: '40px', fontFamily: 'monospace', fontSize: '12px' }}>{idx + 1}</TableCell>
-                                                                            <TableCell>
-                                                                                {item.piece ? (
+                                                                    {(() => {
+                                                                        const groupedItems: Record<string, {
+                                                                            partNumber: string,
+                                                                            name: string,
+                                                                            lotId: string,
+                                                                            notes: string,
+                                                                            qty: number,
+                                                                            status: string,
+                                                                            ids: string[],
+                                                                            isSplit?: boolean,
+                                                                            cutAngles?: string | null
+                                                                        }> = {}
+
+                                                                        wo.items.forEach(item => {
+                                                                            let key = ''
+                                                                            let data: any = {}
+
+                                                                            if (item.piece) {
+                                                                                const lotId = item.piece.inventory?.lotId || 'NEW MATERIAL'
+                                                                                key = `${item.piece.part.partNumber}-${lotId}-${item.status}`
+                                                                                data = {
+                                                                                    partNumber: item.piece.part.partNumber,
+                                                                                    name: item.piece.part.name,
+                                                                                    lotId: lotId,
+                                                                                    notes: item.notes || '',
+                                                                                    isSplit: item.piece.part.isSplit,
+                                                                                    cutAngles: item.piece.part.cutAngles
+                                                                                }
+                                                                            } else if (item.assembly) {
+                                                                                key = `assembly-${item.assembly.assemblyNumber}-${item.status}`
+                                                                                data = {
+                                                                                    partNumber: item.assembly.assemblyNumber,
+                                                                                    name: item.assembly.name,
+                                                                                    lotId: '-',
+                                                                                    notes: item.notes || ''
+                                                                                }
+                                                                            } else if (item.platePart) {
+                                                                                key = `plate-${item.platePart.partNumber}-${item.status}`
+                                                                                data = {
+                                                                                    partNumber: item.platePart.partNumber,
+                                                                                    name: '',
+                                                                                    lotId: '-',
+                                                                                    notes: item.notes || ''
+                                                                                }
+                                                                            }
+
+                                                                            if (!groupedItems[key]) {
+                                                                                groupedItems[key] = { ...data, qty: 0, status: item.status, ids: [] }
+                                                                            }
+                                                                            groupedItems[key].qty++
+                                                                            groupedItems[key].ids.push(item.id)
+                                                                        })
+
+                                                                        return Object.values(groupedItems).map((group, idx) => (
+                                                                            <TableRow key={idx} style={{ borderBottom: idx === Object.values(groupedItems).length - 1 ? 'none' : `1px solid ${tokens.colorNeutralStroke2}` }}>
+                                                                                <TableCell style={{ width: '40px' }}>
+                                                                                    {wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS' && group.status !== 'COMPLETED' && (
+                                                                                        <Checkbox
+                                                                                            checked={group.ids.every(id => selectedBatchItemIds.includes(id))}
+                                                                                            onChange={(e, d) => {
+                                                                                                if (d.checked) setSelectedBatchItemIds(prev => [...prev, ...group.ids])
+                                                                                                else setSelectedBatchItemIds(prev => prev.filter(id => !group.ids.includes(id)))
+                                                                                            }}
+                                                                                        />
+                                                                                    )}
+                                                                                </TableCell>
+                                                                                <TableCell style={{ width: '60px', fontWeight: 700, fontSize: '14px', color: tokens.colorBrandForeground1 }}>
+                                                                                    {group.qty}x
+                                                                                </TableCell>
+                                                                                <TableCell>
                                                                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                                                         <span style={{ fontWeight: 600 }}>
-                                                                                            {item.piece.part.partNumber} #{item.piece.pieceNumber}
-                                                                                            {item.piece.part.isSplit && <Badge size="extra-small" appearance="tint" color="brand" style={{ marginLeft: '6px' }}>1/2</Badge>}
+                                                                                            {group.partNumber}
+                                                                                            {group.isSplit && <Badge size="extra-small" appearance="tint" color="brand" style={{ marginLeft: '6px' }}>1/2</Badge>}
                                                                                         </span>
-                                                                                        {item.piece.part.cutAngles && (
+                                                                                        <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>{group.name}</Text>
+                                                                                        {group.cutAngles && (
                                                                                             <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>
-                                                                                                {item.piece.part.cutAngles}
+                                                                                                {group.cutAngles}
                                                                                             </Text>
                                                                                         )}
                                                                                     </div>
-                                                                                ) : item.assembly ? item.assembly.name
-                                                                                    : item.platePart ? item.platePart.partNumber
-                                                                                        : '-'}
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{item.notes || '-'}</Text>
-                                                                            </TableCell>
-                                                                            <TableCell style={{ textAlign: 'right', width: '100px' }}>
-                                                                                {item.status !== 'COMPLETED' && wo.status === 'IN_PROGRESS' && (
-                                                                                    <Button appearance="subtle" size="small" icon={loading === item.id ? undefined : <CheckmarkRegular />} onClick={() => handleItemComplete(item.id)}>
-                                                                                        {loading === item.id ? "..." : ""}
-                                                                                    </Button>
-                                                                                )}
-                                                                                {item.status === 'COMPLETED' && <CheckmarkRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    <Badge appearance="outline" color={group.lotId === 'NEW MATERIAL' ? 'important' : 'brand'}>
+                                                                                        LOT: {group.lotId}
+                                                                                    </Badge>
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{group.notes || '-'}</Text>
+                                                                                </TableCell>
+                                                                                <TableCell style={{ textAlign: 'right', width: '100px' }}>
+                                                                                    {group.status !== 'COMPLETED' && wo.status === 'IN_PROGRESS' && (
+                                                                                        <Button appearance="subtle" size="small" icon={<CheckmarkRegular />} onClick={() => {
+                                                                                            // Complete all ids in this group
+                                                                                            group.ids.forEach(id => handleItemComplete(id))
+                                                                                        }}>
+                                                                                            Complete All
+                                                                                        </Button>
+                                                                                    )}
+                                                                                    {group.status === 'COMPLETED' && <CheckmarkRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        ))
+                                                                    })()}
+                                                                    {/* Visualizer if available */}
+                                                                    {wo.type === 'CUTTING' && wo.metadata?.plans && (
+                                                                        <TableRow>
+                                                                            <TableCell colSpan={6}>
+                                                                                <LocalCuttingPlanVisualizer plans={wo.metadata.plans} />
                                                                             </TableCell>
                                                                         </TableRow>
-                                                                    ))}
+                                                                    )}
                                                                 </TableBody>
                                                             </Table>
                                                         </div>
