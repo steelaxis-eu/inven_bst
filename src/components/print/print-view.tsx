@@ -188,36 +188,100 @@ export function PrintView({ workOrder }: PrintViewProps) {
                             </tr>
                         </thead>
                         <tbody>
-                            {workOrder.items.map((item: any, idx: number) => {
-                                const piece = item.piece
-                                const part = piece?.part
-                                const profile = part?.profile
+                            {(() => {
+                                const groupedItems: Record<string, {
+                                    partNumber: string,
+                                    name: string,
+                                    description: string,
+                                    qty: number,
+                                    material: string,
+                                    materialDetails: string,
+                                    cutLength: number,
+                                    grade: string
+                                }> = {}
 
-                                return (
-                                    <tr key={item.id} className="border-b border-gray-200 break-inside-avoid">
+                                workOrder.items.forEach((item: any) => {
+                                    const piece = item.piece
+                                    const part = piece?.part
+                                    const profile = part?.profile
+                                    const assembly = item.assembly
+                                    const platePart = item.platePart
+
+                                    let key = '';
+                                    let data: any = {};
+
+                                    if (part) {
+                                        key = `part-${part.partNumber}-${part.length}-${profile?.type}-${profile?.dimensions}-${part.grade?.name}`
+                                        data = {
+                                            partNumber: part.partNumber,
+                                            name: part.name,
+                                            description: part.description,
+                                            material: profile?.type,
+                                            materialDetails: profile?.dimensions,
+                                            cutLength: part.length,
+                                            grade: part.grade?.name
+                                        }
+                                    } else if (assembly) {
+                                        key = `assembly-${assembly.assemblyNumber}`
+                                        data = {
+                                            partNumber: assembly.assemblyNumber,
+                                            name: assembly.name,
+                                            description: '',
+                                            material: 'Assembly',
+                                            materialDetails: '',
+                                            cutLength: 0,
+                                            grade: ''
+                                        }
+                                    } else if (platePart) {
+                                        key = `plate-${platePart.partNumber}`
+                                        data = {
+                                            partNumber: platePart.partNumber,
+                                            name: '',
+                                            description: platePart.description,
+                                            material: 'Plate',
+                                            materialDetails: platePart.material,
+                                            cutLength: 0,
+                                            grade: ''
+                                        }
+                                    } else {
+                                        key = `other-${item.id}`
+                                        data = {
+                                            partNumber: '?',
+                                            name: item.description || 'Unknown',
+                                            description: '',
+                                            material: '',
+                                            materialDetails: '',
+                                            cutLength: 0,
+                                            grade: ''
+                                        }
+                                    }
+
+                                    if (!groupedItems[key]) {
+                                        groupedItems[key] = { ...data, qty: 0 }
+                                    }
+                                    groupedItems[key].qty++
+                                })
+
+                                return Object.values(groupedItems).map((group, idx) => (
+                                    <tr key={idx} className="border-b border-gray-200 break-inside-avoid">
                                         <td className="py-3 font-mono">
-                                            {part?.partNumber || item.description || `Item #${idx + 1}`}
+                                            {group.partNumber}
                                         </td>
                                         <td className="py-3">
-                                            {part ? (
-                                                <>
-                                                    <div className="font-semibold">{part.name}</div>
-                                                </>
-                                            ) : (
-                                                item.description
-                                            )}
+                                            <div className="font-semibold">{group.name}</div>
+                                            {group.description && <div className="text-xs text-gray-500">{group.description}</div>}
                                         </td>
-                                        <td className="py-3 text-center">1</td>
+                                        <td className="py-3 text-center">{group.qty}</td>
 
                                         {/* Dynamic Columns based on Type */}
                                         {workOrder.type === 'CUTTING' && (
                                             <>
                                                 <td className="py-3">
-                                                    {profile?.type} {profile?.dimensions} <br />
-                                                    <span className="text-xs text-gray-500">{part?.grade?.name}</span>
+                                                    {group.material} {group.materialDetails} <br />
+                                                    <span className="text-xs text-gray-500">{group.grade}</span>
                                                 </td>
                                                 <td className="py-3 font-mono">
-                                                    {part?.length} mm
+                                                    {group.cutLength > 0 ? `${group.cutLength} mm` : '-'}
                                                 </td>
                                             </>
                                         )}
@@ -226,8 +290,8 @@ export function PrintView({ workOrder }: PrintViewProps) {
                                             <div className="w-6 h-6 border-2 border-gray-400 rounded-sm"></div>
                                         </td>
                                     </tr>
-                                )
-                            })}
+                                ))
+                            })()}
                         </tbody>
                     </table>
                 </div>

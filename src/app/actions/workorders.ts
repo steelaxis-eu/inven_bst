@@ -57,6 +57,19 @@ async function generateWorkOrderNumber(projectId: string, tx?: Prisma.Transactio
 function formatCuttingInstructions(plans: any[], piecePartNumberMap: Record<string, string>): string {
     let notes = "Cutting Optimization Plan:\n"
 
+    function groupParts(parts: any[]) {
+        const counts: Record<string, { partNumber: string, length: number, qty: number }> = {}
+        parts.forEach(p => {
+            const partNumber = piecePartNumberMap[p.partId] || 'Part'
+            const key = `${partNumber}@${p.length}`
+            if (!counts[key]) counts[key] = { partNumber, length: p.length, qty: 0 }
+            counts[key].qty++
+        })
+        return Object.values(counts)
+            .map(c => `${c.partNumber} (${c.length}mm)${c.qty > 1 ? ` x${c.qty}` : ''}`)
+            .join(', ')
+    }
+
     plans.forEach(p => {
         if (p.type === 'profile' && p.result) {
             notes += `\n[${p.profile} - ${p.grade}]`
@@ -65,8 +78,8 @@ function formatCuttingInstructions(plans: any[], piecePartNumberMap: Record<stri
             const patterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
             p.result.newStockNeeded.forEach((ns: any) => {
                 const sortedParts = [...ns.parts].sort((a, b) => a.partId.localeCompare(b.partId))
-                const partsStr = sortedParts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
-                const key = `${ns.length}#${partsStr}`
+                const partsKey = sortedParts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join('|')
+                const key = `${ns.length}#${partsKey}`
                 if (!patterns[key]) patterns[key] = { qty: 0, length: ns.length, parts: ns.parts }
                 patterns[key].qty++
             })
@@ -75,20 +88,18 @@ function formatCuttingInstructions(plans: any[], piecePartNumberMap: Record<stri
             const stockPatterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
             p.result.stockUsed.forEach((su: any) => {
                 const sortedParts = [...su.parts].sort((a, b) => a.partId.localeCompare(b.partId))
-                const partsStr = sortedParts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
-                const key = `SU#${su.originalLength}#${partsStr}`
+                const partsKey = sortedParts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join('|')
+                const key = `SU#${su.originalLength}#${partsKey}`
                 if (!stockPatterns[key]) stockPatterns[key] = { qty: 0, length: su.originalLength, parts: su.parts }
                 stockPatterns[key].qty++
             })
 
             Object.values(stockPatterns).forEach(pat => {
-                const partsStr = pat.parts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
-                notes += `\n- (${pat.qty}x) Use Stock Bar (${pat.length}mm): [${partsStr}]`
+                notes += `\n- (${pat.qty}x) Use Stock Bar (${pat.length}mm): [${groupParts(pat.parts)}]`
             })
 
             Object.values(patterns).forEach(pat => {
-                const partsStr = pat.parts.map((part: any) => `${piecePartNumberMap[part.partId] || 'Part'} (${part.length}mm)`).join(', ')
-                notes += `\n- ${pat.qty}x New Bar ${pat.length}mm: [${partsStr}]`
+                notes += `\n- ${pat.qty}x New Bar ${pat.length}mm: [${groupParts(pat.parts)}]`
             })
         }
     })
