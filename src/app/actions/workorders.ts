@@ -158,7 +158,7 @@ export async function getProjectWorkOrders(projectId: string) {
                 include: {
                     piece: {
                         include: {
-                            part: { include: { profile: true } },
+                            part: { include: { profile: true, grade: true } },
                             inventory: true
                         }
                     },
@@ -185,7 +185,7 @@ export async function getWorkOrder(workOrderId: string) {
                 include: {
                     piece: {
                         include: {
-                            part: { include: { profile: true } },
+                            part: { include: { profile: true, grade: true } },
                             inventory: true
                         }
                     },
@@ -889,6 +889,8 @@ export async function completeMaterialPrepWorkOrder(
         })
 
         revalidatePath(`/projects/${wo.projectId}`)
+        revalidatePath('/inventory')
+        revalidatePath('/stock')
         return { success: true }
 
     } catch (e: any) {
