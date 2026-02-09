@@ -51,7 +51,8 @@ import {
     updateWorkOrderItemStatus,
     activateWorkOrder,
     completeWorkOrder,
-    completeCuttingWOWithWorkflow
+    completeCuttingWOWithWorkflow,
+    deleteWorkOrder
 } from '@/app/actions/workorders'
 import { BatchCutDialog } from "./batch-cut-dialog"
 import { MaterialPrepDialog } from "./material-prep-dialog"
@@ -255,6 +256,21 @@ function WorkOrderTable({
     const [machinedPieceIds, setMachinedPieceIds] = useState<string[]>([])
 
     // Handlers
+    const handleDeleteWorkOrder = async (wo: WorkOrder) => {
+        if (!confirm(`Are you sure you want to delete Work Order ${wo.workOrderNumber}? This action cannot be undone.`)) {
+            return
+        }
+
+        setLoading(wo.id)
+        const res = await deleteWorkOrder(wo.id)
+        if (!res.success) {
+            toast.error(res.error || 'Failed to delete work order')
+        } else {
+            toast.success('Work order deleted')
+            router.refresh()
+        }
+        setLoading(null)
+    }
     const handleStatusChange = async (wo: WorkOrder, status: string) => {
         if (status === 'COMPLETED' && wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS') {
             setActiveWoForComplete(wo)
@@ -408,7 +424,17 @@ function WorkOrderTable({
                                                 <TableCell>
                                                     <div className={styles.actionButtons}>
                                                         {wo.status === 'PENDING' && (
-                                                            <Button appearance="subtle" icon={<PlayRegular />} onClick={() => handleStatusChange(wo, 'IN_PROGRESS')} title="Start" />
+                                                            <>
+                                                                <Button appearance="subtle" icon={<PlayRegular />} onClick={() => handleStatusChange(wo, 'IN_PROGRESS')} title="Start" />
+                                                                <Button
+                                                                    appearance="subtle"
+                                                                    icon={<DeleteRegular />}
+                                                                    style={{ color: tokens.colorPaletteRedForeground1 }}
+                                                                    onClick={() => handleDeleteWorkOrder(wo)}
+                                                                    title="Delete"
+                                                                    disabled={loading === wo.id}
+                                                                />
+                                                            </>
                                                         )}
                                                         {wo.status === 'IN_PROGRESS' && (
                                                             <>

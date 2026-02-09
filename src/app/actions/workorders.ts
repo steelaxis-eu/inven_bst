@@ -1416,6 +1416,7 @@ export async function createSmartWorkOrder(input: {
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             notes: (notes || '') + "\n\n" + formatCuttingInstructions(optRes.plans, piecePartNumberMap),
+                            metadata: { plans: optRes.plans } as any, // Save structured data for visualizer
                             items: {
                                 create: immediateItems.map(i => ({
                                     pieceId: i.type === 'part' ? i.id : undefined,
@@ -1439,6 +1440,7 @@ export async function createSmartWorkOrder(input: {
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             blockedByWOId: prepWOId,
                             notes: (notes || '') + "\n\n" + formatCuttingInstructions(optRes.plans, piecePartNumberMap),
+                            metadata: { plans: optRes.plans } as any, // Save structured data for visualizer
                             items: {
                                 create: blockedItems.map(i => ({
                                     pieceId: i.type === 'part' ? i.id : undefined,

@@ -596,6 +596,7 @@ model WorkOrder {
   startedAt     DateTime?
   completedAt   DateTime?
   notes         String?
+  metadata      Json?               // Structured data (e.g. cutting plans)
   blockedByWOId String?             // WO that must complete before this can start
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

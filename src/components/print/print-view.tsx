@@ -10,7 +10,111 @@ interface PrintViewProps {
     workOrder: any // Typed as any for flexibility, ideally inferred from Prisma
 }
 
+function CuttingPlanVisualizer({ plans }: { plans: any[] }) {
+    if (!plans || plans.length === 0) return null
+
+    return (
+        <div className="mt-8 space-y-8">
+            <h3 className="font-bold text-lg uppercase border-b-2 border-black pb-1">Visual Cutting Plan (How to Cut)</h3>
+            {plans.map((p, pIdx) => {
+                if (p.type !== 'profile' || !p.result) return null
+
+                // Group identical patterns
+                const patterns: any[] = []
+
+                // New Stock Patterns
+                const newPatterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
+                p.result.newStockNeeded.forEach((ns: any) => {
+                    const partsStr = ns.parts.map((part: any) => `${part.partNumber}@${part.length}`).join('|')
+                    const key = `${ns.length}#${partsStr}`
+                    if (!newPatterns[key]) newPatterns[key] = { qty: 0, length: ns.length, parts: ns.parts }
+                    newPatterns[key].qty++
+                })
+                Object.values(newPatterns).forEach(pat => patterns.push({ ...pat, source: 'New Stock' }))
+
+                // Stock Used Patterns
+                const stockPatterns: Record<string, { qty: number, length: number, parts: any[] }> = {}
+                p.result.stockUsed.forEach((su: any) => {
+                    const partsStr = su.parts.map((part: any) => `${part.partNumber}@${part.length}`).join('|')
+                    const key = `SU#${su.originalLength}#${partsStr}`
+                    if (!stockPatterns[key]) stockPatterns[key] = { qty: 0, length: su.originalLength, parts: su.parts }
+                    stockPatterns[key].qty++
+                })
+                Object.values(stockPatterns).forEach(pat => patterns.push({ ...pat, source: 'Inventory' }))
+
+                return (
+                    <div key={pIdx} className="space-y-4">
+                        <div className="flex justify-between items-end border-b border-gray-200 pb-1">
+                            <span className="font-bold text-blue-800">{p.profile} ({p.grade})</span>
+                            <span className="text-xs text-gray-500 uppercase">Efficiency: {(p.result.efficiency * 100).toFixed(1)}%</span>
+                        </div>
+
+                        <div className="space-y-6">
+                            {patterns.map((pat, patIdx) => (
+                                <div key={patIdx} className="space-y-2">
+                                    <div className="flex justify-between text-xs font-semibold">
+                                        <span>{pat.qty}x {pat.source} Bar ({pat.length}mm)</span>
+                                    </div>
+
+                                    {/* The Visual Bar */}
+                                    <div className="relative w-full h-10 bg-gray-100 flex items-center border border-gray-300 rounded overflow-hidden">
+                                        {pat.parts.map((seg: any, sIdx: number) => {
+                                            const width = (seg.length / pat.length) * 100
+                                            return (
+                                                <div
+                                                    key={sIdx}
+                                                    className="h-full border-r border-black flex flex-col justify-center items-center overflow-hidden bg-white hover:bg-gray-50 transition-colors"
+                                                    style={{ width: `${width}%` }}
+                                                >
+                                                    <span className="text-[10px] font-bold leading-none truncate w-full text-center px-1">
+                                                        {seg.partNumber}
+                                                    </span>
+                                                    <span className="text-[9px] text-gray-600 leading-none">
+                                                        {seg.length}
+                                                    </span>
+                                                </div>
+                                            )
+                                        })}
+                                        {/* Remnant / Waste */}
+                                        <div className="h-full bg-gray-200/50 flex flex-col justify-center items-center flex-1">
+                                            <span className="text-[8px] text-gray-400 font-bold uppercase">Waste</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Dimension Labels (Absolute positioning of tick marks below the bar) */}
+                                    <div className="relative w-full h-4 flex text-[8px] text-gray-500">
+                                        {(() => {
+                                            let currentPos = 0
+                                            return pat.parts.map((seg: any, sIdx: number) => {
+                                                currentPos += seg.length
+                                                const left = (currentPos / pat.length) * 100
+                                                return (
+                                                    <div
+                                                        key={sIdx}
+                                                        className="absolute top-0 border-l border-gray-400 h-2"
+                                                        style={{ left: `${left}%` }}
+                                                    >
+                                                        <span className="absolute -left-1 top-2">{currentPos}</span>
+                                                    </div>
+                                                )
+                                            })
+                                        })()}
+                                        <div className="absolute top-0 right-0 border-r border-gray-400 h-2">
+                                            <span className="absolute -right-1 top-2">{pat.length}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
 export function PrintView({ workOrder }: PrintViewProps) {
+
     const handlePrint = () => {
         window.print()
     }
@@ -127,6 +231,11 @@ export function PrintView({ workOrder }: PrintViewProps) {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Cutting Plan Visualization */}
+                {workOrder.type === 'CUTTING' && workOrder.metadata?.plans && (
+                    <CuttingPlanVisualizer plans={workOrder.metadata.plans} />
+                )}
 
                 {/* Footer Signatures */}
                 <div className="mt-16 grid grid-cols-2 gap-16 break-inside-avoid">
