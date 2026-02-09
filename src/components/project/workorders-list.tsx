@@ -321,8 +321,32 @@ function LocalCuttingPlanVisualizer({ plans }: { plans: any[] }) {
                                             </div>
                                         )
                                     })}
-                                    <div style={{ flex: 1, backgroundColor: tokens.colorNeutralBackground3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <Text size={100} style={{ color: tokens.colorNeutralForeground4, opacity: 0.5 }}>WASTE</Text>
+                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {(() => {
+                                            const totalPartsLength = pat.parts.reduce((sum: number, p: any) => sum + p.length, 0)
+                                            const leftover = pat.length - totalPartsLength
+                                            const isRemnant = leftover >= 500
+
+                                            return (
+                                                <div
+                                                    style={{
+                                                        height: '100%',
+                                                        flex: 1,
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center',
+                                                        backgroundColor: isRemnant ? tokens.colorPaletteGreenBackground2 : tokens.colorNeutralBackground3,
+                                                        borderLeft: isRemnant ? `1px solid ${tokens.colorPaletteGreenBorder2}` : 'none'
+                                                    }}
+                                                >
+                                                    <Text size={100} weight="bold" style={{ color: isRemnant ? tokens.colorPaletteGreenForeground1 : tokens.colorNeutralForeground4, opacity: isRemnant ? 1 : 0.5 }}>
+                                                        {isRemnant ? 'REMNANT' : 'WASTE'}
+                                                    </Text>
+                                                    {isRemnant && <Text size={100} style={{ color: tokens.colorPaletteGreenForeground1, fontSize: '9px' }}>{leftover}mm</Text>}
+                                                </div>
+                                            )
+                                        })()}
                                     </div>
                                 </div>
                             </div>

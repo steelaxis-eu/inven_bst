@@ -95,11 +95,17 @@ function formatCuttingInstructions(plans: any[], piecePartNumberMap: Record<stri
             })
 
             Object.values(stockPatterns).forEach(pat => {
-                notes += `\n- (${pat.qty}x) Use Stock Bar (${pat.length}mm): [${groupParts(pat.parts)}]`
+                const totalCuts = pat.parts.reduce((sum: number, p: any) => sum + p.length, 0)
+                const leftover = pat.length - totalCuts
+                const leftoverTag = leftover >= 500 ? `(REMNANT ${leftover}mm)` : (leftover > 0 ? `(WASTE ${leftover}mm)` : '')
+                notes += `\n- (${pat.qty}x) Use Stock Bar (${pat.length}mm): [${groupParts(pat.parts)}] ${leftoverTag}`
             })
 
             Object.values(patterns).forEach(pat => {
-                notes += `\n- ${pat.qty}x New Bar ${pat.length}mm: [${groupParts(pat.parts)}]`
+                const totalCuts = pat.parts.reduce((sum: number, p: any) => sum + p.length, 0)
+                const leftover = pat.length - totalCuts
+                const leftoverTag = leftover >= 500 ? `(REMNANT ${leftover}mm)` : (leftover > 0 ? `(WASTE ${leftover}mm)` : '')
+                notes += `\n- ${pat.qty}x New Bar ${pat.length}mm: [${groupParts(pat.parts)}] ${leftoverTag}`
             })
         }
     })

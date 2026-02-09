@@ -76,8 +76,36 @@ function CuttingPlanVisualizer({ plans }: { plans: any[] }) {
                                             )
                                         })}
                                         {/* Remnant / Waste */}
-                                        <div className="h-full bg-gray-200/50 flex flex-col justify-center items-center flex-1">
-                                            <span className="text-[8px] text-gray-400 font-bold uppercase">Waste</span>
+                                        {(() => {
+                                            const totalPartsLength = pat.parts.reduce((sum: number, p: any) => sum + p.length, 0)
+                                            const leftover = pat.length - totalPartsLength
+                                            const isRemnant = leftover >= 500
+
+                                            return (
+                                                <div className={`h-full flex flex-col justify-center items-center flex-1 ${isRemnant ? 'bg-green-100 border-l border-green-500' : 'bg-gray-200/50'}`}>
+                                                    <span className={`text-[8px] font-bold uppercase ${isRemnant ? 'text-green-700' : 'text-gray-400'}`}>
+                                                        {isRemnant ? 'REMNANT' : 'Waste'}
+                                                    </span>
+                                                    {isRemnant && <span className="text-[7px] text-green-600 font-mono">({leftover}mm)</span>}
+                                                </div>
+                                            )
+                                        })()}
+                                    </div>
+
+                                    {/* Actual Remnant Marking (For Printer) */}
+                                    <div className="mt-1 flex items-center gap-4 text-[10px] border border-dashed border-gray-400 p-1 rounded">
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 border border-black" />
+                                            <span>Scrap</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-1">
+                                            <span className="font-bold text-red-700">! MEASURE & RECORD:</span>
+                                            <span className="ml-1">Actual length:</span>
+                                            <div className="border-b border-black w-24 h-4 mb-1" />
+                                            <span>mm</span>
+                                        </div>
+                                        <div className="italic text-gray-500 text-[8px]">
+                                            (Auto-calculated leftover: {pat.length - pat.parts.reduce((sum: number, p: any) => sum + p.length, 0)}mm)
                                         </div>
                                     </div>
 
