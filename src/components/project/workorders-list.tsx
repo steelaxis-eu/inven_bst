@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
     Table,
     TableBody,
@@ -22,6 +22,7 @@ import {
     DialogActions,
     Text,
     Title3,
+    Input,
     makeStyles,
     tokens,
     shorthands
@@ -333,6 +334,50 @@ function LocalCuttingPlanVisualizer({ plans }: { plans: any[] }) {
     )
 }
 
+function PartialCompletionDialog({ open, onOpenChange, group, onComplete }: { open: boolean, onOpenChange: (o: boolean) => void, group: any, onComplete: (ids: string[]) => void }) {
+    const [quantity, setQuantity] = useState(1)
+
+    useEffect(() => {
+        if (open) setQuantity(1)
+    }, [open])
+
+    if (!group) return null
+
+    return (
+        <Dialog open={open} onOpenChange={(e, d) => onOpenChange(d.open)}>
+            <DialogSurface>
+                <DialogBody>
+                    <DialogTitle>Record Partial Completion</DialogTitle>
+                    <DialogContent>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+                            <Text>How many pieces of <b>{group.partNumber}</b> from <b>LOT: {group.lotId}</b> were completed?</Text>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Input
+                                    type="number"
+                                    value={quantity.toString()}
+                                    onChange={(e: any, d: any) => setQuantity(Math.min(group.qty, Math.max(1, parseInt(d.value) || 0)))}
+                                    min={1}
+                                    max={group.qty}
+                                    style={{ width: '80px' }}
+                                />
+                                <Text>/ {group.qty}</Text>
+                            </div>
+                        </div>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button appearance="subtle" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button appearance="primary" onClick={() => {
+                            const idsToComplete = group.ids.slice(0, quantity)
+                            onComplete(idsToComplete)
+                            onOpenChange(false)
+                        }}>Record {quantity} Completed</Button>
+                    </DialogActions>
+                </DialogBody>
+            </DialogSurface>
+        </Dialog>
+    )
+}
+
 export function WorkOrderSummary({ workOrders }: { workOrders: WorkOrder[] }) {
     const styles = useStyles()
     const total = workOrders.length
@@ -371,6 +416,8 @@ function WorkOrderTable({
     const [loading, setLoading] = useState<string | null>(null)
     const [selectedBatchItemIds, setSelectedBatchItemIds] = useState<string[]>([])
     const [batchCutDialogOpen, setBatchCutDialogOpen] = useState(false)
+    const [partialDialogOpen, setPartialDialogOpen] = useState(false)
+    const [activeGroup, setActiveGroup] = useState<any>(null)
     const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
     const [materialPrepDialogOpen, setMaterialPrepDialogOpen] = useState(false)
     const [activeWoForComplete, setActiveWoForComplete] = useState<WorkOrder | null>(null)
@@ -676,14 +723,24 @@ function WorkOrderTable({
                                                                                 <TableCell>
                                                                                     <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{group.notes || '-'}</Text>
                                                                                 </TableCell>
-                                                                                <TableCell style={{ textAlign: 'right', width: '100px' }}>
+                                                                                <TableCell style={{ textAlign: 'right', width: '150px' }}>
                                                                                     {group.status !== 'COMPLETED' && wo.status === 'IN_PROGRESS' && (
-                                                                                        <Button appearance="subtle" size="small" icon={<CheckmarkRegular />} onClick={() => {
-                                                                                            // Complete all ids in this group
-                                                                                            group.ids.forEach(id => handleItemComplete(id))
-                                                                                        }}>
-                                                                                            Complete All
-                                                                                        </Button>
+                                                                                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                                                                                            {group.qty > 1 && (
+                                                                                                <Button appearance="subtle" size="small" onClick={() => {
+                                                                                                    setActiveGroup(group)
+                                                                                                    setPartialDialogOpen(true)
+                                                                                                }}>
+                                                                                                    Partial
+                                                                                                </Button>
+                                                                                            )}
+                                                                                            <Button appearance="subtle" size="small" icon={<CheckmarkRegular />} onClick={() => {
+                                                                                                // Complete all ids in this group
+                                                                                                group.ids.forEach(id => handleItemComplete(id))
+                                                                                            }}>
+                                                                                                {group.qty > 1 ? "All" : ""}
+                                                                                            </Button>
+                                                                                        </div>
                                                                                     )}
                                                                                     {group.status === 'COMPLETED' && <CheckmarkRegular style={{ color: tokens.colorPaletteGreenForeground1 }} />}
                                                                                 </TableCell>
@@ -784,6 +841,15 @@ function WorkOrderTable({
                     }}
                 />
             )}
+
+            <PartialCompletionDialog
+                open={partialDialogOpen}
+                onOpenChange={setPartialDialogOpen}
+                group={activeGroup}
+                onComplete={(ids) => {
+                    ids.forEach(id => handleItemComplete(id))
+                }}
+            />
         </div>
     )
 }
