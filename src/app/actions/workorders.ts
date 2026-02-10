@@ -341,6 +341,12 @@ export async function completeCuttingWOWithWorkflow(
 
         // Complete the cutting WO
         await prisma.$transaction(async (tx) => {
+            // Lock the project row to serialize Work Order numbering across requests
+            await tx.project.update({
+                where: { id: wo.projectId },
+                data: { updatedAt: new Date() }
+            })
+
             await tx.workOrder.update({
                 where: { id: workOrderId },
                 data: { status: WorkOrderStatus.COMPLETED, completedAt: new Date() }
@@ -1260,6 +1266,12 @@ export async function createSmartWorkOrder(input: {
                 }
 
                 await prisma.$transaction(async (tx) => {
+                    // Lock the project row to serialize Work Order numbering across requests
+                    await tx.project.update({
+                        where: { id: projectId },
+                        data: { updatedAt: new Date() }
+                    })
+
                     let woOffset = 0
                     // 1. Material Prep WO
                     const prepWO = await tx.workOrder.create({
@@ -1416,6 +1428,12 @@ export async function createSmartWorkOrder(input: {
 
             // EXECUTE TRANSACTION
             await prisma.$transaction(async (tx) => {
+                // Lock the project row to serialize Work Order numbering across requests
+                await tx.project.update({
+                    where: { id: projectId },
+                    data: { updatedAt: new Date() }
+                })
+
                 let prepWOId = null
                 let woOffset = 0
 
