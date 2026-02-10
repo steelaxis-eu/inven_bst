@@ -43,12 +43,23 @@ async function generateWorkOrderNumber(projectId: string, tx?: Prisma.Transactio
         select: { projectNumber: true }
     })
 
-    const count = await client.workOrder.count({
-        where: { projectId }
+    const lastWO = await client.workOrder.findFirst({
+        where: { projectId },
+        orderBy: { createdAt: 'desc' },
+        select: { workOrderNumber: true }
     })
 
+    let nextSequence = 1
+    if (lastWO && lastWO.workOrderNumber) {
+        const parts = lastWO.workOrderNumber.split('-')
+        const lastSeq = parseInt(parts[parts.length - 1], 10)
+        if (!isNaN(lastSeq)) {
+            nextSequence = lastSeq + 1
+        }
+    }
+
     const year = new Date().getFullYear()
-    return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(count + 1 + offset).padStart(3, '0')}`
+    return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(nextSequence + offset).padStart(3, '0')}`
 }
 
 /**
