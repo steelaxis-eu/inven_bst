@@ -36,7 +36,7 @@ export interface CreateWorkOrderInput {
 /**
  * Generate next work order number for a project
  */
-async function generateWorkOrderNumber(projectId: string, tx?: Prisma.TransactionClient): Promise<string> {
+async function generateWorkOrderNumber(projectId: string, tx?: Prisma.TransactionClient, offset: number = 0): Promise<string> {
     const client = tx || prisma
     const project = await client.project.findUnique({
         where: { id: projectId },
@@ -48,7 +48,7 @@ async function generateWorkOrderNumber(projectId: string, tx?: Prisma.Transactio
     })
 
     const year = new Date().getFullYear()
-    return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(count + 1).padStart(3, '0')}`
+    return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(count + 1 + offset).padStart(3, '0')}`
 }
 
 /**
@@ -357,9 +357,11 @@ export async function completeCuttingWOWithWorkflow(
                 data: { status: PartPieceStatus.CUT, cutAt: new Date() }
             })
 
+            let woOffset = 0
+
             // Create MACHINING WO if any pieces need it
             if (machinedPieceIds.length > 0) {
-                const woNumber = await generateWorkOrderNumber(wo.projectId, tx)
+                const woNumber = await generateWorkOrderNumber(wo.projectId, tx, woOffset++)
                 machiningWO = await tx.workOrder.create({
                     data: {
                         projectId: wo.projectId,
@@ -378,7 +380,7 @@ export async function completeCuttingWOWithWorkflow(
 
             // Create WELDING WO for pieces going direct (if any)
             if (directToWelding.length > 0) {
-                const woNumber = await generateWorkOrderNumber(wo.projectId, tx)
+                const woNumber = await generateWorkOrderNumber(wo.projectId, tx, woOffset++)
                 weldingWO = await tx.workOrder.create({
                     data: {
                         projectId: wo.projectId,
@@ -1258,11 +1260,12 @@ export async function createSmartWorkOrder(input: {
                 }
 
                 await prisma.$transaction(async (tx) => {
+                    let woOffset = 0
                     // 1. Material Prep WO
                     const prepWO = await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
                             title: `Prep for ${vendor || 'Vendor'} (${title || 'Outsourced'})`,
                             type: WorkOrderType.MATERIAL_PREP,
                             priority: (priority as any) || WorkOrderPriority.MEDIUM,
@@ -1276,7 +1279,7 @@ export async function createSmartWorkOrder(input: {
                     await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
                             title: title || `Outsourced ${type}`,
                             type: type as WorkOrderType,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1414,6 +1417,7 @@ export async function createSmartWorkOrder(input: {
             // EXECUTE TRANSACTION
             await prisma.$transaction(async (tx) => {
                 let prepWOId = null
+                let woOffset = 0
 
                 // A. Material Prep WO
                 if (materialPrepRequired) {
@@ -1421,7 +1425,7 @@ export async function createSmartWorkOrder(input: {
                     const prepWO = await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
                             title: `Material Prep (${title || 'Cutting'})`,
                             type: WorkOrderType.MATERIAL_PREP,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1438,7 +1442,7 @@ export async function createSmartWorkOrder(input: {
                     await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
                             title: (title || 'Cutting') + ' (Ready/InStock)',
                             type: WorkOrderType.CUTTING,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1461,7 +1465,7 @@ export async function createSmartWorkOrder(input: {
                     await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
                             title: (title || 'Cutting') + ' (Pending Material)',
                             type: WorkOrderType.CUTTING,
                             priority: priority || WorkOrderPriority.MEDIUM,
