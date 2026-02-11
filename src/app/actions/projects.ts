@@ -1,6 +1,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { ProjectStatus, RemnantStatus, ProjectPriority } from '@prisma/client'
 
 export interface GetProjectsParams {
@@ -65,6 +66,8 @@ export interface CreateProjectInput {
 import { generateNextId } from './settings'
 
 export async function createProject(data: CreateProjectInput) {
+    const user = await getCurrentUser()
+    if (!user) return { success: false, error: 'Unauthorized' }
     if (!data.name) return { success: false, error: 'Project name is required' }
 
     try {
@@ -83,8 +86,8 @@ export async function createProject(data: CreateProjectInput) {
                 estimatedHours: data.estimatedHours ? parseFloat(data.estimatedHours.toString()) : null,
                 deliveryDate: data.deliveryDate,
                 status: ProjectStatus.ACTIVE,
-                createdBy: 'System',
-                modifiedBy: 'System'
+                createdBy: user.name || 'System',
+                modifiedBy: user.name || 'System'
             }
         })
         return { success: true }
@@ -96,9 +99,12 @@ export async function createProject(data: CreateProjectInput) {
 
 export async function archiveProject(id: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         await prisma.project.update({
             where: { id },
-            data: { status: ProjectStatus.ARCHIVED }
+            data: { status: ProjectStatus.ARCHIVED, modifiedBy: user.name || 'System' }
         })
         return { success: true }
     } catch (e: any) {
@@ -126,11 +132,14 @@ export interface UpdateProjectInput {
 
 export async function updateProject(id: string, data: UpdateProjectInput) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         await prisma.project.update({
             where: { id },
             data: {
                 ...(data as any),
-                modifiedBy: 'System'
+                modifiedBy: user.name || 'System'
             }
         })
         return { success: true }

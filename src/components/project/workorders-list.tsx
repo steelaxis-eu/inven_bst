@@ -862,7 +862,7 @@ function WorkOrderTable({
                 open={batchCutDialogOpen}
                 onOpenChange={setBatchCutDialogOpen}
                 projectId={projectId}
-                items={allActiveCuttingItems.filter(i => selectedBatchItemIds.includes(i.id))}
+                items={allActiveCuttingItems.filter(i => selectedBatchItemIds.includes(i.id)) as any}
                 onSuccess={() => {
                     setSelectedBatchItemIds([])
                     router.refresh()

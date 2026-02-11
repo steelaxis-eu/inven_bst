@@ -1,10 +1,14 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export async function updateGrade(id: string, data: { density: number, scrapPrice: number }) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         await prisma.materialGrade.update({
             where: { id },
             data: {
@@ -20,6 +24,9 @@ export async function updateGrade(id: string, data: { density: number, scrapPric
 }
 export async function createGrade(name: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const grade = await prisma.materialGrade.create({
             data: {
                 name,

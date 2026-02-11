@@ -1,6 +1,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export async function getSuppliers() {
@@ -29,6 +30,9 @@ export async function createSupplier(data: {
     notes?: string
 }) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         if (!data.name?.trim()) {
             return { success: false, error: 'Supplier name is required' }
         }
@@ -63,6 +67,9 @@ export async function updateSupplier(id: string, data: {
     notes?: string
 }) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const supplier = await prisma.supplier.update({
             where: { id },
             data: {
@@ -87,6 +94,9 @@ export async function updateSupplier(id: string, data: {
 
 export async function deleteSupplier(id: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         // Check if supplier has any inventory linked
         const inventoryCount = await prisma.inventory.count({
             where: { supplierId: id }

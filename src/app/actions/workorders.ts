@@ -35,6 +35,7 @@ export interface CreateWorkOrderInput {
 
 /**
  * Generate next work order number for a project
+ * Uses count-based approach to avoid race conditions with concurrent requests
  */
 async function generateWorkOrderNumber(projectId: string, tx?: Prisma.TransactionClient, offset: number = 0): Promise<string> {
     const client = tx || prisma
@@ -43,20 +44,11 @@ async function generateWorkOrderNumber(projectId: string, tx?: Prisma.Transactio
         select: { projectNumber: true }
     })
 
-    const lastWO = await client.workOrder.findFirst({
-        where: { projectId },
-        orderBy: { createdAt: 'desc' },
-        select: { workOrderNumber: true }
+    const count = await client.workOrder.count({
+        where: { projectId }
     })
 
-    let nextSequence = 1
-    if (lastWO && lastWO.workOrderNumber) {
-        const parts = lastWO.workOrderNumber.split('-')
-        const lastSeq = parseInt(parts[parts.length - 1], 10)
-        if (!isNaN(lastSeq)) {
-            nextSequence = lastSeq + 1
-        }
-    }
+    const nextSequence = count + 1
 
     const year = new Date().getFullYear()
     return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(nextSequence + offset).padStart(3, '0')}`
@@ -553,26 +545,45 @@ export async function completeWorkOrder(workOrderId: string) {
                 }
 
                 if (newPlateStatus) {
-                    for (const item of plateItems) {
-                        // Find the next available PENDING piece for this part
-                        const piece = await tx.platePiece.findFirst({
-                            where: {
-                                platePartId: item.platePartId!,
-                                status: PlatePieceStatus.PENDING
-                            },
-                            orderBy: { pieceNumber: 'asc' }
-                        })
+                    // Batch: collect all platePartIds, fetch all pending pieces at once
+                    const platePartIds = plateItems
+                        .map(i => i.platePartId!)
+                        .filter(Boolean)
 
-                        if (piece) {
-                            await tx.platePiece.update({
-                                where: { id: piece.id },
-                                data: {
-                                    status: newPlateStatus,
-                                    // receivedAt? PlatePiece doesn't have cutAt. 
-                                    // If CUTTING implies received/done, we could set receivedAt if appropriate but it's optional
-                                }
-                            })
+                    const pendingPieces = await tx.platePiece.findMany({
+                        where: {
+                            platePartId: { in: platePartIds },
+                            status: PlatePieceStatus.PENDING
+                        },
+                        orderBy: { pieceNumber: 'asc' }
+                    })
+
+                    // Group by platePartId and pick the first pending piece per WO item
+                    const piecesByPart = new Map<string, string[]>()
+                    for (const p of pendingPieces) {
+                        const arr = piecesByPart.get(p.platePartId) || []
+                        arr.push(p.id)
+                        piecesByPart.set(p.platePartId, arr)
+                    }
+
+                    const pieceIdsToUpdate: string[] = []
+                    const usedCountByPart = new Map<string, number>()
+
+                    for (const item of plateItems) {
+                        const ppId = item.platePartId!
+                        const available = piecesByPart.get(ppId) || []
+                        const usedSoFar = usedCountByPart.get(ppId) || 0
+                        if (usedSoFar < available.length) {
+                            pieceIdsToUpdate.push(available[usedSoFar])
+                            usedCountByPart.set(ppId, usedSoFar + 1)
                         }
+                    }
+
+                    if (pieceIdsToUpdate.length > 0) {
+                        await tx.platePiece.updateMany({
+                            where: { id: { in: pieceIdsToUpdate } },
+                            data: { status: newPlateStatus }
+                        })
                     }
                 }
             }

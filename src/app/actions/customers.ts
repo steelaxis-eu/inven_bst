@@ -1,6 +1,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export async function createCustomer(data: {
@@ -11,6 +12,9 @@ export async function createCustomer(data: {
     address?: string
 }) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const customer = await prisma.customer.create({
             data
         })
@@ -30,6 +34,9 @@ export async function getCustomers() {
 
 export async function deleteCustomer(id: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         await prisma.customer.delete({ where: { id } })
         revalidatePath('/customers')
         return { success: true }

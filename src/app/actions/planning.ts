@@ -1,6 +1,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { optimizeCuttingPlan, OptimizationItem, StockInfo } from '@/lib/optimization'
 
 export interface PlanningResult {
@@ -30,6 +31,9 @@ export async function calculateCuttingPlan(
     customStockOverrides: Record<string, number> = {}
 ): Promise<{ success: boolean, data?: PlanningResult[], error?: string }> {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         // 1. Fetch pieces with profile info
         const pieces = await prisma.partPiece.findMany({
             where: { id: { in: pieceIds } },

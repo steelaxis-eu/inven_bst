@@ -1,6 +1,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { DeliveryStatus, AssemblyStatus, PartPieceStatus } from '@prisma/client'
 
@@ -20,6 +21,9 @@ export interface CreateDeliveryScheduleInput {
  */
 export async function createDeliverySchedule(input: CreateDeliveryScheduleInput) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const { projectId, name, scheduledDate, notes } = input
 
         if (!projectId || !name || !scheduledDate) {
@@ -95,6 +99,9 @@ export async function updateDeliverySchedule(
     data: Partial<Omit<CreateDeliveryScheduleInput, 'projectId'>>
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const schedule = await prisma.deliverySchedule.update({
             where: { id: scheduleId },
             data: {
@@ -120,6 +127,9 @@ export async function updateDeliveryStatus(
     status: DeliveryStatus
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const updateData: any = { status }
 
         if (status === DeliveryStatus.SHIPPED) {
@@ -159,6 +169,9 @@ export async function updateDeliveryStatus(
  */
 export async function deleteDeliverySchedule(scheduleId: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const schedule = await prisma.deliverySchedule.findUnique({
             where: { id: scheduleId }
         })
@@ -191,6 +204,9 @@ export async function deleteDeliverySchedule(scheduleId: string) {
  */
 export async function addAssemblyToDelivery(scheduleId: string, assemblyId: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         // Validate same project
         const [schedule, assembly] = await Promise.all([
             prisma.deliverySchedule.findUnique({ where: { id: scheduleId } }),

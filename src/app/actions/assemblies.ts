@@ -1,6 +1,7 @@
 'use server'
 
 import prisma from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { AssemblyStatus, PartPieceStatus, PlatePieceStatus } from '@prisma/client'
 
@@ -27,6 +28,9 @@ export interface CreateAssemblyInput {
  */
 export async function createAssembly(input: CreateAssemblyInput) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const { projectId, assemblyNumber, name, quantity = 1, bom, drawingRef, ...rest } = input
 
         if (!projectId || !assemblyNumber || !name) {
@@ -291,6 +295,9 @@ export async function updateAssembly(
     data: Partial<Omit<CreateAssemblyInput, 'projectId'>>
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const result = await prisma.$transaction(async (tx) => {
             const oldAssembly = await tx.assembly.findUnique({
                 where: { id: assemblyId },
@@ -393,6 +400,9 @@ export async function updateAssemblyStatus(
     status: AssemblyStatus
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const updateData: any = { status }
 
         if (status === AssemblyStatus.SHIPPED) {
@@ -415,6 +425,9 @@ export async function updateAssemblyStatus(
 
 export async function deleteAssembly(assemblyId: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const result = await prisma.$transaction(async (tx) => {
             const assembly = await tx.assembly.findUnique({
                 where: { id: assemblyId },
@@ -470,6 +483,9 @@ export async function addPartToAssembly(
     notes?: string
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         // Validate that part and assembly belong to same project
         const [assembly, part] = await Promise.all([
             prisma.assembly.findUnique({ where: { id: assemblyId } }),
@@ -542,6 +558,9 @@ export async function addPlatePartToAssembly(
     notes?: string
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const [assembly, platePart] = await Promise.all([
             prisma.assembly.findUnique({ where: { id: assemblyId } }),
             prisma.platePart.findUnique({ where: { id: platePartId } })
@@ -611,6 +630,9 @@ export async function addPlatePartToAssembly(
  */
 export async function removePartFromAssembly(assemblyId: string, partId: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const result = await prisma.$transaction(async (tx) => {
             const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
             const junction = await tx.assemblyPart.findUnique({
@@ -658,6 +680,9 @@ export async function removePartFromAssembly(assemblyId: string, partId: string)
  */
 export async function removePlatePartFromAssembly(assemblyId: string, platePartId: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const result = await prisma.$transaction(async (tx) => {
             const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
             const junction = await tx.plateAssemblyPart.findUnique({
@@ -709,6 +734,9 @@ export async function updateAssemblyPartQuantity(
     newQuantityInAssembly: number
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const result = await prisma.$transaction(async (tx) => {
             const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
             const junction = await tx.assemblyPart.findUnique({
@@ -769,6 +797,9 @@ export async function updatePlateAssemblyPartQuantity(
     newQuantityInAssembly: number
 ) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         const result = await prisma.$transaction(async (tx) => {
             const assembly = await tx.assembly.findUnique({ where: { id: assemblyId } })
             const junction = await tx.plateAssemblyPart.findUnique({

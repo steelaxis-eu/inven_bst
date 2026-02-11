@@ -11,11 +11,19 @@ Welcome to **SteelAxis**, your comprehensive solution for steel fabrication mana
     - [Creating a Project](#creating-a-project)
     - [Managing Parts](#managing-parts)
     - [Importing Drawings (AI)](#importing-drawings-ai)
+    - [Smart Import (Experimental)](#smart-import-experimental)
     - [Assemblies](#assemblies)
 6. [Usage & Tracking](#usage--tracking)
+    - [Batch Material Cutting](#batch-material-cutting)
 7. [Production (Work Orders)](#production-work-orders)
+    - [Cutting Plan Optimization & Nesting Visualizer](#cutting-plan-optimization--nesting-visualizer)
+    - [Material Prep Re-optimization](#material-prep-re-optimization)
+    - [Process Card View](#process-card-view)
+    - [Download Drawings Bundle](#download-drawings-bundle)
 8. [Quality Control](#quality-control)
-9. [Settings](#settings)
+9. [Tools & Utilities](#tools--utilities)
+    - [Profile Weight Calculator](#profile-weight-calculator)
+10. [Settings](#settings)
 
 ---
 
@@ -68,10 +76,29 @@ SteelAxis features a **Robust AI-assisted import tool** designed to handle large
     -   **Robust Mode**: Processing continues even if you close the window. You can return later to resume.
     -   **Batch Import**: Large projects are handled in batches to prevent timeouts.
 3.  **Review**: Once processed, a table displays all extracted data.
-    -   **Profile vs. Plate**: The AI automatically capitalizes on identifying if a part is a Profile (Beam/Tube) or a Plate based on geometry.
+    -   **Profile vs. Plate**: The AI automatically identifies if a part is a Profile (Beam/Tube) or a Plate based on geometry.
     -   **Grade Assignment**: Automatically matches material grades (e.g., S355) from drawings to your system's grades.
     -   **Smart Dimensions**: Standard profiles (HEA, IPE) are validated against your library.
+    -   **Split / Angles**: Parts with cut angles or split profiles are flagged independently — angles do not force a split.
 4.  **Create**: Select the parts you wish to import and click "Create Parts". The system will generate them in your project.
+
+### Smart Import (Experimental)
+For projects with mixed file types, the **Smart Import** dialog provides an AI-powered pipeline that goes beyond ZIP-only uploads.
+
+1.  **Upload**: Drag & drop any combination of **PDFs, Excel (.xlsx), DXF files, ZIPs**, or folders. ZIPs are automatically extracted, and system files (`.DS_Store`, `__MACOSX`) are filtered out.
+2.  **Manifest**: Review the detected files in a table showing file type badges (PDF / Excel / DXF) and paths. Remove any unwanted files before proceeding.
+3.  **AI Scan & Triage**: Click **"Analyze with AI"**. A lightweight AI engine scans each file and produces:
+    -   A **description** of the file's content (e.g., "Parts list with 42 rows", "Assembly drawing of Frame A").
+    -   A **suggested action**:
+        -   `Import Parts` — Extract part data (profiles, dimensions, quantities).
+        -   `Import Assembly` — Create an assembly structure.
+        -   `Extract Cuts` — Pull cut-list data from the document.
+        -   `Associate Drawing` — Link the file as a drawing to existing parts.
+        -   `Ignore` — Skip the file.
+    -   You can override any suggestion before proceeding.
+4.  **Execute & Process**: Click **"Execute Selected Actions"**. Files are uploaded to cloud storage and processed in parallel. Per-file status shows real-time progress with elapsed timers.
+5.  **Review**: An import summary shows files processed, parts found, and any failures. Click **"Inspect"** on any file to view the raw AI-extracted data.
+6.  **Resumable Sessions**: If you close the dialog before finishing, the next time you open Smart Import on the same project, you'll be prompted to **Resume** your previous session or start fresh.
 
 ### Assemblies
 Group parts into **Assemblies** for better organization.
@@ -86,6 +113,18 @@ Track where your material goes.
     -   The system automatically creates **Remnants** (offcuts) if the used length is less than the stock length.
 -   **Usage History**: View a log of all material consumption for audit purposes.
 
+### Batch Material Cutting
+For high-volume operations, the **Batch Cut** dialog lets you allocate multiple parts to a single inventory bar in one step.
+
+1.  **Select Items**: From a Cutting Work Order, choose the pending items you want to cut.
+2.  **Choose Source**: Pick an **inventory stock item** or **remnant** to cut from. The dialog shows the bar's current length and available material.
+3.  **Visual Preview**: A graphical bar displays each part as a colored segment with the remaining material clearly visible. Parts that exceed the available length are flagged.
+4.  **Allocate**: Click **"Allocate"** to record the cuts. The system:
+    -   Records usage for each part against the inventory item.
+    -   Creates a **remnant** if usable material remains (above minimum threshold).
+    -   Marks leftover material as **scrap** if below the threshold.
+    -   Updates each work order item's status to **Completed**.
+
 ## Production (Work Orders)
 Organize tasks for the shop floor using **Work Orders**. The system intelligently suggests workflows based on material availability.
 
@@ -98,14 +137,36 @@ Organize tasks for the shop floor using **Work Orders**. The system intelligentl
 3.  **Create**: Generates specific "Material Cutting" work orders linked to inventory.
 
 #### For Assemblies (Welding WOs)
-1.  **Check Readiness**: improving production flow, the system first checks if all child parts for selected assemblies are cut and ready.
+1.  **Check Readiness**: To improve production flow, the system first checks if all child parts for selected assemblies are cut and ready.
     -   **Ready**: If all parts are available, a **Welding WO** is created immediately.
     -   **Not Ready**: If parts are missing, the system suggests a **Material Plan**.
 2.  **Material Planning**:
     -   Automatically creates **Material Prep WOs** (for purchasing/cutting) for the missing items.
     -   Reserves the necessary stock length (e.g., 6m or 12m bars) for the missing profiles.
 
+### Cutting Plan Optimization & Nesting Visualizer
+When creating a Cutting Work Order, the system generates a full **visual cutting plan** powered by a 1D bin-packing algorithm.
+
+-   **Pattern Grouping**: Identical cut layouts are grouped together (e.g., "×5 bars") with a per-pattern **efficiency percentage**.
+-   **Source Types**: Each bar is labeled by source — **Inventory** (existing stock), **Remnant** (leftover from previous cuts), or **New** (material to order).
+-   **Bar Visualizer**: A graphical bar shows colored segments for each part and a hatched zone for waste. Hover over a part to highlight it in both the bar and the summary table.
+-   **Summary Table**: Lists part numbers, lengths, and quantities per pattern for quick reference.
+
+This visualizer appears in both the **Create Work Order** preview and directly inside **Cutting Work Order** cards on the project page.
+
+### Material Prep Re-optimization
+After a **Material Prep WO** has been created (typically from an Assembly workflow), you can re-optimize it if material availability changes.
+
+1.  Open the Material Prep WO and click **"Re-optimize"**.
+2.  The dialog shows each material group (profile + grade) and the total required length.
+3.  **Override Material**: Enable overrides per group to:
+    -   **Substitute Grade** — e.g., use S275 instead of S355 if approved.
+    -   **Change Bar Length** — e.g., switch from 12m to 6m stock.
+    -   **Limit Quantity** — cap the number of bars available.
+4.  Click **"Re-optimize & Update"** to re-run the cutting algorithm with your overrides. The linked Cutting WO instructions are automatically updated.
+
 ### Work Order Types
+-   **Material Prep**: Purchase or prepare raw stock before cutting.
 -   **Material Cutting**: Process raw stock into cut pieces.
 -   **Welding / Assembly**: Join cut pieces into final assemblies.
 -   **Fabrication**: General fabrication tasks.
@@ -115,8 +176,24 @@ Organize tasks for the shop floor using **Work Orders**. The system intelligentl
 -   **Logistics**: Internal transport or site delivery.
 -   **Outsourced**: Tracks work sent to external vendors (e.g., Galvanizing).
 
+### Process Card View
+Work Orders on the project page are displayed as **Process Cards** grouped by type in a logical production pipeline:
+
+`Material Prep → Cutting → Machining → Fabrication → Welding → Painting → Assembly → QC → Packaging`
+
+-   Each process type is an expandable accordion card with a colored left border.
+-   **Summary Badges**: Total, in-progress, and completed counts per process.
+-   **Inline Cutting Plan**: Cutting WOs show the nesting visualizer directly inside the card.
+-   **Partial Completion**: Mark individual items as done within a WO without completing the entire order.
+-   **Quick Actions**: Change status, delete, or download drawings from the card header.
+
+### Download Drawings Bundle
+From any Work Order card, click the **"Download Drawings"** button to generate a ZIP file containing all PDF/DXF drawings attached to the parts in that order. This is especially useful for:
+-   Sending drawing packages to **external vendors** (e.g., galvanizing, laser cutting).
+-   Distributing shop-floor drawing sets to operators.
+
 ### Status Tracking
--   **Status Flow**: Work Orders move from `Pending` -> `In Progress` -> `Completed`.
+-   **Status Flow**: Work Orders move from `Pending` → `In Progress` → `Completed`.
 -   **Automatic Updates**: Completing a "Cutting WO" automatically updates the status of the related Parts to "Ready" for the next stage (Welding).
 
 ## Quality Control
@@ -138,6 +215,18 @@ Manage the shipping logistics of your finished assemblies.
     - Includes weights, assembly numbers, and signature lines.
 - **Status**: Track deliveries from "Pending" to "Delivered".
 
+## Tools & Utilities
+
+### Profile Weight Calculator
+SteelAxis includes a built-in **Profile Weight Calculator** for determining the weight-per-meter of custom or non-standard profiles.
+
+1.  **Select Shape**: Choose from standard cross-section shapes (RHS, CHS, Flat Bar, Angle, T-section, etc.).
+2.  **Enter Dimensions**: Input the relevant dimensions (width, height, thickness, diameter) depending on the selected shape.
+3.  **Calculate**: The system computes the weight using engineering formulas and material density.
+4.  **Use in Parts**: When creating or editing a part, the calculator can be opened inline to auto-populate the weight field.
+
+This tool ensures consistent weight calculations across the application, especially for custom profiles not in your standard library.
+
 ## Settings
 Configure the system to match your shop's needs.
 - **Grades & Profiles**: Manage standard steel grades and profile types.
@@ -151,11 +240,12 @@ Configure the system to match your shop's needs.
 SteelAxis is not just another inventory app; it is a purpose-built solution for modern steel fabrication.
 
 ### Why SteelAxis?
-1.  **AI-Powered Drawing Import**: Stop typing BOMs manually. Upload a ZIP of drawings, and our AI extracts quantities, grades, and dimensions instantly.
-2.  **Smart 1D Nesting & Optimization**: Before you cut, SteelAxis calculates the most efficient cutting plan. It automatically suggests using **stock lengths** or high-priority **remnants** to minimize waste.
+1.  **AI-Powered Drawing Import**: Stop typing BOMs manually. Upload PDFs, Excels, or ZIPs — our AI extracts quantities, grades, and dimensions instantly. The experimental **Smart Import** even triages mixed file types automatically.
+2.  **Smart 1D Nesting & Optimization**: Before you cut, SteelAxis calculates the most efficient cutting plan with a **visual nesting display**. It automatically suggests using **stock lengths** or high-priority **remnants** to minimize waste.
 3.  **End-to-End Workflow Validation**: We don't just track status; we enforce quality. For example, a **Welding Work Order** cannot be marked complete until the mandatory **Visual Testing (VT)** inspection is passed.
-4.  **Integrated Outsourcing**: Manage external vendors (Galvanizing, Laser Cutting) as easily as your own shop. Automatically bundle drawings into ZIPs for RFQs.
+4.  **Integrated Outsourcing**: Manage external vendors (Galvanizing, Laser Cutting) as easily as your own shop. Download drawing bundles as ZIPs directly from Work Orders for RFQs.
 5.  **Professional Logistics**: Generate and print clear, branded **Packing Lists** and Delivery Schedules to ensure the right steel gets to the right site.
+6.  **Batch Cutting & Re-optimization**: Cut multiple parts from a single bar in one operation, and re-optimize material plans on the fly when stock availability changes.
 
 ### EN 1090 Compliance Pain Points Solved
 For workshops aiming for **EN 1090 Execution Class 2 (EXC2) or higher**, traceability is critical. SteelAxis handles the heavy lifting:
@@ -166,4 +256,4 @@ For workshops aiming for **EN 1090 Execution Class 2 (EXC2) or higher**, traceab
 
 ---
 
-*Verified for SteelAxis v0.5 MVP*
+*Verified for SteelAxis v0.6*
