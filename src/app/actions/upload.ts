@@ -13,8 +13,35 @@ export async function getSignedUploadUrl(path: string, contentType: string) {
 
         const supabase = await createClient()
 
-        // Ensure bucket exists or we assume 'projects' bucket
-        // The path should be like 'projects/{projectId}/certificates/{filename}'
+        // Validate content type
+        const allowedTypes = [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+            'text/csv',
+            'text/plain'
+        ]
+
+        if (!allowedTypes.includes(contentType)) {
+            return { success: false, error: 'Invalid file type' }
+        }
+
+        // Validate path structure: projects/{projectId}/{folder}/{filename} or certificates/{filename}
+        // Basic check to ensure it doesn't try to go up directories
+        if (path.includes('..')) {
+            return { success: false, error: 'Invalid path' }
+        }
+
+        // Enforce project scoping if applicable
+        if (!path.startsWith('projects/') && !path.startsWith('certificates/')) {
+            return { success: false, error: 'Invalid upload path. Must act on projects or certificates.' }
+        }
+
         const bucket = 'projects'
 
         // Create signed upload URL

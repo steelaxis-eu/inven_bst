@@ -57,6 +57,7 @@ import {
 } from '@/app/actions/workorders'
 import { BatchCutDialog } from "./batch-cut-dialog"
 import { MaterialPrepDialog } from "./material-prep-dialog"
+import { MaterialPrepEditDialog } from "./material-prep-edit-dialog"
 import { DownloadDrawingsButton } from '@/components/work-order/download-drawings-button'
 
 // --- Interfaces ---
@@ -446,6 +447,8 @@ function WorkOrderTable({
     const [materialPrepDialogOpen, setMaterialPrepDialogOpen] = useState(false)
     const [activeWoForComplete, setActiveWoForComplete] = useState<WorkOrder | null>(null)
     const [machinedPieceIds, setMachinedPieceIds] = useState<string[]>([])
+    const [prepEditDialogOpen, setPrepEditDialogOpen] = useState(false)
+    const [prepEditId, setPrepEditId] = useState<string | null>(null)
 
     // Handlers
     const handleDeleteWorkOrder = async (wo: WorkOrder) => {
@@ -600,7 +603,19 @@ function WorkOrderTable({
                                                             wo.status === 'COMPLETED' ? tokens.colorPaletteGreenBackground1 : tokens.colorNeutralBackground4
                                                     }} />
                                                 </TableCell>
-                                                <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>{wo.workOrderNumber}</TableCell>
+                                                <TableCell style={{ fontFamily: 'monospace', fontWeight: 500 }}>
+                                                    <span
+                                                        style={wo.type === 'MATERIAL_PREP' ? { cursor: 'pointer', textDecoration: 'underline', color: tokens.colorBrandForeground1 } : {}}
+                                                        onClick={() => {
+                                                            if (wo.type === 'MATERIAL_PREP') {
+                                                                setPrepEditId(wo.id)
+                                                                setPrepEditDialogOpen(true)
+                                                            }
+                                                        }}
+                                                    >
+                                                        {wo.workOrderNumber}
+                                                    </span>
+                                                </TableCell>
                                                 <TableCell>
                                                     <div style={{ fontWeight: 500 }}>{wo.title}</div>
                                                     {wo.description && <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{wo.description}</Text>}
@@ -862,6 +877,17 @@ function WorkOrderTable({
                     onSuccess={() => {
                         setMaterialPrepDialogOpen(false)
                         router.refresh()
+                    }}
+                />
+            )}
+
+            {prepEditId && (
+                <MaterialPrepEditDialog
+                    open={prepEditDialogOpen}
+                    onOpenChange={setPrepEditDialogOpen}
+                    workOrderId={prepEditId}
+                    onSuccess={() => {
+                        // router.refresh() handles inside dialog but extra safety
                     }}
                 />
             )}

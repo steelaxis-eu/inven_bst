@@ -15,12 +15,19 @@ import {
     Button,
     Badge,
     Title1,
-    tokens
+    tokens,
+    Input
 } from "@fluentui/react-components"
-import { DeleteRegular } from "@fluentui/react-icons"
+import { DeleteRegular, SearchRegular, ArrowLeftRegular, ArrowRightRegular } from "@fluentui/react-icons"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import { useDebouncedCallback } from "use-debounce"
 
 interface InventoryViewProps {
     inventory: any[]
+    page: number
+    totalPages: number
+    totalItems: number
+    search: string
     profiles: any[]
     standardProfiles: any[]
     grades: any[]
@@ -32,6 +39,10 @@ interface InventoryViewProps {
 
 export function InventoryView({
     inventory,
+    page,
+    totalPages,
+    totalItems,
+    search,
     profiles,
     standardProfiles,
     grades,
@@ -40,11 +51,39 @@ export function InventoryView({
     projects,
     onDelete
 }: InventoryViewProps) {
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+
+    const handleSearch = useDebouncedCallback((term: string) => {
+        const params = new URLSearchParams(searchParams)
+        if (term) {
+            params.set('search', term)
+        } else {
+            params.delete('search')
+        }
+        params.set('page', '1') // Reset to page 1 on search
+        router.replace(`${pathname}?${params.toString()}`)
+    }, 300)
+
+    const handlePageChange = (newPage: number) => {
+        const params = new URLSearchParams(searchParams)
+        params.set('page', newPage.toString())
+        router.push(`${pathname}?${params.toString()}`)
+    }
+
     return (
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
                 <Title1>Inventory</Title1>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Input
+                        contentBefore={<SearchRegular />}
+                        placeholder="Search lot, profile, grade..."
+                        defaultValue={search}
+                        onChange={(e, d) => handleSearch(d.value)}
+                        style={{ minWidth: '300px' }}
+                    />
                     <CSVImportDialog />
                     <CreateUsageDialog projects={projects} />
                     <CreateInventoryDialog
@@ -57,7 +96,7 @@ export function InventoryView({
                 </div>
             </div>
 
-            <div style={{ border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium }}>
+            <div style={{ border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: tokens.borderRadiusMedium, overflow: 'hidden' }}>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -108,6 +147,32 @@ export function InventoryView({
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '24px', gap: '16px' }}>
+                    <Button
+                        icon={<ArrowLeftRegular />}
+                        appearance="subtle"
+                        disabled={page <= 1}
+                        onClick={() => handlePageChange(page - 1)}
+                    >
+                        Previous
+                    </Button>
+                    <span style={{ fontSize: tokens.fontSizeBase300 }}>
+                        Page {page} of {totalPages}
+                    </span>
+                    <Button
+                        icon={<ArrowRightRegular />}
+                        appearance="subtle"
+                        disabled={page >= totalPages}
+                        iconPosition="after"
+                        onClick={() => handlePageChange(page + 1)}
+                    >
+                        Next
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }

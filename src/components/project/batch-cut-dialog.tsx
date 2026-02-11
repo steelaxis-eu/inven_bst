@@ -159,7 +159,7 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
     const loadInventory = async () => {
         setLoading(true)
         try {
-            const data = await getInventory()
+            const { data } = await getInventory({ limit: 1000 }) // Temporary large limit until async search
             setInventory(data)
         } catch (e) {
             toast.error("Failed to load inventory")

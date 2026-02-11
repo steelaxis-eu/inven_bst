@@ -12,24 +12,63 @@ import {
     Badge,
     Title1,
     Title3,
-    tokens
+    tokens,
+    Button,
+    Input
 } from "@fluentui/react-components"
 import Link from "next/link"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
 import { ProjectCardActions } from "@/components/project-card-actions"
 import { format } from "date-fns"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
+import { useDebouncedCallback } from "use-debounce"
+import { SearchRegular, ArrowLeftRegular, ArrowRightRegular } from "@fluentui/react-icons"
 
 interface ProjectsViewProps {
     projects: any[]
+    page: number
+    totalPages: number
+    totalItems: number
+    search: string
     customers: any[]
 }
 
-export function ProjectsView({ projects, customers }: ProjectsViewProps) {
+export function ProjectsView({ projects, page, totalPages, totalItems, search, customers }: ProjectsViewProps) {
+    const router = useRouter()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+
+    const handleSearch = useDebouncedCallback((term: string) => {
+        const params = new URLSearchParams(searchParams)
+        if (term) {
+            params.set('search', term)
+        } else {
+            params.delete('search')
+        }
+        params.set('page', '1')
+        router.replace(`${pathname}?${params.toString()}`)
+    }, 300)
+
+    const handlePageChange = (newPage: number) => {
+        const params = new URLSearchParams(searchParams)
+        params.set('page', newPage.toString())
+        router.push(`${pathname}?${params.toString()}`)
+    }
+
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
                 <Title1>Projects</Title1>
-                <CreateProjectDialog customers={customers} />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <Input
+                        contentBefore={<SearchRegular />}
+                        placeholder="Search projects..."
+                        defaultValue={search}
+                        onChange={(e, d) => handleSearch(d.value)}
+                        style={{ minWidth: '300px' }}
+                    />
+                    <CreateProjectDialog customers={customers} />
+                </div>
             </div>
 
             <Card>
@@ -51,7 +90,7 @@ export function ProjectsView({ projects, customers }: ProjectsViewProps) {
                             {projects.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} style={{ textAlign: 'center', padding: '48px', color: tokens.colorNeutralForeground3 }}>
-                                        No active projects.
+                                        No active projects found.
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -96,6 +135,32 @@ export function ProjectsView({ projects, customers }: ProjectsViewProps) {
                     </Table>
                 </div>
             </Card>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '24px', gap: '16px' }}>
+                    <Button
+                        icon={<ArrowLeftRegular />}
+                        appearance="subtle"
+                        disabled={page <= 1}
+                        onClick={() => handlePageChange(page - 1)}
+                    >
+                        Previous
+                    </Button>
+                    <span style={{ fontSize: tokens.fontSizeBase300 }}>
+                        Page {page} of {totalPages}
+                    </span>
+                    <Button
+                        icon={<ArrowRightRegular />}
+                        appearance="subtle"
+                        disabled={page >= totalPages}
+                        iconPosition="after"
+                        onClick={() => handlePageChange(page + 1)}
+                    >
+                        Next
+                    </Button>
+                </div>
+            )}
         </div>
     )
 }

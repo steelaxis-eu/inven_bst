@@ -58,14 +58,52 @@ export async function createDocument(input: CreateDocumentInput) {
 /**
  * Get all documents for a project
  */
-export async function getProjectDocuments(projectId: string, type?: string) {
-    return await prisma.projectDocument.findMany({
-        where: {
-            projectId,
-            ...(type ? { type } : {})
-        },
-        orderBy: { uploadedAt: 'desc' }
-    })
+export interface GetProjectDocumentsParams {
+    projectId: string
+    type?: string
+    page?: number
+    limit?: number
+    search?: string
+}
+
+export async function getProjectDocuments({
+    projectId,
+    type,
+    page = 1,
+    limit = 50,
+    search = ''
+}: GetProjectDocumentsParams) {
+    const skip = (page - 1) * limit
+
+    const where: any = {
+        projectId,
+        ...(type ? { type } : {})
+    }
+
+    if (search) {
+        where.OR = [
+            { filename: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            { type: { contains: search, mode: 'insensitive' } }
+        ]
+    }
+
+    const [data, total] = await Promise.all([
+        prisma.projectDocument.findMany({
+            where,
+            orderBy: { uploadedAt: 'desc' },
+            skip,
+            take: limit
+        }),
+        prisma.projectDocument.count({ where })
+    ])
+
+    return {
+        data,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+    }
 }
 
 /**

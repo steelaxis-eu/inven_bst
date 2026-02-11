@@ -3,12 +3,48 @@
 import prisma from '@/lib/prisma'
 import { ProjectStatus, RemnantStatus, ProjectPriority } from '@prisma/client'
 
-export async function getActiveProjects() {
-    return await prisma.project.findMany({
-        where: { status: ProjectStatus.ACTIVE },
-        orderBy: { projectNumber: 'asc' },
-        include: { customer: true }
-    })
+export interface GetProjectsParams {
+    page?: number
+    limit?: number
+    search?: string
+}
+
+export async function getActiveProjects(params: GetProjectsParams = {}) {
+    const page = params.page || 1
+    const limit = params.limit || 50
+    const search = params.search || ''
+
+    const skip = (page - 1) * limit
+
+    const where: any = {
+        status: ProjectStatus.ACTIVE
+    }
+
+    if (search) {
+        where.OR = [
+            { name: { contains: search, mode: 'insensitive' } },
+            { projectNumber: { contains: search, mode: 'insensitive' } },
+            { customer: { companyName: { contains: search, mode: 'insensitive' } } }
+        ]
+    }
+
+    const [data, total] = await Promise.all([
+        prisma.project.findMany({
+            where,
+            orderBy: { projectNumber: 'asc' },
+            include: { customer: true },
+            skip,
+            take: limit
+        }),
+        prisma.project.count({ where })
+    ])
+
+    return {
+        data,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+    }
 }
 
 
@@ -104,8 +140,14 @@ export async function updateProject(id: string, data: UpdateProjectInput) {
 }
 
 export async function getProject(id: string) {
-    console.log(`[getProject] Fetching project with ID: "${id}"`) // Server log for debug
+    const cleanId = id.trim()
+    return await prisma.project.findFirst({
+        where: { OR: [{ id: cleanId }, { id }] },
+        include: { customer: true }
+    })
+}
 
+export async function getProjectWithStats(id: string) {
     // Try exact match first
     let project = await prisma.project.findUnique({
         where: { id },
@@ -131,7 +173,6 @@ export async function getProject(id: string) {
 
     // If not found, try robust fallback (trim, first)
     if (!project) {
-        console.log(`[getProject] Exact match failed for "${id}". Trying robust search...`)
         const cleanId = id.trim()
         project = await prisma.project.findFirst({
             where: { id: cleanId },

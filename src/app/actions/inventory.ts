@@ -4,16 +4,66 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { InventoryStatus } from '@prisma/client'
 
-export async function getInventory() {
-    return await prisma.inventory.findMany({
-        where: { status: InventoryStatus.ACTIVE },
-        include: {
-            profile: true,
-            grade: true
-        },
-        orderBy: { lotId: 'asc' }
-    })
+export interface GetInventoryParams {
+    page?: number
+    limit?: number
+    search?: string
 }
+
+export async function getInventory(params: GetInventoryParams = {}) {
+    const page = params.page || 1
+    const limit = params.limit || 50
+    const search = params.search || ''
+
+    const skip = (page - 1) * limit
+
+    const where: any = {
+        status: InventoryStatus.ACTIVE
+    }
+
+    if (search) {
+        where.OR = [
+            { lotId: { contains: search, mode: 'insensitive' } },
+            { certificateFilename: { contains: search, mode: 'insensitive' } },
+            { invoiceNumber: { contains: search, mode: 'insensitive' } },
+            {
+                profile: {
+                    OR: [
+                        { type: { contains: search, mode: 'insensitive' } },
+                        { dimensions: { contains: search, mode: 'insensitive' } }
+                    ]
+                }
+            },
+            {
+                grade: {
+                    name: { contains: search, mode: 'insensitive' }
+                }
+            }
+        ]
+    }
+
+    const [data, total] = await Promise.all([
+        prisma.inventory.findMany({
+            where,
+            include: {
+                profile: true,
+                grade: true
+            },
+            orderBy: { lotId: 'asc' },
+            skip,
+            take: limit
+        }),
+        prisma.inventory.count({ where })
+    ])
+
+    return {
+        data,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit)
+    }
+}
+
 
 export async function getInventoryItemByLot(lotId: string) {
     return await prisma.inventory.findUnique({

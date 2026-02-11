@@ -1,5 +1,6 @@
 'use server'
 
+import { getCurrentUser } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { WorkOrderStatus, PartPieceStatus } from '@prisma/client'
@@ -41,6 +42,9 @@ export async function recordBatchUsage({
     userId?: string
 }) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         return await prisma.$transaction(async (tx) => {
             // 1. Fetch Source
             let sourceItem: any = null
@@ -72,43 +76,51 @@ export async function recordBatchUsage({
                 }
             })
 
-            // 3. Process Cuts
+            // 3. Process Cuts (Batch Operations)
             let totalLengthUsed = 0
+            const usageLinesData: any[] = []
+            const workOrderItemIds: string[] = []
+            const pieceIds: string[] = []
+
             for (const cut of cuts) {
                 totalLengthUsed += cut.length * cut.quantity
 
-                // Create Usage Line
-                await tx.usageLine.create({
-                    data: {
-                        usageId: usage.id,
-                        [sourceType === 'INVENTORY' ? 'inventoryId' : 'remnantId']: sourceId,
-                        quantityUsed: cut.quantity,
-                        cost: (cut.length / 1000) * costPerMeter * cut.quantity,
-                        usageType: 'PROJECT_WO',
-                        workOrderItemId: cut.workOrderItemId,
-                        projectId
-                    }
+                usageLinesData.push({
+                    usageId: usage.id,
+                    [sourceType === 'INVENTORY' ? 'inventoryId' : 'remnantId']: sourceId,
+                    quantityUsed: cut.quantity,
+                    cost: (cut.length / 1000) * costPerMeter * cut.quantity,
+                    usageType: 'PROJECT_WO',
+                    workOrderItemId: cut.workOrderItemId,
+                    projectId
                 })
 
-                // Update Work Order Item Status
-                await tx.workOrderItem.update({
-                    where: { id: cut.workOrderItemId },
+                if (cut.workOrderItemId) workOrderItemIds.push(cut.workOrderItemId)
+                if (cut.pieceId) pieceIds.push(cut.pieceId)
+            }
+
+            if (usageLinesData.length > 0) {
+                await tx.usageLine.createMany({ data: usageLinesData })
+            }
+
+            if (workOrderItemIds.length > 0) {
+                await tx.workOrderItem.updateMany({
+                    where: { id: { in: workOrderItemIds } },
                     data: {
                         status: WorkOrderStatus.COMPLETED,
                         completedAt: new Date()
                     }
                 })
+            }
 
-                // Update Piece Status
-                if (cut.pieceId) {
-                    await tx.partPiece.update({
-                        where: { id: cut.pieceId },
-                        data: {
-                            status: PartPieceStatus.CUT,
-                            cutAt: new Date()
-                        }
-                    })
-                }
+            if (pieceIds.length > 0) {
+                await tx.partPiece.updateMany({
+                    where: { id: { in: pieceIds } },
+                    data: {
+                        status: PartPieceStatus.CUT,
+                        cutAt: new Date()
+                    }
+                })
             }
 
             // 4. Handle Source Update & Offcut/Remnant
@@ -216,6 +228,9 @@ export async function getUsageItem(query: string) {
 export async function createUsage(projectId: string, userIdArg: string, lines: any[]) {
     const userId = userIdArg || 'system'
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         return await prisma.$transaction(async (tx) => {
             const usage = await tx.usage.create({
                 data: {
@@ -290,6 +305,9 @@ export async function updateUsageLine(id: string, length: number, status: string
 
 export async function deleteUsageLine(id: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         await prisma.usageLine.delete({ where: { id } })
         revalidatePath('/usage')
         return { success: true }
@@ -300,6 +318,9 @@ export async function deleteUsageLine(id: string) {
 
 export async function deleteUsage(id: string) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { success: false, error: 'Unauthorized' }
+
         await prisma.usage.delete({ where: { id } })
         revalidatePath('/usage')
         return { success: true }

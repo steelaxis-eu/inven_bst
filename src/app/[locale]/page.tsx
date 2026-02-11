@@ -14,7 +14,8 @@ export default async function Home() {
   // Fetch projects for the dialog
   let projects: any[] = []
   try {
-    projects = await getActiveProjects()
+    const projectsResult = await getActiveProjects({ limit: 1000 })
+    projects = projectsResult.data
   } catch (e) { console.error(e) }
 
   return (

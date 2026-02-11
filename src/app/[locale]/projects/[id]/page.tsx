@@ -1,4 +1,4 @@
-import { getProject } from "@/app/actions/projects"
+import { getProjectWithStats } from "@/app/actions/projects"
 import { getProjectParts } from "@/app/actions/parts"
 import { getProjectAssemblies } from "@/app/actions/assemblies"
 import { getProjectWorkOrders } from "@/app/actions/workorders"
@@ -17,7 +17,7 @@ export default async function ProjectDashboard({ params }: { params: Promise<{ i
 
     const [project, parts, assemblies, workOrders, qualityChecks, plateParts, deliveries, profiles, grades, inventoryStock, standardProfiles, shapes] =
         await Promise.all([
-            getProject(cleanId),
+            getProjectWithStats(cleanId),
             getProjectParts(cleanId),
             getProjectAssemblies(cleanId),
             getProjectWorkOrders(cleanId),

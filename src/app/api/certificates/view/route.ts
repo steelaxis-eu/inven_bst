@@ -12,9 +12,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Path is required' }, { status: 400 })
     }
 
-    try {
-        const supabase = await createClient()
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
+    if (authError || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    try {
         // Download file from Supabase
         const { data, error } = await supabase.storage
             .from(bucket)

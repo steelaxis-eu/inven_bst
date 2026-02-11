@@ -5,23 +5,40 @@ import { InventoryView } from "./inventory-view"
 
 export const dynamic = 'force-dynamic'
 
-export default async function InventoryPage() {
+export default async function InventoryPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+    const sp = await searchParams
+    const page = Number(sp?.page) || 1
+    const search = (sp?.search as string) || ''
+
     // Try/catch for build safety
-    let inventory: any[] = []
+    let inventoryData: any[] = []
+    let total = 0
+    let totalPages = 0
+
     let profiles: any[] = []
     let standardProfiles: any[] = []
     let grades: any[] = []
     let shapes: any[] = []
     let suppliers: any[] = []
     let projects: any[] = []
+
     try {
-        inventory = await getInventory()
+        const result = await getInventory({ page, search, limit: 50 })
+        inventoryData = result.data
+        total = result.total
+        totalPages = result.totalPages
+
         profiles = await getProfiles()
         standardProfiles = await getStandardProfiles()
         grades = await getGrades()
         shapes = await getProfileShapes()
         suppliers = await getSuppliers()
-        projects = await getActiveProjects()
+        const projectsResult = await getActiveProjects({ limit: 1000 })
+        projects = projectsResult.data
     } catch (e) { }
 
     async function deleteItem(formData: FormData) {
@@ -32,7 +49,11 @@ export default async function InventoryPage() {
 
     return (
         <InventoryView
-            inventory={inventory}
+            inventory={inventoryData}
+            page={page}
+            totalPages={totalPages}
+            totalItems={total}
+            search={search}
             profiles={profiles}
             standardProfiles={standardProfiles}
             grades={grades}
