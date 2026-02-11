@@ -32,7 +32,7 @@ export async function recordBatchUsage({
     sourceType,
     cuts,
     offcut,
-    userId = 'system' // TODO: Get from auth
+    userId = 'system' // Ignored in favor of session user
 }: {
     projectId: string
     sourceId: string
@@ -70,8 +70,8 @@ export async function recordBatchUsage({
             const usage = await tx.usage.create({
                 data: {
                     projectId,
-                    userId, // NextAuth ID
-                    createdBy: userId,
+                    userId: user.id, // Enforce session ID
+                    createdBy: user.name || 'System',
                     date: new Date()
                 }
             })
@@ -226,17 +226,17 @@ export async function getUsageItem(query: string) {
 }
 
 export async function createUsage(projectId: string, userIdArg: string, lines: any[]) {
-    const userId = userIdArg || 'system'
-    try {
-        const user = await getCurrentUser()
-        if (!user) return { success: false, error: 'Unauthorized' }
+    // userIdArg ignored
+    const user = await getCurrentUser()
+    if (!user) return { success: false, error: 'Unauthorized' }
 
+    try {
         return await prisma.$transaction(async (tx) => {
             const usage = await tx.usage.create({
                 data: {
                     projectId,
-                    userId,
-                    createdBy: userId,
+                    userId: user.id,
+                    createdBy: user.name || 'System',
                     date: new Date()
                 }
             })

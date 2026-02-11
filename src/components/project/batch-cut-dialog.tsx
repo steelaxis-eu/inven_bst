@@ -1,17 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
     Dialog,
     DialogSurface,
-    DialogBody,
     DialogTitle,
-    DialogContent,
-    DialogActions,
     Button,
     Input,
     Label,
-    Select, // Should use combobox or dropdown
     Checkbox,
     makeStyles,
     tokens,
@@ -24,19 +20,30 @@ import {
 } from "@fluentui/react-components"
 import {
     CutRegular,
-    RulerRegular,
-    DeleteRegular,
-    DismissRegular
+    RulerRegular
 } from "@fluentui/react-icons"
 import { toast } from 'sonner'
 import { getInventory } from "@/app/actions/inventory"
 import { recordBatchUsage } from "@/app/actions/usage"
+import { InventoryWithRelations } from "@/types"
+
+interface BatchCutItem {
+    id: string
+    pieceId: string | null // Corrected type from string to string | null
+    piece?: {
+        length: number
+        part?: {
+            partNumber: string
+            profileType: string | null
+        } | null
+    } | null
+}
 
 interface BatchCutDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     projectId: string
-    items: any[] // WorkOrderItems
+    items: BatchCutItem[]
     onSuccess: () => void
 }
 
@@ -135,11 +142,11 @@ const useStyles = makeStyles({
 
 export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess }: BatchCutDialogProps) {
     const styles = useStyles()
-    const [inventory, setInventory] = useState<any[]>([])
+    const [inventory, setInventory] = useState<InventoryWithRelations[]>([])
     const [loading, setLoading] = useState(false)
 
     // State
-    const [pendingItems, setPendingItems] = useState<any[]>(items)
+    const [pendingItems, setPendingItems] = useState<BatchCutItem[]>(items)
     const [selectedSourceId, setSelectedSourceId] = useState<string>('')
     const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
 
@@ -154,25 +161,29 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
             loadInventory()
             setPendingItems(items)
         }
-    }, [open, items])
+    }, [open]) // Only reset when dialog opens
 
     const loadInventory = async () => {
         setLoading(true)
         try {
-            const { data } = await getInventory({ limit: 1000 }) // Temporary large limit until async search
-            setInventory(data)
+            // TODO: Paginate or async search for better performance with large inventory
+            const { data } = await getInventory({ limit: 1000 })
+            setInventory(data as InventoryWithRelations[])
         } catch (e) {
             toast.error("Failed to load inventory")
         }
         setLoading(false)
     }
 
-    const selectedSource = inventory.find(i => i.id === selectedSourceId)
+    const selectedSource = useMemo(() =>
+        inventory.find(i => i.id === selectedSourceId),
+        [inventory, selectedSourceId])
 
     // Calculate usage
-    const selectedPartsLength = pendingItems
+    const selectedPartsLength = useMemo(() => pendingItems
         .filter(i => selectedItemIds.includes(i.id))
-        .reduce((sum, item) => sum + (item.piece?.length || 0), 0)
+        .reduce((sum, item) => sum + (item.piece?.length || 0), 0),
+        [pendingItems, selectedItemIds])
 
     useEffect(() => {
         if (selectedSource) {
@@ -191,16 +202,23 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
                 .filter(i => selectedItemIds.includes(i.id))
                 .map(i => ({
                     workOrderItemId: i.id,
-                    pieceId: i.pieceId,
+                    pieceId: i.pieceId!, // Assert non-null as filtered items logic implies valid items
                     quantity: 1,
                     length: i.piece?.length || 0
                 }))
+
+            // Validate that we have valid piece Ids
+            if (cuts.some(c => !c.pieceId)) {
+                toast.error("Invalid item selected (missing piece ID)")
+                setLoading(false)
+                return
+            }
 
             const res = await recordBatchUsage({
                 projectId,
                 sourceId: selectedSource.id,
                 sourceType: 'INVENTORY',
-                cuts,
+                cuts: cuts as any, // backend expects specific shape, assuming compatibility
                 offcut: {
                     actualLength: isScrap ? 0 : remnantLength,
                     isScrap,
@@ -238,6 +256,30 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
 
     const isValid = selectedSource && selectedItemIds.length > 0 && (isScrap || remnantLength >= 0)
 
+    // Group items for display
+    const groupedItems = useMemo(() => {
+        const grouped: Record<string, {
+            partNumber: string,
+            length: number,
+            profileType: string,
+            ids: string[]
+        }> = {}
+
+        pendingItems.forEach(item => {
+            const key = `${item.piece?.part?.partNumber}-${item.piece?.length}`
+            if (!grouped[key]) {
+                grouped[key] = {
+                    partNumber: item.piece?.part?.partNumber || 'UNK',
+                    length: item.piece?.length || 0,
+                    profileType: item.piece?.part?.profileType || '',
+                    ids: []
+                }
+            }
+            grouped[key].ids.push(item.id)
+        })
+        return Object.values(grouped)
+    }, [pendingItems])
+
     return (
         <Dialog open={open} onOpenChange={(e, data) => onOpenChange(data.open)}>
             <DialogSurface style={{ maxWidth: '900px', width: '90vw' }}>
@@ -252,80 +294,60 @@ export function BatchCutDialog({ open, onOpenChange, projectId, items, onSuccess
                         <div className={styles.column} style={{ borderRight: `1px solid ${tokens.colorNeutralStroke2}` }}>
                             <div className={styles.columnHeader}>Pending Parts</div>
                             <div className={styles.scrollArea}>
-                                {(() => {
-                                    const grouped: Record<string, {
-                                        partNumber: string,
-                                        length: number,
-                                        profileType: string,
-                                        ids: string[]
-                                    }> = {}
+                                {groupedItems.map(group => {
+                                    const selectedCount = group.ids.filter(id => selectedItemIds.includes(id)).length
+                                    const isAll = selectedCount === group.ids.length
+                                    const isSome = selectedCount > 0 && selectedCount < group.ids.length
 
-                                    pendingItems.forEach(item => {
-                                        const key = `${item.piece?.part?.partNumber}-${item.piece?.length}`
-                                        if (!grouped[key]) {
-                                            grouped[key] = {
-                                                partNumber: item.piece?.part?.partNumber || 'UNK',
-                                                length: item.piece?.length || 0,
-                                                profileType: item.piece?.part?.profileType || '',
-                                                ids: []
-                                            }
-                                        }
-                                        grouped[key].ids.push(item.id)
-                                    })
-
-                                    return Object.values(grouped).map(group => {
-                                        const selectedCount = group.ids.filter(id => selectedItemIds.includes(id)).length
-                                        const isAll = selectedCount === group.ids.length
-                                        const isSome = selectedCount > 0 && selectedCount < group.ids.length
-
-                                        return (
-                                            <div
-                                                key={`${group.partNumber}-${group.length}`}
-                                                className={`${styles.listItem} ${selectedCount > 0 ? styles.selectedItem : ''}`}
-                                            >
-                                                <Checkbox
-                                                    checked={isAll ? true : (isSome ? 'mixed' : false)}
-                                                    onChange={(e, d) => {
-                                                        if (d.checked) {
-                                                            // Add all remaining from this group if checked, or toggle
-                                                            const newIds = [...selectedItemIds, ...group.ids.filter(id => !selectedItemIds.includes(id))]
-                                                            setSelectedItemIds(newIds)
-                                                        } else {
-                                                            setSelectedItemIds(selectedItemIds.filter(id => !group.ids.includes(id)))
-                                                        }
-                                                    }}
-                                                />
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-                                                        <span>{group.partNumber}</span>
-                                                        <Text size={200} weight="bold" color="brand">{selectedCount} / {group.ids.length}</Text>
-                                                    </div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: tokens.colorNeutralForeground3, marginTop: '4px' }}>
-                                                        <span>L: {group.length}mm</span>
-                                                        <Badge appearance="outline" size="small">{group.profileType}</Badge>
-                                                    </div>
-
-                                                    {group.ids.length > 1 && (
-                                                        <div style={{ marginTop: '8px', display: 'flex', gap: '4px' }}>
-                                                            <Input
-                                                                type="number"
-                                                                size="small"
-                                                                value={selectedCount.toString()}
-                                                                onChange={(e: any, d: any) => {
-                                                                    const count = Math.min(group.ids.length, Math.max(0, parseInt(d.value) || 0))
-                                                                    const otherIds = selectedItemIds.filter(id => !group.ids.includes(id))
-                                                                    const groupSlice = group.ids.slice(0, count)
-                                                                    setSelectedItemIds([...otherIds, ...groupSlice])
-                                                                }}
-                                                                style={{ width: '60px' }}
-                                                            />
-                                                        </div>
-                                                    )}
+                                    return (
+                                        <div
+                                            key={`${group.partNumber}-${group.length}`}
+                                            className={`${styles.listItem} ${selectedCount > 0 ? styles.selectedItem : ''}`}
+                                        >
+                                            <Checkbox
+                                                checked={isAll ? true : (isSome ? 'mixed' : false)}
+                                                onChange={(e, d) => {
+                                                    if (d.checked) {
+                                                        // Add all remaining from this group if checked, or toggle
+                                                        const newIds = [...selectedItemIds, ...group.ids.filter(id => !selectedItemIds.includes(id))]
+                                                        setSelectedItemIds(newIds)
+                                                    } else {
+                                                        setSelectedItemIds(selectedItemIds.filter(id => !group.ids.includes(id)))
+                                                    }
+                                                }}
+                                            />
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span>{group.partNumber}</span>
+                                                    <Text size={200} weight="bold" color="brand">{selectedCount} / {group.ids.length}</Text>
                                                 </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: tokens.colorNeutralForeground3, marginTop: '4px' }}>
+                                                    <span>L: {group.length}mm</span>
+                                                    <Badge appearance="outline" size="small">{group.profileType || 'N/A'}</Badge>
+                                                </div>
+
+                                                {group.ids.length > 1 && (
+                                                    <div style={{ marginTop: '8px', display: 'flex', gap: '4px' }}>
+                                                        <Input
+                                                            type="number"
+                                                            size="small"
+                                                            value={selectedCount.toString()}
+                                                            onChange={(e, d) => {
+                                                                const val = parseInt(d.value)
+                                                                if (isNaN(val)) return
+                                                                const count = Math.min(group.ids.length, Math.max(0, val))
+                                                                const otherIds = selectedItemIds.filter(id => !group.ids.includes(id))
+                                                                const groupSlice = group.ids.slice(0, count)
+                                                                setSelectedItemIds([...otherIds, ...groupSlice])
+                                                            }}
+                                                            style={{ width: '60px' }}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
-                                        )
-                                    })
-                                })()}
+                                        </div>
+                                    )
+                                })}
 
                                 {pendingItems.length === 0 && (
                                     <div style={{ textAlign: 'center', padding: '40px', color: tokens.colorNeutralForeground3 }}>
