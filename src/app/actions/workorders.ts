@@ -37,21 +37,33 @@ export interface CreateWorkOrderInput {
  * Generate next work order number for a project
  * Uses count-based approach to avoid race conditions with concurrent requests
  */
-async function generateWorkOrderNumber(projectId: string, tx?: Prisma.TransactionClient, offset: number = 0): Promise<string> {
+async function generateWorkOrderNumber(projectId: string, tx?: Prisma.TransactionClient): Promise<string> {
     const client = tx || prisma
     const project = await client.project.findUnique({
         where: { id: projectId },
         select: { projectNumber: true }
     })
 
-    const count = await client.workOrder.count({
-        where: { projectId }
+    const allWos = await client.workOrder.findMany({
+        where: { projectId },
+        select: { workOrderNumber: true }
     })
 
-    const nextSequence = count + 1
+    let maxSequence = 0
+    for (const wo of allWos) {
+        const parts = wo.workOrderNumber.split('-')
+        const seqStr = parts[parts.length - 1]
+        if (seqStr) {
+            const seq = parseInt(seqStr, 10)
+            if (!isNaN(seq) && seq > maxSequence) {
+                maxSequence = seq
+            }
+        }
+    }
 
+    const nextSequence = maxSequence + 1
     const year = new Date().getFullYear()
-    return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(nextSequence + offset).padStart(3, '0')}`
+    return `WO-${project?.projectNumber || 'XXX'}-${year}-${String(nextSequence).padStart(3, '0')}`
 }
 
 /**
@@ -130,19 +142,21 @@ export async function createWorkOrder(input: CreateWorkOrderInput) {
             return { success: false, error: 'Missing required fields' }
         }
 
-        const workOrderNumber = await generateWorkOrderNumber(projectId)
+        const wo = await prisma.$transaction(async (tx) => {
+            await tx.project.update({ where: { id: projectId }, data: { updatedAt: new Date() } })
 
-        const wo = await prisma.workOrder.create({
-            data: {
-                projectId,
-                workOrderNumber,
-                title,
-                type,
-                priority: (rest.priority as any) || WorkOrderPriority.MEDIUM,
-                ...rest,
-                scheduledDate: rest.scheduledDate ? new Date(rest.scheduledDate) : undefined
-            }
-        })
+            return await tx.workOrder.create({
+                data: {
+                    projectId,
+                    workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                    title,
+                    type,
+                    priority: (rest.priority as any) || WorkOrderPriority.MEDIUM,
+                    ...rest,
+                    scheduledDate: rest.scheduledDate ? new Date(rest.scheduledDate) : undefined
+                }
+            })
+        }, { maxWait: 5000, timeout: 20000 })
 
         revalidatePath(`/projects/${projectId}`)
         return { success: true, data: wo }
@@ -381,11 +395,9 @@ export async function completeCuttingWOWithWorkflow(
                 data: { status: PartPieceStatus.CUT, cutAt: new Date() }
             })
 
-            let woOffset = 0
-
             // Create MACHINING WO if any pieces need it
             if (machinedPieceIds.length > 0) {
-                const woNumber = await generateWorkOrderNumber(wo.projectId, tx, woOffset++)
+                const woNumber = await generateWorkOrderNumber(wo.projectId, tx)
                 machiningWO = await tx.workOrder.create({
                     data: {
                         projectId: wo.projectId,
@@ -404,7 +416,7 @@ export async function completeCuttingWOWithWorkflow(
 
             // Create WELDING WO for pieces going direct (if any)
             if (directToWelding.length > 0) {
-                const woNumber = await generateWorkOrderNumber(wo.projectId, tx, woOffset++)
+                const woNumber = await generateWorkOrderNumber(wo.projectId, tx)
                 weldingWO = await tx.workOrder.create({
                     data: {
                         projectId: wo.projectId,
@@ -1337,12 +1349,11 @@ export async function createSmartWorkOrder(input: {
                         data: { updatedAt: new Date() }
                     })
 
-                    let woOffset = 0
                     // 1. Material Prep WO
                     const prepWO = await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
                             title: `Prep for ${vendor || 'Vendor'} (${title || 'Outsourced'})`,
                             type: WorkOrderType.MATERIAL_PREP,
                             priority: (priority as any) || WorkOrderPriority.MEDIUM,
@@ -1357,7 +1368,7 @@ export async function createSmartWorkOrder(input: {
                     await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
                             title: title || `Outsourced ${type}`,
                             type: type as WorkOrderType,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1501,15 +1512,13 @@ export async function createSmartWorkOrder(input: {
                 })
 
                 let prepWOId = null
-                let woOffset = 0
-
                 // A. Material Prep WO
                 if (materialPrepRequired) {
                     const prepDate = scheduledDate ? new Date(scheduledDate) : new Date()
                     const prepWO = await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
                             title: `Material Prep (${title || 'Cutting'})`,
                             type: WorkOrderType.MATERIAL_PREP,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1527,7 +1536,7 @@ export async function createSmartWorkOrder(input: {
                     await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
                             title: (title || 'Cutting') + ' (Ready/InStock)',
                             type: WorkOrderType.CUTTING,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1550,7 +1559,7 @@ export async function createSmartWorkOrder(input: {
                     await tx.workOrder.create({
                         data: {
                             projectId,
-                            workOrderNumber: await generateWorkOrderNumber(projectId, tx, woOffset++),
+                            workOrderNumber: await generateWorkOrderNumber(projectId, tx),
                             title: (title || 'Cutting') + ' (Pending Material)',
                             type: WorkOrderType.CUTTING,
                             priority: priority || WorkOrderPriority.MEDIUM,
@@ -1580,24 +1589,28 @@ export async function createSmartWorkOrder(input: {
         // ====================================================================
         // SCENARIO 3: STANDARD WO
         // ====================================================================
-        await prisma.workOrder.create({
-            data: {
-                projectId,
-                workOrderNumber: await generateWorkOrderNumber(projectId),
-                title: title || type,
-                type: type as WorkOrderType,
-                priority: priority || WorkOrderPriority.MEDIUM,
-                status: WorkOrderStatus.PENDING,
-                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                notes,
-                items: {
-                    create: items.map(i => ({
-                        pieceId: i.type === 'part' ? i.id : undefined,
-                        platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
-                    }))
+        const wo = await prisma.$transaction(async (tx) => {
+            await tx.project.update({ where: { id: projectId }, data: { updatedAt: new Date() } })
+
+            return await tx.workOrder.create({
+                data: {
+                    projectId,
+                    workOrderNumber: await generateWorkOrderNumber(projectId, tx),
+                    title: title || type,
+                    type: type as WorkOrderType,
+                    priority: priority || WorkOrderPriority.MEDIUM,
+                    status: WorkOrderStatus.PENDING,
+                    scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                    notes,
+                    items: {
+                        create: items.map(i => ({
+                            pieceId: i.type === 'part' ? i.id : undefined,
+                            platePartId: i.type === 'plate' ? platePieceMap[i.id] : undefined
+                        }))
+                    }
                 }
-            }
-        })
+            })
+        }, { maxWait: 5000, timeout: 20000 })
 
         revalidatePath(`/projects/${projectId}`)
         return { success: true, message: 'Work Order created' }
@@ -1672,31 +1685,34 @@ export async function createAssemblyWorkOrder(input: {
             }
         }
 
-        const workOrderNumber = await generateWorkOrderNumber(projectId)
+        const wo = await prisma.$transaction(async (tx) => {
+            await tx.project.update({ where: { id: projectId }, data: { updatedAt: new Date() } })
+            const workOrderNumber = await generateWorkOrderNumber(projectId, tx)
 
-        // Get assembly names for title
-        const assemblies = await prisma.assembly.findMany({
-            where: { id: { in: assemblyIds } },
-            select: { assemblyNumber: true, name: true }
-        })
-        const defaultTitle = `Assembly: ${assemblies.map(a => a.assemblyNumber).join(', ')}`
+            // Get assembly names for title
+            const assemblies = await tx.assembly.findMany({
+                where: { id: { in: assemblyIds } },
+                select: { assemblyNumber: true, name: true }
+            })
+            const defaultTitle = `Assembly: ${assemblies.map(a => a.assemblyNumber).join(', ')}`
 
-        const wo = await prisma.workOrder.create({
-            data: {
-                projectId,
-                workOrderNumber,
-                title: title || defaultTitle,
-                type: WorkOrderType.ASSEMBLY,
-                priority: (priority as any) || WorkOrderPriority.MEDIUM,
-                status: WorkOrderStatus.PENDING,  // stays PENDING until manually activated
-                scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-                notes: allReady ? notes : `${notes || ''}\n[Waiting for parts]`.trim(),
-                items: {
-                    create: assemblyIds.map(assemblyId => ({ assemblyId }))
-                }
-            },
-            include: { items: true }
-        })
+            return await tx.workOrder.create({
+                data: {
+                    projectId,
+                    workOrderNumber,
+                    title: title || defaultTitle,
+                    type: WorkOrderType.ASSEMBLY,
+                    priority: (priority as any) || WorkOrderPriority.MEDIUM,
+                    status: WorkOrderStatus.PENDING,  // stays PENDING until manually activated
+                    scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+                    notes: allReady ? notes : `${notes || ''}\n[Waiting for parts]`.trim(),
+                    items: {
+                        create: assemblyIds.map(assemblyId => ({ assemblyId }))
+                    }
+                },
+                include: { items: true }
+            })
+        }, { maxWait: 5000, timeout: 20000 })
 
         revalidatePath(`/projects/${projectId}`)
         return { success: true, data: wo, allReady }
