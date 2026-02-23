@@ -43,6 +43,7 @@ import {
     type AssemblyReadiness
 } from '@/app/actions/workorders'
 import { startNestingJob, getJobStatus } from '@/app/actions/optimization'
+import { getGrades } from '@/app/actions/inventory'
 
 interface CreateAssemblyWODialogProps {
     projectId: string
@@ -124,7 +125,13 @@ export function CreateAssemblyWODialog({
     const [step, setStep] = useState<'READINESS' | 'PLANNING'>('READINESS')
     const [planningResults, setPlanningResults] = useState<any[]>([])
     const [stockLength, setStockLength] = useState(12000)
-    const [customOverrides, setCustomOverrides] = useState<Record<string, number>>({}) // Key: profileType|dimensions|grade
+    const [customOverrides, setCustomOverrides] = useState<Record<string, { length?: number, gradeId?: string }>>({}) // Key: profileType|dimensions|grade
+    const [grades, setGrades] = useState<any[]>([])
+
+    // Load grades
+    useEffect(() => {
+        getGrades().then(g => setGrades(g))
+    }, [])
 
     // Form inputs
     const [createPartPrepWO, setCreatePartPrepWO] = useState(true)
@@ -157,7 +164,7 @@ export function CreateAssemblyWODialog({
         p.pieces.filter(pc => pc.status !== 'READY').map(pc => pc.id)
     )
 
-    const calculatePlan = async (length: number, overrides?: Record<string, number>) => {
+    const calculatePlan = async (length: number, overrides?: Record<string, { length?: number, gradeId?: string }>) => {
         setCalculating(true)
         try {
             const overridesToUse = overrides || customOverrides
@@ -197,23 +204,20 @@ export function CreateAssemblyWODialog({
         }
     }, [step, stockLength])
 
-    const handleOverrideChange = (profileKey: string, val: string) => {
-        // If it's a specific "Custom" flag or just direct number input
-        // Let's assume input is direct number string
-        if (!val) {
-            const newMap = { ...customOverrides }
+    const handleOverrideChange = (profileKey: string, changes: { length?: number, gradeId?: string }) => {
+        let newMap = { ...customOverrides }
+        const current = newMap[profileKey] || {}
+
+        const updated = { ...current, ...changes }
+
+        if (!updated.length && !updated.gradeId) {
             delete newMap[profileKey]
-            setCustomOverrides(newMap)
-            return
+        } else {
+            newMap[profileKey] = updated
         }
 
-        const num = parseInt(val)
-        if (!isNaN(num) && num > 0) {
-            setCustomOverrides(prev => ({
-                ...prev,
-                [profileKey]: num
-            }))
-        }
+        setCustomOverrides(newMap)
+        return newMap
     }
 
     const handleNext = async () => {
@@ -377,26 +381,44 @@ export function CreateAssemblyWODialog({
                                                 <Badge appearance="outline">{res.grade}</Badge>
 
                                                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <Label size="small">Length (mm):</Label>
+                                                    <Dropdown
+                                                        style={{ width: '120px' }}
+                                                        size="small"
+                                                        placeholder="Substitute Grade"
+                                                        disabled={calculating}
+                                                        value={grades.find(g => g.id === customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`]?.gradeId)?.name || "Original Grade"}
+                                                        selectedOptions={customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`]?.gradeId ? [customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`].gradeId!] : []}
+                                                        onOptionSelect={(e, d) => {
+                                                            const key = `${res.profileType}|${res.dimensions}|${res.grade}`
+                                                            const val = d.optionValue === 'original' ? undefined : d.optionValue
+                                                            const newMap = handleOverrideChange(key, { gradeId: val })
+                                                            calculatePlan(stockLength, newMap)
+                                                        }}
+                                                    >
+                                                        <Option value="original">Original Grade</Option>
+                                                        {grades.map(g => (
+                                                            <Option key={g.id} value={g.id} text={g.name}>{g.name}</Option>
+                                                        ))}
+                                                    </Dropdown>
                                                     <Combobox
                                                         style={{ width: '120px' }}
                                                         size="small"
                                                         freeform
-                                                        placeholder="Select or type"
-                                                        value={(customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`] || stockLength).toString()}
+                                                        placeholder="Length"
+                                                        value={(customOverrides[`${res.profileType}|${res.dimensions}|${res.grade}`]?.length || stockLength).toString()}
                                                         onOptionSelect={(e, d) => {
                                                             if (d.optionValue) {
                                                                 const key = `${res.profileType}|${res.dimensions}|${res.grade}`
-                                                                handleOverrideChange(key, d.optionValue)
-                                                                // Trigger recalc immediately with new value
                                                                 const num = parseInt(d.optionValue)
                                                                 if (!isNaN(num) && num > 0) {
-                                                                    calculatePlan(stockLength, { ...customOverrides, [key]: num })
+                                                                    const newMap = handleOverrideChange(key, { length: num })
+                                                                    calculatePlan(stockLength, newMap)
                                                                 }
                                                             }
                                                         }}
                                                         onChange={(e) => {
-                                                            handleOverrideChange(`${res.profileType}|${res.dimensions}|${res.grade}`, e.target.value)
+                                                            const val = e.target.value
+                                                            if (val) handleOverrideChange(`${res.profileType}|${res.dimensions}|${res.grade}`, { length: parseInt(val) })
                                                         }}
                                                         onBlur={() => {
                                                             // Trigger recalc on blur (uses updated state)

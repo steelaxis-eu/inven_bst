@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
     Dialog,
     DialogSurface,
@@ -32,6 +32,7 @@ import {
 } from "@fluentui/react-icons";
 import { toast } from 'sonner'
 import { createSmartWorkOrder, getOptimizationPreview } from '@/app/actions/workorders' // Use smart actions
+import { getGrades } from '@/app/actions/inventory'
 import { NestingVisualizer } from './nesting-visualizer'
 
 const useStyles = makeStyles({
@@ -89,8 +90,14 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
     const [step, setStep] = useState(1); // 1 = Config, 2 = Optimization/Review
     const [submitting, setSubmitting] = useState(false)
     const [optimizationResult, setOptimizationResult] = useState<any>(null)
-    const [customOverrides, setCustomOverrides] = useState<Record<string, number>>({})
+    const [customOverrides, setCustomOverrides] = useState<Record<string, { length?: number, gradeId?: string }>>({})
     const [calculating, setCalculating] = useState(false)
+    const [grades, setGrades] = useState<any[]>([])
+
+    // Load grades
+    useEffect(() => {
+        getGrades().then(g => setGrades(g))
+    }, [])
 
     // Form State
     const [type, setType] = useState<string>('CUTTING')
@@ -168,21 +175,23 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
         }
     }
 
-    const handleOverrideChange = (profileKey: string, val: string) => {
-        const num = parseInt(val)
+    const handleOverrideChange = (profileKey: string, changes: { length?: number, gradeId?: string }) => {
         let newOverrides = { ...customOverrides }
+        const current = newOverrides[profileKey] || {}
 
-        if (!val) {
+        const updated = { ...current, ...changes }
+
+        if (!updated.length && !updated.gradeId) {
             delete newOverrides[profileKey]
-        } else if (!isNaN(num) && num > 0) {
-            newOverrides[profileKey] = num
+        } else {
+            newOverrides[profileKey] = updated
         }
 
         setCustomOverrides(newOverrides)
         return newOverrides
     }
 
-    const runOptimization = async (overrides?: Record<string, number>) => {
+    const runOptimization = async (overrides?: Record<string, { length?: number, gradeId?: string }>) => {
         setCalculating(true)
         try {
             const pieceIds = [...selectedParts, ...selectedPlates];
@@ -298,21 +307,40 @@ export function CreateWorkOrderDialog({ open, onOpenChange, projectId, selectedP
                                                     plan={plan}
                                                     extraHeaderContent={
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <Dropdown
+                                                                style={{ width: '120px' }}
+                                                                size="small"
+                                                                placeholder="Substitute Grade"
+                                                                disabled={calculating}
+                                                                value={grades.find(g => g.id === customOverrides[plan.materialKey]?.gradeId)?.name || "Original Grade"}
+                                                                selectedOptions={customOverrides[plan.materialKey]?.gradeId ? [customOverrides[plan.materialKey].gradeId!] : []}
+                                                                onOptionSelect={(e, d) => {
+                                                                    const val = d.optionValue === 'original' ? undefined : d.optionValue
+                                                                    const newOverrides = handleOverrideChange(plan.materialKey, { gradeId: val })
+                                                                    runOptimization(newOverrides)
+                                                                }}
+                                                            >
+                                                                <Option value="original">Original Grade</Option>
+                                                                {grades.map(g => (
+                                                                    <Option key={g.id} value={g.id} text={g.name}>{g.name}</Option>
+                                                                ))}
+                                                            </Dropdown>
                                                             <Combobox
                                                                 style={{ width: '100px' }}
                                                                 size="small"
                                                                 freeform
                                                                 placeholder="Length"
                                                                 disabled={calculating}
-                                                                value={(customOverrides[plan.materialKey] || 12000).toString()}
+                                                                value={(customOverrides[plan.materialKey]?.length || 12000).toString()}
                                                                 onOptionSelect={(e, d) => {
                                                                     if (d.optionValue) {
-                                                                        const newOverrides = handleOverrideChange(plan.materialKey, d.optionValue)
+                                                                        const newOverrides = handleOverrideChange(plan.materialKey, { length: parseInt(d.optionValue) })
                                                                         runOptimization(newOverrides)
                                                                     }
                                                                 }}
                                                                 onChange={(e) => {
-                                                                    handleOverrideChange(plan.materialKey, e.target.value)
+                                                                    const val = e.target.value
+                                                                    if (val) handleOverrideChange(plan.materialKey, { length: parseInt(val) })
                                                                 }}
                                                                 onBlur={() => {
                                                                     runOptimization()

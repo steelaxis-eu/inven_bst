@@ -28,7 +28,7 @@ export interface PlanningResult {
 export async function calculateCuttingPlan(
     pieceIds: string[],
     standardStockLength: number = 12000,
-    customStockOverrides: Record<string, number> = {}
+    customStockOverrides: Record<string, { length?: number, gradeId?: string } | number> = {}
 ): Promise<{ success: boolean, data?: PlanningResult[], error?: string }> {
     try {
         const user = await getCurrentUser()
@@ -96,6 +96,24 @@ export async function calculateCuttingPlan(
         for (const key in groups) {
             const group = groups[key]
 
+            const groupKey = `${group.profileType}|${group.dimensions}|${group.gradeName}`
+            const overrideVal = customStockOverrides[groupKey]
+            let stockLengthToUse = standardStockLength
+            let targetGradeId = group.gradeId
+
+            if (typeof overrideVal === 'number') {
+                stockLengthToUse = overrideVal
+            } else if (overrideVal) {
+                if (overrideVal.length) stockLengthToUse = overrideVal.length
+                if (overrideVal.gradeId) targetGradeId = overrideVal.gradeId
+            }
+
+            let resultGradeName = group.gradeName
+            if (targetGradeId && targetGradeId !== group.gradeId) {
+                const newGrade = await prisma.materialGrade.findUnique({ where: { id: targetGradeId } })
+                if (newGrade) resultGradeName = newGrade.name
+            }
+
             // Fetch Inventory (Stock + Remnants)
             let inventory: any[] = []
 
@@ -108,11 +126,11 @@ export async function calculateCuttingPlan(
                 if (matchingProfile) targetProfileId = matchingProfile.id
             }
 
-            if (targetProfileId && group.gradeId) {
+            if (targetProfileId && targetGradeId) {
                 inventory = await prisma.inventory.findMany({
                     where: {
                         profileId: targetProfileId,
-                        gradeId: group.gradeId,
+                        gradeId: targetGradeId,
                         status: 'ACTIVE',
                         quantityAtHand: { gt: 0 }
                     },
@@ -134,10 +152,6 @@ export async function calculateCuttingPlan(
                 length: p.length,
                 quantity: 1
             }))
-
-            // Custom Override Check
-            const groupKey = `${group.profileType}|${group.dimensions}|${group.gradeName}`
-            const stockLengthToUse = customStockOverrides[groupKey] || standardStockLength
 
             const plan = optimizeCuttingPlan(optParts, stockInfo, stockLengthToUse)
 
@@ -169,7 +183,7 @@ export async function calculateCuttingPlan(
             results.push({
                 profileType: group.profileType,
                 dimensions: group.dimensions,
-                grade: group.gradeName,
+                grade: resultGradeName,
                 stockUsed,
                 newStockNeeded,
                 partsFromStock,

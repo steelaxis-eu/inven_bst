@@ -655,6 +655,11 @@ function WorkOrderTable({
                                                         <Link href={`/projects/${projectId}/work-orders/${wo.id}/print`} target="_blank" title="Print Work Order">
                                                             <Button appearance="subtle" icon={<PrintRegular />} />
                                                         </Link>
+                                                        {wo.type === 'MATERIAL_PREP' && (
+                                                            <Link href={`/projects/${projectId}/work-orders/${wo.id}/rfq`} target="_blank" title="Download RFQ">
+                                                                <Button appearance="subtle" icon={<ReceiptPlayRegular />} style={{ color: tokens.colorPaletteGreenForeground1 }} />
+                                                            </Link>
+                                                        )}
                                                         <DownloadDrawingsButton
                                                             workOrderId={wo.id}
                                                             workOrderNumber={wo.workOrderNumber}

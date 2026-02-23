@@ -966,7 +966,7 @@ export async function completeMaterialPrepWorkOrder(
  */
 export async function getOptimizationPreview(
     input: string[] | { id: string, type: 'part' | 'plate' }[],
-    customStockOverrides: Record<string, number> = {}
+    customStockOverrides: Record<string, { length?: number, gradeId?: string } | number> = {}
 ) {
     try {
         // Normalize input
@@ -1023,9 +1023,26 @@ export async function getOptimizationPreview(
                 const firstPart = groupPieces[0].part
                 const [profileKeyPart, gradeKeyPart] = key.split('#')
 
+                const overrideVal = customStockOverrides[key]
+                let stockLengthToUse = 12000
+                let targetGradeId = firstPart.gradeId
+
+                if (typeof overrideVal === 'number') {
+                    stockLengthToUse = overrideVal
+                } else if (overrideVal) {
+                    if (overrideVal.length) stockLengthToUse = overrideVal.length
+                    if (overrideVal.gradeId) targetGradeId = overrideVal.gradeId
+                }
+
                 // Determine Profile Info for display
                 let profileName = 'Unknown Profile'
                 let gradeName = firstPart.grade?.name || 'Unknown Grade'
+
+                if (targetGradeId && targetGradeId !== firstPart.gradeId) {
+                    const newGrade = await prisma.materialGrade.findUnique({ where: { id: targetGradeId } })
+                    if (newGrade) gradeName = newGrade.name
+                }
+
                 let profileType = firstPart.profile?.type || firstPart.profileType
                 let profileDims = firstPart.profile?.dimensions || firstPart.profileDimensions
 
@@ -1071,11 +1088,11 @@ export async function getOptimizationPreview(
                 let inventory: any[] = []
                 let remnants: any[] = []
 
-                if (targetProfileId && firstPart.gradeId) {
+                if (targetProfileId && targetGradeId) {
                     inventory = await prisma.inventory.findMany({
                         where: {
                             profileId: targetProfileId,
-                            gradeId: firstPart.gradeId,
+                            gradeId: targetGradeId,
                             status: InventoryStatus.ACTIVE,
                             quantityAtHand: { gt: 0 }
                         }
@@ -1084,7 +1101,7 @@ export async function getOptimizationPreview(
                     remnants = await prisma.remnant.findMany({
                         where: {
                             profileId: targetProfileId,
-                            gradeId: firstPart.gradeId,
+                            gradeId: targetGradeId,
                             status: RemnantStatus.AVAILABLE
                         }
                     })
@@ -1112,7 +1129,6 @@ export async function getOptimizationPreview(
                 }))
 
                 // We run optimization even if no stock - it will tell us what to buy
-                const stockLengthToUse = customStockOverrides[key] || 12000
                 const result = optimizeCuttingPlan(partsRequest, stockInfo, stockLengthToUse)
 
                 // Inject partNumbers into result
@@ -1225,7 +1241,7 @@ export async function createSmartWorkOrder(input: {
     vendor?: string
     // Optimization confirmation
     cachedPlan?: any
-    stockOverrides?: Record<string, number>
+    stockOverrides?: Record<string, { length?: number, gradeId?: string } | number>
 }): Promise<{
     success: boolean
     message?: string
@@ -1333,6 +1349,7 @@ export async function createSmartWorkOrder(input: {
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
                             notes: prepNotes + "\n\n" + (notes || ''),
+                            metadata: { plans: optRes.plans } as any,
                         }
                     })
 
@@ -1499,6 +1516,7 @@ export async function createSmartWorkOrder(input: {
                             status: WorkOrderStatus.PENDING,
                             scheduledDate: prepDate,
                             notes: prepSummary + "\n\n" + (notes || ''),
+                            metadata: { plans: optRes.plans } as any,
                         }
                     })
                     prepWOId = prepWO.id
