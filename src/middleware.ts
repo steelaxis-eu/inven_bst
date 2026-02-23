@@ -74,11 +74,11 @@ export async function middleware(request: NextRequest) {
         const user = userVal
         const { pathname } = request.nextUrl
 
-        // Helper to check if a pathname matches /login or /auth (with or without locale)
-        const isAuthPage = pathname.match(/^\/(?:en|lv)?\/?(login|auth)/)
+        // Helper to check if a pathname matches /login, /auth, or /quote (with or without locale)
+        const isAuthOrPublicPage = pathname.match(/^\/(?:en|lv)?\/?(login|auth|quote)/)
 
         // Protected Routes Logic
-        if (!user && !isAuthPage) {
+        if (!user && !isAuthOrPublicPage) {
             // Get locale from request if possible, or fallback to default
             const localeMatch = pathname.match(/^\/(en|lv)/)
             const locale = localeMatch ? localeMatch[1] : 'en'
@@ -86,7 +86,9 @@ export async function middleware(request: NextRequest) {
         }
 
         // If user IS logged in and trying to access /login, send them to dashboard
-        if (user && isAuthPage) {
+        // Note: we don't redirect them if they are on /quote
+        const isLoginPage = pathname.match(/^\/(?:en|lv)?\/?(login|auth)/)
+        if (user && isLoginPage) {
             const localeMatch = pathname.match(/^\/(en|lv)/)
             const locale = localeMatch ? localeMatch[1] : 'en'
             return NextResponse.redirect(new URL(`/${locale}`, request.url))

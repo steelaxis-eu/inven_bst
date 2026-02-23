@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
 import { optimizeCuttingPlan, StockInfo } from '@/lib/optimization'
+import { notifySharedMailbox } from './emails'
 import {
     WorkOrderStatus,
     WorkOrderType,
@@ -2001,6 +2002,103 @@ export async function reoptimizeMaterialPrep(
 
     } catch (e: any) {
         console.error('reoptimizeMaterialPrep error:', e)
+        return { success: false, error: e.message }
+    }
+}
+
+// ============================================================================
+// SUPPLIER QUOTE (MAGIC LINK) FEATURES
+// ============================================================================
+
+export async function generateQuoteToken(woId: string): Promise<{ success: boolean, token?: string, error?: string }> {
+    try {
+        const wo = await prisma.workOrder.findUnique({ where: { id: woId } })
+        if (!wo) return { success: false, error: 'Work Order not found' }
+
+        let token = (wo.metadata as any)?.quoteToken
+        if (token) return { success: true, token }
+
+        // Generate new token if one doesn't exist
+        const crypto = require('crypto')
+        token = crypto.randomUUID()
+
+        const currentMetadata = (wo.metadata as any) || {}
+        await prisma.workOrder.update({
+            where: { id: woId },
+            data: {
+                metadata: {
+                    ...currentMetadata,
+                    quoteToken: token
+                } as any
+            }
+        })
+        return { success: true, token }
+    } catch (e: any) {
+        console.error("generateQuoteToken error:", e)
+        return { success: false, error: e.message }
+    }
+}
+
+export async function getWorkOrderByQuoteToken(token: string): Promise<any | null> {
+    try {
+        // Find WO where metadata.quoteToken == token
+        const wos = await prisma.workOrder.findMany({
+            where: {
+                metadata: {
+                    path: ['quoteToken'],
+                    equals: token
+                }
+            },
+            include: {
+                project: { select: { projectNumber: true, name: true } },
+                items: {
+                    include: {
+                        piece: { include: { part: true } },
+                        platePart: true
+                    }
+                }
+            }
+        })
+
+        if (!wos || wos.length === 0) return null
+        return wos[0]
+    } catch (e: any) {
+        console.error("getWorkOrderByQuoteToken error:", e)
+        return null
+    }
+}
+
+export async function submitSupplierQuote(token: string, payload: { companyName: string, email: string, pricing: string, leadTime: string, notes?: string }): Promise<{ success: boolean, error?: string }> {
+    try {
+        const wo = await getWorkOrderByQuoteToken(token)
+        if (!wo) return { success: false, error: 'Invalid token' }
+
+        const currentMetadata = (wo.metadata as any) || {}
+        const quotes = currentMetadata.supplierQuotes || []
+
+        quotes.push({
+            id: require('crypto').randomUUID(),
+            submittedAt: new Date().toISOString(),
+            ...payload
+        })
+
+        await prisma.workOrder.update({
+            where: { id: wo.id },
+            data: {
+                metadata: {
+                    ...currentMetadata,
+                    supplierQuotes: quotes
+                } as any
+            }
+        })
+
+        // Notify the team via the shared mailbox
+        await notifySharedMailbox(payload)
+
+        revalidatePath(`/projects/${wo.projectId}`)
+        return { success: true }
+    } catch (e: any) {
+        console.error("submitSupplierQuote error:", e)
         return { success: false, error: e.message }
     }
 }

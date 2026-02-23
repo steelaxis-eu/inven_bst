@@ -53,11 +53,13 @@ import {
     activateWorkOrder,
     completeWorkOrder,
     completeCuttingWOWithWorkflow,
-    deleteWorkOrder
+    deleteWorkOrder,
+    generateQuoteToken
 } from '@/app/actions/workorders'
 import { BatchCutDialog } from "./batch-cut-dialog"
 import { MaterialPrepDialog } from "./material-prep-dialog"
 import { MaterialPrepEditDialog } from "./material-prep-edit-dialog"
+import { ConfirmQuoteDialog } from "./confirm-quote-dialog"
 import { DownloadDrawingsButton } from '@/components/work-order/download-drawings-button'
 
 // --- Interfaces ---
@@ -112,6 +114,16 @@ interface WorkOrder {
     items: WorkOrderItem[]
     metadata?: {
         plans?: any[]
+        quoteToken?: string
+        supplierQuotes?: {
+            id: string
+            companyName: string
+            email: string
+            pricing: string
+            leadTime: string
+            notes?: string
+            submittedAt: string
+        }[]
     } | null
 }
 
@@ -449,6 +461,9 @@ function WorkOrderTable({
     const [machinedPieceIds, setMachinedPieceIds] = useState<string[]>([])
     const [prepEditDialogOpen, setPrepEditDialogOpen] = useState(false)
     const [prepEditId, setPrepEditId] = useState<string | null>(null)
+    const [quoteDialogOpen, setQuoteDialogOpen] = useState(false)
+    const [activeQuote, setActiveQuote] = useState<any>(null)
+    const [activeWoForQuote, setActiveWoForQuote] = useState<any>(null)
 
     // Handlers
     const handleDeleteWorkOrder = async (wo: WorkOrder) => {
@@ -466,6 +481,24 @@ function WorkOrderTable({
         }
         setLoading(null)
     }
+
+    const handleShareQuoteLink = async (woId: string) => {
+        setLoading(woId)
+        try {
+            const res = await generateQuoteToken(woId)
+            if (res.success && res.token) {
+                const url = `${window.location.origin}/en/quote/${res.token}`
+                await navigator.clipboard.writeText(url)
+                toast.success('Quote link copied to clipboard!')
+            } else {
+                toast.error(res.error || 'Failed to generate quote link')
+            }
+        } catch (e) {
+            toast.error('Unexpected error generating quote link')
+        }
+        setLoading(null)
+    }
+
     const handleStatusChange = async (wo: WorkOrder, status: string) => {
         if (status === 'COMPLETED' && wo.type === 'CUTTING' && wo.status === 'IN_PROGRESS') {
             setActiveWoForComplete(wo)
@@ -619,6 +652,11 @@ function WorkOrderTable({
                                                 <TableCell>
                                                     <div style={{ fontWeight: 500 }}>{wo.title}</div>
                                                     {wo.description && <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>{wo.description}</Text>}
+                                                    {wo.metadata?.supplierQuotes && wo.metadata.supplierQuotes.length > 0 && (
+                                                        <Badge appearance="filled" color="brand" shape="rounded" style={{ marginTop: '4px' }}>
+                                                            {wo.metadata.supplierQuotes.length} Quotes Received
+                                                        </Badge>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge appearance="outline">{wo.priority}</Badge>
@@ -656,9 +694,17 @@ function WorkOrderTable({
                                                             <Button appearance="subtle" icon={<PrintRegular />} />
                                                         </Link>
                                                         {wo.type === 'MATERIAL_PREP' && (
-                                                            <Link href={`/projects/${projectId}/work-orders/${wo.id}/rfq`} target="_blank" title="Download RFQ">
-                                                                <Button appearance="subtle" icon={<ReceiptPlayRegular />} style={{ color: tokens.colorPaletteGreenForeground1 }} />
-                                                            </Link>
+                                                            <>
+                                                                <Link href={`/projects/${projectId}/work-orders/${wo.id}/rfq`} target="_blank" title="Download RFQ">
+                                                                    <Button appearance="subtle" icon={<ReceiptPlayRegular />} style={{ color: tokens.colorPaletteGreenForeground1 }} />
+                                                                </Link>
+                                                                <Button
+                                                                    appearance="subtle"
+                                                                    icon={<ClipboardTaskRegular />}
+                                                                    title="Share Quote Link"
+                                                                    onClick={() => handleShareQuoteLink(wo.id)}
+                                                                />
+                                                            </>
                                                         )}
                                                         <DownloadDrawingsButton
                                                             workOrderId={wo.id}
@@ -801,6 +847,53 @@ function WorkOrderTable({
                                                                     )}
                                                                 </TableBody>
                                                             </Table>
+
+                                                            {/* Quotes Comparison View */}
+                                                            {wo.metadata?.supplierQuotes && wo.metadata.supplierQuotes.length > 0 && (
+                                                                <div style={{ marginTop: '16px', padding: '16px', backgroundColor: tokens.colorNeutralBackground2, borderRadius: tokens.borderRadiusMedium, border: `1px solid ${tokens.colorBrandStroke2}` }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                                                        <ReceiptPlayRegular style={{ color: tokens.colorBrandForeground1 }} />
+                                                                        <Text weight="semibold">Supplier Quotes</Text>
+                                                                    </div>
+                                                                    <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow>
+                                                                                <TableHeaderCell>Company</TableHeaderCell>
+                                                                                <TableHeaderCell>Email</TableHeaderCell>
+                                                                                <TableHeaderCell>Pricing</TableHeaderCell>
+                                                                                <TableHeaderCell>Lead Time</TableHeaderCell>
+                                                                                <TableHeaderCell>Action</TableHeaderCell>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {wo.metadata.supplierQuotes.map((quote: any) => (
+                                                                                <TableRow key={quote.id}>
+                                                                                    <TableCell>
+                                                                                        <Text weight="medium">{quote.companyName}</Text>
+                                                                                        {quote.notes && <Text size={100} style={{ display: 'block', color: tokens.colorNeutralForeground3 }}>Notes: {quote.notes}</Text>}
+                                                                                    </TableCell>
+                                                                                    <TableCell>{quote.email}</TableCell>
+                                                                                    <TableCell style={{ whiteSpace: 'pre-wrap' }}>{quote.pricing}</TableCell>
+                                                                                    <TableCell>{quote.leadTime}</TableCell>
+                                                                                    <TableCell>
+                                                                                        <Button
+                                                                                            appearance="primary"
+                                                                                            size="small"
+                                                                                            onClick={() => {
+                                                                                                setActiveQuote(quote)
+                                                                                                setActiveWoForQuote(wo)
+                                                                                                setQuoteDialogOpen(true)
+                                                                                            }}
+                                                                                        >
+                                                                                            Approve & Confirm
+                                                                                        </Button>
+                                                                                    </TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
